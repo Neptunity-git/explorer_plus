@@ -99,7 +99,28 @@ API には版を付け、manifest に「どの版向けに作ったか」を書�
 
 **後で見直す条件**：特になし。
 
+## 判断6: MOD の閉じ込めは「sandbox」と「CSP」の2重にする
+
+**決めたこと**：MOD の iframe は、`sandbox="allow-scripts"`（`allow-same-origin` を付けない）にしたうえで、
+本体が CSP（通信先の制限）を必ず付ける。MOD のデータの保存は localStorage ではなく、本体の API で行う。
+
+**検討した選択肢**：
+
+- 案A（採用）：sandbox と CSP の2重
+- 案B（却下）：sandbox だけ。技術の確認（`spikes/platform-check/RESULTS.md`）で、sandbox だけでは MOD が
+  インターネットに出られ、Tauri の通信口にも要求が届く（Tauri の送り元の確認で拒否はされる）と分かった。
+  守りが Tauri 側の1枚だけになる
+
+**選んだ理由**：MOD が勝手にファイルの情報を外へ送れないことを、2枚の守りで確実にする。sandbox の副作用で
+MOD は localStorage を使えないので、保存は本体が面倒を見る（判断3の「自分の構造を保存する」と一致）。
+
+**後で見直す条件**：「ネットから情報を取ってくる MOD」（天気を表示する、など）の要望が出たとき（ユーザーが許可した
+通信先だけ開ける）。
+
 ## 用語メモ
+
+- CSP（Content Security Policy）：Webページに「どこと通信してよいか、どのスクリプトを動かしてよいか」を指示するルール
+- オリジン：Webページの「出どころ」（`https://example.com` など）。sandbox の iframe は出どころなし（`null`）扱いになる
 
 - manifest.json：MOD の名前や設定を書く、MOD の名刺のようなファイル
 - ES モジュール：今の JavaScript の標準的なファイルの分け方（import / export を使う）

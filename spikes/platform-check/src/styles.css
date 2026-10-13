@@ -1,0 +1,10 @@
+body { font-family: "Segoe UI", "Yu Gothic UI", sans-serif; margin: 16px; background: #fafafa; color: #222; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 4px 8px; vertical-align: top; text-align: left; }
+pre { margin: 0; font-size: 12px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
+.ok { color: #0a7a2a; font-weight: bold; }
+.ng { color: #b00020; font-weight: bold; }
+#icons { display: flex; flex-wrap: wrap; gap: 12px; }
+figure { margin: 0; text-align: center; }
+canvas { width: 64px; height: 64px; }
+iframe { width: 300px; height: 40px; border: 1px dashed #999; }

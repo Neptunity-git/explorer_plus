@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>explorer3D 試作（技術の確認）</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>技術の確認（ADR 0006 判断2）</h1>
+      <p>起動すると6項目を自動で確かめ、結果を一時フォルダの report.json に書き出します。</p>
+      <table id="results">
+        <thead><tr><th>項目</th><th>結果</th><th>詳細</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h2>Windows の標準アイコン</h2>
+      <div id="icons"></div>
+      <h2>MOD の閉じ込め（iframe）</h2>
+      <div id="mods"></div>
+      <p id="saved"></p>
+    </main>
+  </body>
+</html>
