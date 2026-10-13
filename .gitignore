@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# JavaScript / TypeScript（依存パッケージ・ビルド結果）
+node_modules/
+dist/
+build/
+coverage/
+.expo/
+.next/
+*.tsbuildinfo
+
+# Unity 等の生ログ（大きいのでコミットしない。要約は logs/*.json に残る）
+logs/raw/
+
+# Unity
+work/**/[Ll]ibrary/
+work/**/[Tt]emp/
+work/**/[Oo]bj/
+work/**/[Ll]ogs/
+work/**/[Uu]ser[Ss]ettings/
+
+# Blender の自動バックアップ
+*.blend1
+*.blend2

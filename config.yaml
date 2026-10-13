@@ -1,0 +1,53 @@
+# どのアダプターを使うかを宣言するだけの場所（requirements.md 8章）
+# マシン固有の値（実行ファイルのパス、通知先など）は teamNeo/defaults.conf に書く
+
+implementer:
+  adapter: qwen
+  qwen:
+    # Windows 側で動く Ollama の URL（WSL2 から見たアドレス）
+    base_url: http://localhost:11434
+    # `ollama list` で表示される名前（teamNeo/defaults.conf があれば自動で埋まる）
+    model: qwen3.8-27b
+    num_ctx: 16384
+    timeout_sec: 1800
+    max_context_chars: 60000
+    # 1タスク終わっても、この時間は GPU に載せたままにする（読み込み直しの時間を減らす）
+    keep_alive: 30m
+    # 思考モード。true にすると JSON を書く前に考え続けて上限を使い切り、空の応答になる（ADR-0006）
+    think: false
+    # 1回の応答で生成するトークンの上限（暴走への保険。16384 は約15分。ADR-0011）
+    num_predict: 16384
+    # num_ctx を決めるときに出力のために空けておく量。これを超える長い応答は、num_ctx を広げて1回だけ書き直させる
+    output_reserve: 8192
+    # 依頼文が長いとき（やり直しで前回のコードが加わったときなど）だけ、num_ctx をこの値まで広げる。
+    # 広げるほど GPU からあふれて遅くなる（16384: 23.6 / 24576: 20.6 / 32768: 17.2 トークン/秒。ADR-0009）
+    max_num_ctx: 32768
+    # 広げても出力の余地がこれより少なければ、Qwen を呼ばずに失敗にする（呼んでも途中で打ち切られるため）
+    min_output_tokens: 2048
+
+# ②セカンドオピニオン（Claude によるレビュー）。enabled: false にすると常に人間の確認待ちになる
+reviewer:
+  adapter: claude_cli
+  claude_cli:
+    # 利用枠を節約するため軽量モデルを使う（requirements.md 5章）
+    model: haiku
+    timeout_sec: 600
+
+# 止まったタスクの見直し（ADR-0007）。enabled: false にすると、止まったタスクは朝まで止めたままになる
+triage:
+  adapter: claude_cli
+  claude_cli:
+    # 設計の見直しなので、レビューより強いモデルを使う
+    model: sonnet
+    timeout_sec: 900
+
+tools:
+  code:
+    adapter: code
+    timeout_sec: 600
+  blender:
+    adapter: blender
+    timeout_sec: 3600
+  unity:
+    adapter: unity
+    timeout_sec: 3600
