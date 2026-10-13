@@ -42,3 +42,11 @@ python3 -m orchestrator resolve /mnt/c/Users/neo_m/projects-NEO/explorer_plus <�
 `/mnt/c/Users/neo_m/projects-NEO/teamNeo/docs/changes.md` を確認済みの日付：2026-10-13（プロジェクトの作成日。それ以前のお知らせは反映済み）
 
 ## このプロジェクト固有の規約
+
+- アプリは `work/app/`（Tauri 2 ＋ Vite ＋ TypeScript。ADR 0006）。Rust は `work/app/src-tauri/`
+- 置き場所：MOD の API の型 `src/api/`（Claude が書く正本）、画面に依存しない純粋なロジック `src/core/`（Qwen に任せる中心）、
+  本体の画面 `src/host/`、MOD の中で動くランタイム `src/runtime/`、標準のビュー `views/<id>/`、テスト `tests/`
+- テストは Vitest。タスクの `test_command` は、そのタスクのテストのファイルだけを流す：
+  `bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/<名前>.test.ts"`
+- MOD の API の約束事は `docs/design/mod-api-v1.md`。API に触れるタスクは、これと `work/app/src/api/types.ts` を `context_files` に入れる
+- 開発用のデスクトップ PC は Wi-Fi が無く、位置情報が取れない。位置情報は BYOD のノート PC で確かめる
