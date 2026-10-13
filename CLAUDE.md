@@ -1,4 +1,4 @@
-# explorer3D について（Claude Code 用の前提情報）
+# explorer_plus について（Claude Code 用の前提情報）
 
 このプロジェクトは `/mnt/c/Users/neo_m/projects-NEO/teamNeo` にある「一人開発チーム」システムの
 一部です。あなた（Claude）は設計・タスク分解・Qwen（ローカル実装担当）の管理・

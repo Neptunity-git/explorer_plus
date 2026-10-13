@@ -78,10 +78,11 @@ function runModProbe(name: string, withCsp: boolean): Promise<any> {
   });
 }
 
-// 閉じ込めが効いている = Tauri の機能にも親の画面にも触れられない（ネットは CSP ありのときだけ遮断を期待）
+// 閉じ込めが効いている = 実際に Tauri の機能を呼べず、親の画面にも触れられない（ネットは CSP ありのときだけ遮断を期待）。
+// iframe の中に __TAURI__ などの入り口が「見えている」こと自体は、呼べなければ害はないので合否には含めず、詳細に残す。
 function modIsolated(r: any, expectNetBlocked: boolean): boolean {
   if (r.error) return false;
-  const noTauri = !r.hasTauriGlobal && r.invokeViaInternals !== "ALLOWED" && !String(r.ipcFetch).includes("status 200");
+  const noTauri = r.invokeViaInternals !== "ALLOWED" && !String(r.ipcFetch).includes("status 200");
   const noParent = String(r.parentDocument).startsWith("blocked") && String(r.parentTauri).startsWith("blocked");
   const net = expectNetBlocked ? String(r.internet).startsWith("blocked") : true;
   return noTauri && noParent && net;

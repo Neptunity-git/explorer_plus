@@ -1,4 +1,4 @@
-# 企画書：explorer3D
+# 企画書：explorer_plus
 
 ## 目的・コンセプト
 

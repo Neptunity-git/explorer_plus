@@ -1,4 +1,4 @@
-# 運営ルール・規約：explorer3D
+# 運営ルール・規約：explorer_plus
 
 チーム共通の規約（開発プロセス、ADR形式、タスクのステータス設計、リトライ規則、
 ブランチ運用、自律運用）は `/mnt/c/Users/neo_m/projects-NEO/teamNeo/docs/conventions.md` に従う。
@@ -21,13 +21,13 @@
 
 ```bash
 cd /mnt/c/Users/neo_m/projects-NEO/teamNeo
-python3 -m orchestrator status  /mnt/c/Users/neo_m/projects-NEO/explorer3D                  # タスクの状態一覧
-python3 -m orchestrator run     /mnt/c/Users/neo_m/projects-NEO/explorer3D tasks/<ファイル名>  # 1件だけ最後まで流す
-python3 -m orchestrator loop    /mnt/c/Users/neo_m/projects-NEO/explorer3D --until 07:00    # 自律運用（複数プロジェクト可）
-python3 -m orchestrator approve /mnt/c/Users/neo_m/projects-NEO/explorer3D <タスクID>         # 人間の最終承認 → main へマージ
-python3 -m orchestrator retry   /mnt/c/Users/neo_m/projects-NEO/explorer3D <タスクID> --note "やり直しの指示"
-python3 -m orchestrator triage  /mnt/c/Users/neo_m/projects-NEO/explorer3D <タスクID>        # 止まったタスクを Claude に見直させる
-python3 -m orchestrator resolve /mnt/c/Users/neo_m/projects-NEO/explorer3D <タスクID> --note "何をどう直したか"  # main で直接直して完了にする
+python3 -m orchestrator status  /mnt/c/Users/neo_m/projects-NEO/explorer_plus                  # タスクの状態一覧
+python3 -m orchestrator run     /mnt/c/Users/neo_m/projects-NEO/explorer_plus tasks/<ファイル名>  # 1件だけ最後まで流す
+python3 -m orchestrator loop    /mnt/c/Users/neo_m/projects-NEO/explorer_plus --until 07:00    # 自律運用（複数プロジェクト可）
+python3 -m orchestrator approve /mnt/c/Users/neo_m/projects-NEO/explorer_plus <タスクID>         # 人間の最終承認 → main へマージ
+python3 -m orchestrator retry   /mnt/c/Users/neo_m/projects-NEO/explorer_plus <タスクID> --note "やり直しの指示"
+python3 -m orchestrator triage  /mnt/c/Users/neo_m/projects-NEO/explorer_plus <タスクID>        # 止まったタスクを Claude に見直させる
+python3 -m orchestrator resolve /mnt/c/Users/neo_m/projects-NEO/explorer_plus <タスクID> --note "何をどう直したか"  # main で直接直して完了にする
 ```
 
 ## 朝の確認（Claude が発案者と一緒に行う）

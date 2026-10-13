@@ -1,4 +1,4 @@
-# 要件定義：explorer3D
+# 要件定義：explorer_plus
 
 > このファイルは常に最新版のみを保持する（過去の変更履歴は残さない）。
 > 決定の経緯・理由は [decisions/](decisions/) のADRを参照。
