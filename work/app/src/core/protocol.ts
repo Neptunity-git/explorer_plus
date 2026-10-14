@@ -65,13 +65,17 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: {} };
 
     case "open": {
-      const { id, path, from } = params;
+      const { id, path, from, newTab } = params;
       if (!isString(id) || !isNonEmptyString(path)) return { ok: false };
       const result: Record<string, unknown> = { id, path };
       if (from !== undefined) {
         const parsedRect = parseRect(from);
         if (!parsedRect.ok) return { ok: false };
         result.from = parsedRect.rect;
+      }
+      if (newTab !== undefined) {
+        if (typeof newTab !== "boolean") return { ok: false };
+        result.newTab = newTab;
       }
       return { ok: true, params: result };
     }
