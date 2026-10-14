@@ -1,0 +1,36 @@
+{
+  "task_id": "0002",
+  "phase": "implement",
+  "started_at": "2026-10-14T12:50:55",
+  "events": [
+    {
+      "at": "2026-10-14T12:52:08",
+      "kind": "implement",
+      "status": "success",
+      "changed_files": [
+        "work/app/src/core/entries.ts",
+        "work/app/tests/entries.test.ts"
+      ],
+      "verification_output": "done_reason=stop prompt_tokens=2952 generated_tokens=1494 total_sec=73\n本文 4671文字 / 思考 0文字\n本文の先頭: {\n  \"edits\": [],\n  \"files\": [\n    {\n      \"content\": \"import type { Entry, IconKind } from \\\"../api/types\\\";\\n\\nconst LAUNCH_EXTS = new Set([\\\"exe\\\", \\\"bat\\\", \\\"cmd\\\", \\\"lnk\\\", \\\"msi\\\"]);\\nconst CONFIG_EXTS = new Set([\\\"json\\\", \\\"yaml\\\", \\\"yml\\\", \\\"toml\\\", \\\"ini\\\", \\\"cfg\\\", \\\"conf\\\", \\\"xml\\\"]);\\n\\nexport function extOf(name: string): string {\\n  const dot = name.lastIndexOf(\\\".\\\");\\n  if (dot <= 0 || dot === name.length - 1) return \\\"\\\";\\n  return name.slice(dot + 1).toLowerCase();\\n}\\n\\nexport \n本文の末尾: \"),\\n      entry(\\\"A\\\", \\\"folder\\\"),\\n    ];\\n    const before = input.map((e) => e.name);\\n    sortEntries(input);\\n    expect(input.map((e) => e.name)).toEqual(before);\\n  });\\n\\n  it(\\\"returns an empty array for an empty input\\\", () => {\\n    expect(sortEntries([])).toEqual([]);\\n  });\\n});\\n\",\n      \"path\": \"work/app/tests/entries.test.ts\"\n    }\n  ],\n  \"report\": \"entries.ts と entries.test.ts を作成しました。extOf・iconKindFor・sortEntries を受け入れ条件どおりに実装し、Vitest テストで検証します。\",\n  \"self_report\": \"success\"\n}",
+      "report": "entries.ts と entries.test.ts を作成しました。extOf・iconKindFor・sortEntries を受け入れ条件どおりに実装し、Vitest テストで検証します。",
+      "implementer": "qwen:qwen3.8-27b",
+      "metrics": {
+        "prompt_tokens": 2952,
+        "generated_tokens": 1494,
+        "seconds": 72.7,
+        "done_reason": "stop",
+        "prompt_estimate": 2539,
+        "num_ctx": 16384,
+        "num_predict": 13845
+      }
+    },
+    {
+      "at": "2026-10-14T12:52:26",
+      "kind": "auto_check",
+      "result": "fail",
+      "output": "\nadded 3 packages in 1s\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\n ❯ tests/entries.test.ts (10 tests | 1 failed) 13ms\n   ❯ extOf (3)\n     ✓ returns the lowercased extension after the last dot 1ms\n     ✓ returns an empty string when there is no extension 0ms\n     × treats a leading dot as an extension separator 3ms\n   ✓ iconKindFor (3)\n     ✓ returns launch for executable extensions 0ms\n     ✓ returns config for configuration extensions 0ms\n     ✓ returns system for other files and all folders 0ms\n   ✓ sortEntries (4)\n     ✓ sorts folders first, then files, using numeric and case-insensitive name comparison 4ms\n     ✓ breaks ties with raw string comparison and keeps original order for identical names 0ms\n     ✓ does not mutate the input array 1ms\n     ✓ returns an empty array for an empty input 0ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 9 passed (10)\n   Start at  12:52:25\n   Duration  1.07s (import 48%, transform 27%, worker 19%, tests 6%)\n\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/entries.test.ts > extOf > treats a leading dot as an extension separator\nAssertionError: expected '' to be 'gitignore' // Object.is equality\n\n- Expected\n+ Received\n\n- gitignore\n\n ❯ tests/entries.test.ts:22:33\n     20|\n     21|   it(\"treats a leading dot as an extension separator\", () => {\n     22|     expect(extOf(\".gitignore\")).toBe(\"gitignore\");\n       |                                 ^\n     23|   });\n     24| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n"
+    }
+  ],
+  "resulting_status": "todo",
+  "finished_at": "2026-10-14T12:52:26"
+}

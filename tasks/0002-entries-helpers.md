@@ -1,21 +1,48 @@
 ---
-id: "0002"
+id: '0002'
 title: 拡張子・アイコンの種類・並び順の関数（extOf / iconKindFor / sortEntries）
 status: todo
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/entries.ts
-  - work/app/tests/entries.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/entries.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
+- work/app/src/core/entries.ts
+- work/app/tests/entries.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/entries.test.ts"
+qwen_self_report: success
+auto_check: fail
 claude_review: n/a
-retry_count: 0
+retry_count: 1
+branch: task/0002-a1
+attempt: 1
+implementer_report: entries.ts と entries.test.ts を作成しました。extOf・iconKindFor・sortEntries
+  を受け入れ条件どおりに実装し、Vitest テストで検証します。
+last_changed_files:
+- work/app/src/core/entries.ts
+- work/app/tests/entries.test.ts
+last_failure: "\nadded 3 packages in 1s\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\
+  \n ❯ tests/entries.test.ts (10 tests | 1 failed) 13ms\n   ❯ extOf (3)\n     ✓ returns\
+  \ the lowercased extension after the last dot 1ms\n     ✓ returns an empty string\
+  \ when there is no extension 0ms\n     × treats a leading dot as an extension separator\
+  \ 3ms\n   ✓ iconKindFor (3)\n     ✓ returns launch for executable extensions 0ms\n\
+  \     ✓ returns config for configuration extensions 0ms\n     ✓ returns system for\
+  \ other files and all folders 0ms\n   ✓ sortEntries (4)\n     ✓ sorts folders first,\
+  \ then files, using numeric and case-insensitive name comparison 4ms\n     ✓ breaks\
+  \ ties with raw string comparison and keeps original order for identical names 0ms\n\
+  \     ✓ does not mutate the input array 1ms\n     ✓ returns an empty array for an\
+  \ empty input 0ms\n\n Test Files  1 failed (1)\n      Tests  1 failed | 9 passed\
+  \ (10)\n   Start at  12:52:25\n   Duration  1.07s (import 48%, transform 27%, worker\
+  \ 19%, tests 6%)\n\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/entries.test.ts\
+  \ > extOf > treats a leading dot as an extension separator\nAssertionError: expected\
+  \ '' to be 'gitignore' // Object.is equality\n\n- Expected\n+ Received\n\n- gitignore\n\
+  \n ❯ tests/entries.test.ts:22:33\n     20|\n     21|   it(\"treats a leading dot\
+  \ as an extension separator\", () => {\n     22|     expect(extOf(\".gitignore\"\
+  )).toBe(\"gitignore\");\n       |                                 ^\n     23|  \
+  \ });\n     24| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n"
 ---
 ## Instructions
 
