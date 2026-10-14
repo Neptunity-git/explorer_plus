@@ -33,6 +33,8 @@ retry_count: 0
 | `clipboard.paste` | 中身は見ない | `{}` |
 | `drag.start` | `items` は ref の配列で 1〜`TRANSFER_MAX_ITEMS` 件。`x`・`y` は有限の数（`Number.isFinite`）。`targets` は落とせる場所の配列で 0〜`DROP_TARGETS_MAX` 件 | `{ items, x, y, targets }` |
 | `drag.targets` | `targets` は落とせる場所の配列で 0〜`DROP_TARGETS_MAX` 件 | `{ targets }` |
+| `drag.move` | `x`・`y` は有限の数。`ctrl`・`shift` は真偽値（`typeof … === "boolean"`） | `{ x, y, ctrl, shift }` |
+| `drag.end` | `x`・`y` は有限の数。`ctrl`・`shift`・`cancel` は真偽値 | `{ x, y, ctrl, shift, cancel }` |
 
 - 落とせる場所（`targets` の各要素）：普通のオブジェクトで、`id` は文字列（空文字でもよい）、`path` は空でない文字列、`x`・`y`・`width`・`height` は有限の数で、`width`・`height` は 0 以上。
   調べた後は `{ id, path, x, y, width, height }` だけ（知らない項目はコピーしない）。1つでも守っていなければ、その呼び出しは失敗（`{ ok: false }`）
@@ -52,11 +54,15 @@ retry_count: 0
     → `{ items: [{ id: "1:a", path: "C:\\a" }], x: 10, y: 20.5, targets: [{ id: "1:f", path: "C:\\f", x: 0, y: 30, width: 400, height: 28 }] }`
   - `drag.start`, `{ items: [{ id: "1:a", path: "C:\\a" }], x: 0, y: 0, targets: [] }` → `{ items: [{ id: "1:a", path: "C:\\a" }], x: 0, y: 0, targets: [] }`
   - `drag.targets`, `{ targets: [{ id: "", path: "E:\\f", x: 1, y: 2, width: 3, height: 4 }] }` → `{ targets: [{ id: "", path: "E:\\f", x: 1, y: 2, width: 3, height: 4 }] }`
+  - `drag.move`, `{ x: -5, y: 300.5, ctrl: true, shift: false, q: 1 }` → `{ x: -5, y: 300.5, ctrl: true, shift: false }`
+  - `drag.end`, `{ x: 1, y: 2, ctrl: false, shift: true, cancel: false }` → `{ x: 1, y: 2, ctrl: false, shift: true, cancel: false }`
 - 失敗（すべて `ok: false`・`id: 5`・`error.code === "invalid"`）：
   - `clipboard.copy`：`{ items: [] }`、`{}`、`{ items: 1001 件の { id: "a", path: "p" } }`
   - `drag.start`：`{ items: [], x: 0, y: 0, targets: [] }`、`{ items: [{ id: "a", path: "p" }], x: NaN, y: 0, targets: [] }`、`{ items: [{ id: "a", path: "p" }], x: 0, y: 0 }`（targets が無い）、
     `{ items: [{ id: "a", path: "p" }], x: 0, y: 0, targets: [{ id: "a", path: "", x: 0, y: 0, width: 1, height: 1 }] }`、
     `{ items: [{ id: "a", path: "p" }], x: 0, y: 0, targets: [{ id: "a", path: "p", x: 0, y: 0, width: -1, height: 1 }] }`
   - `drag.targets`：`{}`、`{ targets: 501 件の { id: "a", path: "p", x: 0, y: 0, width: 1, height: 1 } }`
+  - `drag.move`：`{ x: 0, y: 0, ctrl: false }`（shift が無い）、`{ x: Infinity, y: 0, ctrl: false, shift: false }`
+  - `drag.end`：`{ x: 0, y: 0, ctrl: false, shift: false }`（cancel が無い）、`{ x: 0, y: 0, ctrl: false, shift: false, cancel: "no" }`
 - 既存の `tests/protocol.test.ts`・`tests/protocol-additions.test.ts`・`tests/protocol-home.test.ts` も、変えずに合格する
 - `test_command` が成功する（型チェック `tsc --noEmit` も通る）

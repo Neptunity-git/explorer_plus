@@ -216,7 +216,9 @@ export type CallMethod =
   | "clipboard.cut"
   | "clipboard.paste"
   | "drag.start"
-  | "drag.targets";
+  | "drag.targets"
+  | "drag.move"
+  | "drag.end";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -264,6 +266,10 @@ export type CallParams = {
   "drag.start": { items: EntryRef[]; x: number; y: number; targets: DropTarget[] };
   /** 落とせる場所を知らせ直す（本体から dragTargets の知らせが来たとき） */
   "drag.targets": { targets: DropTarget[] };
+  /** ドラッグ中のマウスの位置（iframe の中の座標）。ランタイムが自動で送る */
+  "drag.move": { x: number; y: number; ctrl: boolean; shift: boolean };
+  /** ボタンを離した（cancel は Esc でやめたとき）。ランタイムが自動で送る */
+  "drag.end": { x: number; y: number; ctrl: boolean; shift: boolean; cancel: boolean };
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -303,6 +309,8 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "clipboard.paste": null,
   "drag.start": null,
   "drag.targets": null,
+  "drag.move": null,
+  "drag.end": null,
 };
 
 export type CallMessage = {

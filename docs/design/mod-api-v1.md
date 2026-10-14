@@ -267,6 +267,7 @@ ep.onTimetable((tt) => { /* 時間割が変わった */ });
 | `clipboard.paste` | `{}` | `{ count }`（ビューが開いているフォルダへ貼り付けた数。Windows の画面で進み具合・名前の重なりを扱う） |
 | `drag.start` | `{ items, x, y, targets: [{ id, path, x, y, width, height }] }` | なし。そこから先は本体がマウスを追い、落としたら移動・コピーする |
 | `drag.targets` | `{ targets }` | なし（本体から `dragTargets` の知らせが来たら、落とせる場所を知らせ直す） |
+| `drag.move`・`drag.end` | `{ x, y, ctrl, shift }`・`{ x, y, ctrl, shift, cancel }` | なし。ドラッグ中のマウスの動き。ランタイムが自動で送るので、MOD は呼ばなくてよい（iframe の中で押したボタンの動きは、離すまでその iframe に届くため） |
 
 - 足した知らせ：`dragTargets`（data は null）。ドラッグ中にこのビューのタブに切り替わったとき
 - ランタイムには `ep.clipboard.copy(entries)`・`cut(entries)`・`paste()`、`ep.drag.start({ items, x, y, targets })`・`ep.drag.targets(targets)`・`ep.onDragTargets(cb)` を足す
