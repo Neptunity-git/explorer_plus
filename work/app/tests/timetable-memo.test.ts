@@ -4,7 +4,7 @@ import { validateTimetable } from "../src/core/timetable";
 function base() {
   return {
     days: [1],
-    periods: [{ id: "p1", label: "1限", start: "08:00", end: "08:50" }],
+    periods: [{ id: "p1", label: "1限", start: "09:00", end: "10:30" }],
     slots: [{ day: 1, periodId: "p1", title: "英語", folders: [] }],
     place: null,
     ondemand: [{ id: "o1", title: "情報倫理", folders: [] }],
