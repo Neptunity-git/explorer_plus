@@ -1,21 +1,32 @@
 ---
-id: "0015"
+id: '0015'
 title: 時間割のオンデマンドの枠（ondemand）を検査する
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/timetable.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/timetable.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/timetable-ondemand.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetable.test.ts tests/timetable-ondemand.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/tests/timetable-ondemand.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetable.test.ts tests/timetable-ondemand.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0015-a1
+attempt: 1
+implementer_report: validateTimetable に ondemand の検査を追加。raw.ondemand が undefined なら出力に
+  ondemand キーを作らず（既存テスト互換）。あれば place 検査の後に、配列・長さ50以下、各要素のオブジェクト性、id(1〜32・重複禁止)、title(1〜60)、folders(slots
+  と同じ決まり)を調べ、誤りの頭は指定どおり。誤りが無ければ知らない項目を落として ondemand を出力に含める。新規テスト work/app/tests/timetable-ondemand.test.ts
+  を作成し、受け入れ条件の各ケースを検証。既存の tests/timetable.test.ts は変更していない。
+last_changed_files:
+- work/app/tests/timetable-ondemand.test.ts
+- work/app/src/core/timetable.ts
+review_reason: 実装は指示どおりedits形式で正確に追加され、受け入れ条件の11ケースを全てカバーするテストが作成された。既存テスト21個も全て合格し、互換性が保たれている。誤りの頭、検査ロジック、出力形式すべてが要件に合致している。
 ---
 ## Instructions
 
