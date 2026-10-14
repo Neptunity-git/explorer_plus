@@ -16,6 +16,9 @@ const RUNTIME_PREFIX: &str = "__runtime";
 const FRAME_FILE: &str = "__frame.html";
 const RUNTIME_FILE: &str = "explorer-plus-runtime.js";
 const STORAGE_MAX_BYTES: usize = 32 * 1024 * 1024;
+/// ページ（WebView2）から見た MOD の配信先。Rust にはリクエストが "mod://localhost/..." の形で届くが、
+/// CSP はページから見た住所で書く必要がある（Windows の Tauri は独自の通信先を http://<名前>.localhost で見せる）
+const MOD_ORIGIN: &str = "http://mod.localhost";
 
 #[derive(Default)]
 pub struct ModRegistry(RwLock<HashMap<String, ModDir>>);
@@ -259,7 +262,6 @@ fn file_response(path: &Path, csp: &str) -> Response<Vec<u8>> {
 
 pub fn handle(app: &AppHandle, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
     let uri = request.uri();
-    let origin = format!("{}://{}", uri.scheme_str().unwrap_or("http"), uri.host().unwrap_or("mod.localhost"));
     let Some(path) = percent_decode(uri.path().trim_start_matches('/')) else {
         return status(StatusCode::BAD_REQUEST);
     };
@@ -277,7 +279,7 @@ pub fn handle(app: &AppHandle, request: &Request<Vec<u8>>) -> Response<Vec<u8>> 
     let Some(m) = registry.0.read().unwrap().get(first).cloned() else {
         return status(StatusCode::NOT_FOUND);
     };
-    let csp = frame_csp(&origin, first);
+    let csp = frame_csp(MOD_ORIGIN, first);
     if rest == FRAME_FILE {
         return Response::builder()
             .header("Content-Type", "text/html; charset=utf-8")

@@ -107,7 +107,7 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
 
     case "getTree": {
       const { depth } = params;
-      if (!Number.isInteger(depth) || depth < TREE_DEPTH.min || depth > TREE_DEPTH.max) return { ok: false };
+      if (!isInt(depth) || depth < TREE_DEPTH.min || depth > TREE_DEPTH.max) return { ok: false };
       return { ok: true, params: { depth } };
     }
 
@@ -121,6 +121,11 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     default:
       return { ok: false };
   }
+}
+
+/** Number.isInteger と同じ判定。TypeScript に「数である」と伝えるための形 */
+function isInt(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v);
 }
 
 export function parseModMessage(data: unknown): ParseResult {
@@ -139,7 +144,7 @@ export function parseModMessage(data: unknown): ParseResult {
 
   if (kind === "call") {
     const { id, method, params } = data;
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!isInt(id) || id <= 0) {
       return { ok: false, id: null, error: { code: "invalid", message: "id must be a positive integer" } };
     }
     if (typeof method !== "string" || !(method in METHOD_REQUIRES)) {

@@ -23,7 +23,12 @@ pub fn run() {
         })
         .register_asynchronous_uri_scheme_protocol("mod", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
-            tauri::async_runtime::spawn_blocking(move || responder.respond(mods::handle(&app, &request)));
+            tauri::async_runtime::spawn_blocking(move || {
+                let response = mods::handle(&app, &request);
+                #[cfg(debug_assertions)]
+                eprintln!("[mod] {} -> {}", request.uri(), response.status());
+                responder.respond(response)
+            });
         })
         .invoke_handler(tauri::generate_handler![
             fsops::list_dir,

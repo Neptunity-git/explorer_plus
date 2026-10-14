@@ -50,3 +50,5 @@ python3 -m orchestrator resolve /mnt/c/Users/neo_m/projects-NEO/explorer_plus <�
   `bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/<名前>.test.ts"`
 - MOD の API の約束事は `docs/design/mod-api-v1.md`。API に触れるタスクは、これと `work/app/src/api/types.ts` を `context_files` に入れる
 - 開発用のデスクトップ PC は Wi-Fi が無く、位置情報が取れない。位置情報は BYOD のノート PC で確かめる
+- `test_command` には型チェックも入れる（Vitest は型を検査しないため。0003 で、テストは合格したが `tsc` で落ちた）：
+  `bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/<名前>.test.ts"`

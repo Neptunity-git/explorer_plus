@@ -14,8 +14,11 @@
     "windows": [
       {
         "title": "explorer_plus",
-        "width": 1200,
-        "height": 800
+        "width": 1100,
+        "height": 680,
+        "minWidth": 640,
+        "minHeight": 400,
+        "center": true
       }
     ],
     "security": {
