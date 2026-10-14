@@ -45,7 +45,23 @@ blocked_reason: "機械的検証に2回失敗しました。最後の失敗: odT
   \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
   \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-open-newtab.test.ts(63,29):\
   \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
-  \ Property 'params' does not exist on type 'KeyMessage'.\n"
+  \ Property 'params' does not exist on type 'KeyMessage'.\n\n\nClaude の見直し（数行の修正（朝に\
+  \ Claude が直接直す））: tsc の型エラー（TS2339）の原因は、テストファイルが result.message.params を直接読んでいることです。result.message\
+  \ の型 ModToHostMessage は KeyMessage を含む union なので params が無い型が混ざります。実装担当は直したと報告しましたが、ブランチのテストは直っていません。実装（protocol.ts\
+  \ の case \"open\"）は正しく、テストの書き方だけを直せば足ります。タスクの指示どおり (result.message as CallMessage).params\
+  \ で取り出します。CallMessage は src/api/types.ts に export されています。変更箇所は import 1行と params\
+  \ 参照4箇所で、正確なコードを示せるため direct_fix としました。\n修正案: tasks/fixes/0013.md"
+triage_count: 1
+triage:
+  category: direct_fix
+  reason: tsc の型エラー（TS2339）の原因は、テストファイルが result.message.params を直接読んでいることです。result.message
+    の型 ModToHostMessage は KeyMessage を含む union なので params が無い型が混ざります。実装担当は直したと報告しましたが、ブランチのテストは直っていません。実装（protocol.ts
+    の case "open"）は正しく、テストの書き方だけを直せば足ります。タスクの指示どおり (result.message as CallMessage).params
+    で取り出します。CallMessage は src/api/types.ts に export されています。変更箇所は import 1行と params
+    参照4箇所で、正確なコードを示せるため direct_fix としました。
+  at: '2026-10-14T15:40:43'
+  by: claude_cli:sonnet
+proposed_fix: tasks/fixes/0013.md
 ---
 ## Instructions
 
