@@ -81,7 +81,20 @@ blocked_reason: "機械的検証に2回失敗しました。最後の失敗:  �
   \     29|\n     30|   it(\"handles non-ASCII segments\", () => {\n     31|     expect(splitPath(\"\
   C:\\\\学業\\\\A校\")).toEqual([\n       |                                     ^\n \
   \    32|       { label: \"C:\", path: \"C:\\\\\" },\n     33|       { label: \"\
-  学業\", path: \"C:\\\\学業\" },\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯\n\n"
+  学業\", path: \"C:\\\\学業\" },\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯\n\n\n\nClaude の見直し（数行の修正（朝に\
+  \ Claude が直接直す））: splitPath の acc の初期値が既にバックスラッシュ付き（C:\\）なのに、ループ内でさらに \\ + part\
+  \ を足しているため、区切りが二重になりテスト3件が失敗している。テストの期待値は受け入れ条件と一致していて正しい。acc の初期値をバックスラッシュ無しのドライブ名（C:）にすれば、C:\
+  \ + \\ + Users = C:\\Users となり、期待値と一致する。parseCommandLine のテスト8件は成功済みで、変更は不要。\n修正案:\
+  \ tasks/fixes/0017.md"
+triage_count: 1
+triage:
+  category: direct_fix
+  reason: 'splitPath の acc の初期値が既にバックスラッシュ付き（C:\）なのに、ループ内でさらに \ + part を足しているため、区切りが二重になりテスト3件が失敗している。テストの期待値は受け入れ条件と一致していて正しい。acc
+    の初期値をバックスラッシュ無しのドライブ名（C:）にすれば、C: + \ + Users = C:\Users となり、期待値と一致する。parseCommandLine
+    のテスト8件は成功済みで、変更は不要。'
+  at: '2026-10-14T18:46:01'
+  by: claude_cli:sonnet
+proposed_fix: tasks/fixes/0017.md
 ---
 ## Instructions
 
