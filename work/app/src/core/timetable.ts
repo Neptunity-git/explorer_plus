@@ -282,7 +282,7 @@ export function validateTimetable(raw: unknown): TimetableResult {
 
         const memo = o.memo;
         let memoOut: string | undefined;
-        if (memo !== undefined) {
+        if (memo !== undefined && memo !== null) {
           if (typeof memo !== "string" || memo.length > 200) {
             errors.push(`ondemand[${i}].memo: must be a string of length 0-200`);
           } else {
