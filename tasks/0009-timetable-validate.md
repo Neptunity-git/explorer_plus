@@ -1,21 +1,31 @@
 ---
-id: "0009"
+id: 0009
 title: 時間割の検査 validateTimetable と、時刻の読み取り parseTime
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/timetable.ts
-  - work/app/tests/timetable.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetable.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/timetable.ts
+- work/app/tests/timetable.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetable.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0009-a1
+attempt: 1
+implementer_report: Created work/app/src/core/timetable.ts with parseTime, emptyTimetable,
+  and validateTimetable functions, and work/app/tests/timetable.test.ts with comprehensive
+  Vitest tests covering all acceptance criteria.
+last_changed_files:
+- work/app/src/core/timetable.ts
+- work/app/tests/timetable.test.ts
+review_reason: すべての関数が仕様通り実装されており、バリデーションロジックは複雑だが正確。テストが受け入れ条件をすべてカバーし、自動テスト（Vitest）で21個すべて合格。指示範囲外の変更もない。
 ---
 ## Instructions
 
