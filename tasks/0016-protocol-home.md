@@ -33,7 +33,7 @@ retry_count: 0
 | method | params の決まり | 調べた後の params |
 |---|---|---|
 | `timetable.delete`・`views.list`・`quickAccess.list`・`recent.list` | 中身は見ない | `{}` |
-| `tabs.open` | `viewId` は空でない文字列で長さ 64 以下。`path` は省略可能で、あれば空でない文字列 | `{ viewId }` に、渡されたときだけ `path` を足したもの |
+| `tabs.open` | `viewId` は空でない文字列で長さ 64 以下。`path` は省略可能で、あれば空でない文字列。`replace` は省略可能で、あれば真偽値（`typeof replace === "boolean"`） | `{ viewId }` に、渡されたときだけ `path`・`replace` を足したもの |
 | `quickAccess.pin`・`quickAccess.unpin` | `items` は ref の配列で 1〜`QUICK_ACCESS_MAX_ITEMS` 件（今ある `parseRefArray` で調べる） | `{ items }` |
 
 ## Acceptance Criteria
@@ -47,11 +47,12 @@ retry_count: 0
   - `timetable.delete`, `{ a: 1 }` → `{}`。`views.list`, `{}` → `{}`。`quickAccess.list`, `{}` → `{}`。`recent.list`, `{}` → `{}`
   - `tabs.open`, `{ viewId: "builtin.notes" }` → `{ viewId: "builtin.notes" }`（`path` のキーが無い）
   - `tabs.open`, `{ viewId: "builtin.win11", path: "C:\\x", q: 1 }` → `{ viewId: "builtin.win11", path: "C:\\x" }`
+  - `tabs.open`, `{ viewId: "builtin.win11", path: "C:\\x", replace: true }` → `{ viewId: "builtin.win11", path: "C:\\x", replace: true }`
   - `quickAccess.pin`, `{ items: [{ id: "1:a", path: "C:\\a", z: 1 }] }` → `{ items: [{ id: "1:a", path: "C:\\a" }] }`
   - `quickAccess.unpin`, `{ items: [{ id: "", path: "E:\\a" }] }` → `{ items: [{ id: "", path: "E:\\a" }] }`
 - 失敗（すべて `ok: false`・`id: 5`・`error.code === "invalid"`）：
   - `createFolder`：`{ name: "" }`、`{ name: "x".repeat(256) }`、`{ name: 3 }`
-  - `tabs.open`：`{}`、`{ viewId: "" }`、`{ viewId: "x".repeat(65) }`、`{ viewId: "a", path: "" }`、`{ viewId: "a", path: 1 }`
+  - `tabs.open`：`{}`、`{ viewId: "" }`、`{ viewId: "x".repeat(65) }`、`{ viewId: "a", path: "" }`、`{ viewId: "a", path: 1 }`、`{ viewId: "a", replace: "yes" }`
   - `quickAccess.pin`：`{ items: [] }`、`{}`、`{ items: 101 件の { id: "a", path: "p" } }`
 - 既存の `tests/protocol.test.ts`・`tests/protocol-additions.test.ts`・`tests/protocol-tags.test.ts`・`tests/protocol-open-newtab.test.ts` も、変えずに合格する
 - `test_command` が成功する（型チェック `tsc --noEmit` も通る）

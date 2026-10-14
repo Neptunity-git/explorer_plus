@@ -237,7 +237,8 @@ export type CallParams = {
   "timetable.delete": Record<string, never>;
   "views.list": Record<string, never>;
   /** 新しいタブを開く。path を省略すると、フォルダと関係するビューでは今のフォルダ */
-  "tabs.open": { viewId: string; path?: string };
+  /** replace：新しいタブではなく、このビューのタブで開く（ホームから開くとき） */
+  "tabs.open": { viewId: string; path?: string; replace?: boolean };
   "quickAccess.list": Record<string, never>;
   "quickAccess.pin": { items: EntryRef[] };
   "quickAccess.unpin": { items: EntryRef[] };
