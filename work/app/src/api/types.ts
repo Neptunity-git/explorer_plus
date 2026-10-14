@@ -71,12 +71,16 @@ export type ViewContext = {
   theme: "light" | "dark";
 };
 
+/** MOD が右クリックのメニューに足す項目。選ばれると、showMenu の返り値の chosen に id が入る */
+export type MenuItem = { id: string; label: string };
+
 /** 画面上の位置（アニメーションの出どころ）。iframe の左上が原点 */
 export type Rect = { x: number; y: number; width: number; height: number };
 
 // ---- エラー ----
 
-export const ERROR_CODES = ["not-declared", "denied", "not-found", "too-large", "invalid", "io"] as const;
+// "exists" は 2026-10-14 に追加（名前の変更・フォルダの作成で、同じ名前が既にあるとき）
+export const ERROR_CODES = ["not-declared", "denied", "not-found", "too-large", "invalid", "io", "exists"] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 export type ApiError = { code: ErrorCode; message: string };
 
@@ -93,7 +97,11 @@ export type CallMethod =
   | "storage.delete"
   | "storage.keys"
   | "getTree"
-  | "resolve";
+  | "resolve"
+  // ↓ 2026-10-14 に追加（Win11 の操作を受け継ぐ。ADR 0009）
+  | "rename"
+  | "createFolder"
+  | "showMenu";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -108,6 +116,9 @@ export type CallParams = {
   "storage.keys": Record<string, never>;
   getTree: { depth: number };
   resolve: { refs: EntryRef[] };
+  rename: { id: string; path: string; newName: string };
+  createFolder: Record<string, never>;
+  showMenu: { x: number; y: number; items: EntryRef[]; extra?: MenuItem[] };
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -123,6 +134,9 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "storage.keys": null,
   getTree: "tree",
   resolve: "links",
+  rename: null,
+  createFolder: null,
+  showMenu: null,
 };
 
 export type CallMessage = {
@@ -139,7 +153,9 @@ export type ResultMessage =
 
 export type EventMessage =
   | { ep: 1; kind: "event"; event: "folder"; data: FolderSnapshot }
-  | { ep: 1; kind: "event"; event: "theme"; data: "light" | "dark" };
+  | { ep: 1; kind: "event"; event: "theme"; data: "light" | "dark" }
+  // 本体がビューに「この項目の名前の変更を始めて」と頼む（メニューの「名前の変更」、新しいフォルダを作った直後）
+  | { ep: 1; kind: "event"; event: "action"; data: { action: "rename"; entry: Entry } };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 
@@ -153,4 +169,9 @@ export type HostToModMessage = ResultMessage | EventMessage;
 /** storage の1つの値の上限（JSON にしたときの UTF-8 のバイト数） */
 export const STORAGE_VALUE_MAX_BYTES = 1024 * 1024;
 export const RESOLVE_MAX_REFS = 100;
+/** showMenu の items（選んでいる項目）の上限 */
+export const MENU_MAX_ITEMS = 1000;
+/** showMenu の extra（MOD が足す項目）の上限と、ラベルの長さの上限 */
+export const MENU_MAX_EXTRA = 20;
+export const MENU_LABEL_MAX = 60;
 export const TREE_DEPTH = { min: 1, max: 5 } as const;

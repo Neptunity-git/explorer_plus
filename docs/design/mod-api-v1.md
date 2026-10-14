@@ -95,6 +95,13 @@ const data = await ep.storage.get("chests");          // 無ければ undefined
 await ep.storage.delete("chests");
 const keys = await ep.storage.keys();
 
+const renamed = await ep.rename(entry, "新しい名前.txt");   // 名前の変更。新しい Entry が返る
+const folder = await ep.createFolder();              // 今のフォルダに「新しいフォルダー」を作る。続けて本体から action（rename）が届く
+const { chosen } = await ep.showMenu({ x, y, items: selectedEntries, extra: [{ id: "pin", label: "チェストに入れる" }] });
+                                                     // 右クリックのメニューを本体が出す。標準の項目（開く・ごみ箱など）は本体が実行し、
+                                                     // extra の項目が選ばれたときだけ chosen にその id が入る（それ以外は null）
+const stop2 = ep.onAction(({ action, entry }) => { /* action === "rename"：その項目の名前の変更を始める */ });
+
 const tree = await ep.getTree({ depth: 2 });          // uses に "tree" が要る
 const found = await ep.resolve([{ id, path }]);       // uses に "links" が要る。見つからなければ null
 ```
@@ -134,6 +141,7 @@ type Entry = {
 | `too-large` | storage の値が 1MB を超えた |
 | `invalid` | 引数の形が違う |
 | `io` | 読み書きに失敗した |
+| `exists` | 同じ名前のファイル・フォルダが既にある（名前の変更・フォルダの作成）。2026-10-14 に追加 |
 
 ## 本体と MOD のあいだのメッセージ（ランタイムの中身。MOD 作者は気にしなくてよい）
 
@@ -158,8 +166,21 @@ type Entry = {
 | `storage.get` / `storage.set` / `storage.delete` / `storage.keys` | `{ key }` / `{ key, value }` / `{ key }` / `{}` | なし |
 | `getTree` | `{ depth }`（1〜5） | `tree` |
 | `resolve` | `{ refs: [{ id, path }] }`（100件まで） | `links` |
+| `rename` | `{ id, path, newName }`（newName は 1〜255 文字） | なし |
+| `createFolder` | `{}` | なし |
+| `showMenu` | `{ x, y, items: [{ id, path }]（0〜1000件）, extra?: [{ id, label }]（0〜20件。id は 1〜64 文字、label は 1〜60 文字） }`。x・y は iframe の中の座標 | なし |
 
-知らせの `event`：`folder`（data はフォルダの中身。`onFolder` に届く）、`theme`（data は `"light"` か `"dark"`）。
+`rename`・`createFolder`・`showMenu` と、知らせの `action`、エラーの `exists` は 2026-10-14 に追加した（ADR 0009）。
+
+ref の `id` は空文字でもよい（ファイルID の無いドライブのため）。本体は、ID が取れるファイルについては ID の一致を確かめる。
+
+知らせの `event`：`folder`（data はフォルダの中身。`onFolder` に届く）、`theme`（data は `"light"` か `"dark"`）、
+`action`（data は `{ action: "rename", entry }`。`onAction` に届く）。
+
+### 名前の決まり（rename・createFolder）
+
+Windows と同じ。本体が確かめ、守っていなければ `invalid`：空・空白だけは不可、255 文字まで、`\ / : * ? " < > |` と制御文字は不可、
+末尾の空白・`.` は不可、予約された名前（`CON`・`PRN`・`AUX`・`NUL`・`COM1`〜`COM9`・`LPT1`〜`LPT9`。大文字小文字を問わず、`con.txt` のように拡張子が付いても不可）は不可。
 
 ## 版の決まり
 
