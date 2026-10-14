@@ -1,21 +1,32 @@
 ---
-id: "0002"
+id: '0002'
 title: 拡張子・アイコンの種類・並び順の関数（extOf / iconKindFor / sortEntries）
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/entries.ts
-  - work/app/tests/entries.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/entries.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
-retry_count: 0
+- work/app/src/core/entries.ts
+- work/app/tests/entries.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/entries.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
+retry_count: 1
+branch: task/0002-a2
+attempt: 2
+implementer_report: 失敗の原因は実装の誤りでした。テストの期待値 `extOf(".gitignore") === "gitignore"` は受け入れ条件（`.gitignore`
+  → `gitignore`）と一致しており正しいです。実装の `extOf` が `dot <= 0` で判定していたため、`.` が先頭（index 0）にある
+  `.gitignore` を「拡張子なし」と誤判定していました。Windows エクスプローラに合わせ `.gitignore` のような先頭ドット名も拡張子とみなす必要があるため、条件を
+  `dot < 0` に修正しました（`dot === name.length - 1` の `file.` 判定は維持）。テストは受け入れ条件どおりなので変更していません。
+last_changed_files:
+- work/app/src/core/entries.ts
+- work/app/tests/entries.test.ts
+review_reason: 受け入れ条件をすべて満たしている。extOf・iconKindFor・sortEntries の実装が指定通り。テストが各条件を正確に検証（テスト値を弱めていない）。指示の範囲外の変更がない。自動検証（テスト）合格。
 ---
 ## Instructions
 

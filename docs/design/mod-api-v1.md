@@ -53,7 +53,7 @@ my-view/
 | `name` | ○ | 1〜40文字 |
 | `version` | ○ | `数字.数字.数字` |
 | `apiVersion` | ○ | 整数。第1版は `1` |
-| `entry` | ○ | MOD のフォルダの中の `.js` ファイルへの相対パス。`..` と、`/` で始まるパスは不可 |
+| `entry` | ○ | MOD のフォルダの中の `.js` ファイルへの相対パス。区切りは `/` だけ（`\` と `:` は不可）。`/` で始まらず、区切った部分に空・`.`・`..` が無い（例：`index.js`、`dist/main.js`） |
 | `uses` | ○ | 下の「使う情報」の名前の配列（空でもよい）。知らない名前があればエラー。重複は1つにまとめる |
 | `description` | | 200文字まで |
 
@@ -103,7 +103,8 @@ const found = await ep.resolve([{ id, path }]);       // uses に "links" が要
 
 ```ts
 type Entry = {
-  id: string;          // ファイルID（"<ボリュームの番号16桁>:<ファイルの番号32桁>" の16進数）。名前変更・移動で変わらない
+  id: string;          // ファイルID（"<ボリュームの番号16桁>:<ファイルの番号32桁>" の16進数）。名前変更・移動で変わらない。
+                       // ファイルID の無いドライブ（FAT の USB メモリなど）では ""（そのファイルへのリンクは、パスでしか探せない）
   name: string;        // "report.docx"
   path: string;        // "C:\\Users\\neo_m\\report.docx"
   kind: "file" | "folder";

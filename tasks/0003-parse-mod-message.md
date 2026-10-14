@@ -1,22 +1,32 @@
 ---
-id: "0003"
+id: '0003'
 title: MOD から届くメッセージを検査する parseModMessage
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - docs/design/mod-api-v1.md
-  - work/app/src/api/types.ts
+- docs/design/mod-api-v1.md
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/protocol.ts
-  - work/app/tests/protocol.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/protocol.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/protocol.ts
+- work/app/tests/protocol.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/protocol.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0003-a1
+attempt: 1
+implementer_report: Created work/app/src/core/protocol.ts with parseModMessage function
+  and work/app/tests/protocol.test.ts with comprehensive Vitest tests covering all
+  acceptance criteria.
+last_changed_files:
+- work/app/src/core/protocol.ts
+- work/app/tests/protocol.test.ts
+review_reason: 実装が仕様のすべてのルール（1-4）とmethod別のparams検証を正しく実装している。テストが受け入れ条件の全ケース（成功4、失敗16、境界値2）をカバーし、error.codeとidの検証も正確。自動検証24/24合格、コードに明らかな破綻がない。
 ---
 ## Instructions
 

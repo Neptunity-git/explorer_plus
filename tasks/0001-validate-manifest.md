@@ -1,22 +1,30 @@
 ---
-id: "0001"
+id: '0001'
 title: MOD の manifest.json を検査する validateManifest
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - docs/design/mod-api-v1.md
-  - work/app/src/api/types.ts
+- docs/design/mod-api-v1.md
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/manifest.ts
-  - work/app/tests/manifest.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/manifest.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/manifest.ts
+- work/app/tests/manifest.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/manifest.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0001-a1
+attempt: 1
+implementer_report: manifest.ts とテストを作成した。
+last_changed_files:
+- work/app/src/core/manifest.ts
+- work/app/tests/manifest.test.ts
+review_reason: 実装が仕様を完全に満たし、全ての受け入れ条件がテストで検証されている。エラーメッセージ形式、フィールド検証、uses重複除去、manifest生成のいずれも正確で、テストが13/13合格している。
 ---
 ## Instructions
 
