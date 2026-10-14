@@ -1,0 +1,55 @@
+{
+  "task_id": "0019",
+  "phase": "implement",
+  "started_at": "2026-10-14T18:49:10",
+  "events": [
+    {
+      "at": "2026-10-14T18:50:26",
+      "kind": "implement",
+      "status": "success",
+      "changed_files": [
+        "work/app/src/core/ref-lists.ts",
+        "work/app/tests/ref-lists.test.ts"
+      ],
+      "verification_output": "done_reason=stop prompt_tokens=6761 generated_tokens=1561 total_sec=75\n本文 4006文字 / 思考 0文字\n本文の先頭: {\n  \"edits\": [],\n  \"files\": [\n    {\n      \"content\": \"import type { EntryRef } from \\\"../api/types\\\";\\nimport { sameRef } from \\\"./tags\\\";\\n\\n/**\\n * クイックアクセス（ピン留めしたフォルダ）と、最近使った項目（ADR 0014 判断2・3）の\\n * 一覧を扱う純粋関数。どの関数も引数の配列を書き換えず、新しい配列を返す。\\n */\\n\\n/**\\n * `refs` の各 ref を順に、`list` に同じもの（sameRef）が無ければ最後に足す。\\n * あれば、その位置のまま ref を引数のものに置き換える（パスを新しくするため）。\\n * `refs` の中で重なっているもの（sameRef）は、最初の1つだけを扱う。\\n */\\nexport function pinRefs(list: readonly EntryRef[], refs: readonly EntryRef[]): EntryRef[] {\\n  con\n本文の末尾:  expect(pushRecent([a, b, c], d, 3)).toEqual([d, a, b]);\\n  });\\n\\n  it(\\\"引数の list が変わっていない\\\", () => {\\n    const list = [a, b, c];\\n    const before = JSON.stringify(list);\\n    pushRecent(list, c, 3);\\n    expect(JSON.stringify(list)).toBe(before);\\n  });\\n});\\n\",\n      \"path\": \"work/app/tests/ref-lists.test.ts\"\n    }\n  ],\n  \"report\": \"ref-lists.ts と ref-lists.test.ts を作成しました。pinRefs・unpinRefs・pushRecent はすべて引数の配列を書き換えず新しい配列を返します。sameRef は ./tags から import しています。\",\n  \"self_report\": \"success\"\n}",
+      "report": "ref-lists.ts と ref-lists.test.ts を作成しました。pinRefs・unpinRefs・pushRecent はすべて引数の配列を書き換えず新しい配列を返します。sameRef は ./tags から import しています。",
+      "implementer": "qwen:qwen3.8-27b",
+      "metrics": {
+        "prompt_tokens": 6761,
+        "generated_tokens": 1561,
+        "seconds": 75.0,
+        "done_reason": "stop",
+        "prompt_estimate": 5979,
+        "num_ctx": 16384,
+        "num_predict": 10405
+      }
+    },
+    {
+      "at": "2026-10-14T18:50:46",
+      "kind": "auto_check",
+      "result": "pass",
+      "output": "\nup to date in 394ms\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\n ✓ tests/ref-lists.test.ts (13 tests) 5ms\n\n Test Files  1 passed (1)\n      Tests  13 passed (13)\n   Start at  18:50:45\n   Duration  1.03s (import 45%, transform 36%, worker 17%, tests 2%)\n\n"
+    },
+    {
+      "at": "2026-10-14T18:51:14",
+      "kind": "claude_review",
+      "verdict": "pass",
+      "reason": "受け入れ条件をすべて満たしている。関数の仕様が正確に実装され、テストはすべてのケース（重複排除、パス更新、max 制限、引数の不変性）を検証している。",
+      "reviewer": "claude_cli:haiku",
+      "usage": {
+        "calls": 1,
+        "turns": 3,
+        "cost_usd": 0.0419,
+        "input_tokens": 48367,
+        "output_tokens": 2752
+      }
+    },
+    {
+      "at": "2026-10-14T18:51:16",
+      "kind": "merged",
+      "branch": "task/0019-a1"
+    }
+  ],
+  "resulting_status": "done",
+  "finished_at": "2026-10-14T18:51:16"
+}

@@ -1,22 +1,31 @@
 ---
-id: "0019"
+id: 0019
 title: クイックアクセスと最近使った項目の一覧を操作する関数
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
-  - work/app/src/core/tags.ts
+- work/app/src/api/types.ts
+- work/app/src/core/tags.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/ref-lists.ts
-  - work/app/tests/ref-lists.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/ref-lists.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/ref-lists.ts
+- work/app/tests/ref-lists.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/ref-lists.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0019-a1
+attempt: 1
+implementer_report: ref-lists.ts と ref-lists.test.ts を作成しました。pinRefs・unpinRefs・pushRecent
+  はすべて引数の配列を書き換えず新しい配列を返します。sameRef は ./tags から import しています。
+last_changed_files:
+- work/app/src/core/ref-lists.ts
+- work/app/tests/ref-lists.test.ts
+review_reason: 受け入れ条件をすべて満たしている。関数の仕様が正確に実装され、テストはすべてのケース（重複排除、パス更新、max 制限、引数の不変性）を検証している。
 ---
 ## Instructions
 

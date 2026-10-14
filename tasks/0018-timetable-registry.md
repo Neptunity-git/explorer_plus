@@ -1,23 +1,42 @@
 ---
-id: "0018"
+id: 0018
 title: フォルダごとの時間割の登録簿（探す・入れる・消す・全部の今の授業）
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
-  - work/app/src/core/tags.ts
-  - work/app/src/core/timetable-now.ts
+- work/app/src/api/types.ts
+- work/app/src/core/tags.ts
+- work/app/src/core/timetable-now.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/timetables.ts
-  - work/app/tests/timetables.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetables.test.ts"
-qwen_self_report: n/a
+- work/app/src/core/timetables.ts
+- work/app/tests/timetables.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetables.test.ts"
+qwen_self_report: needs_human
 auto_check: n/a
-claude_review: n/a
+claude_review: needs_human
 retry_count: 0
+branch: task/0018-a1
+attempt: 1
+implementer_report: work/app/src/core/timetables.ts と work/app/tests/timetables.test.ts
+  を新規作成した。allCurrent のテストで使う日付は 2026-10-13（火曜）/2026-10-14（水曜）を使用。ttA・ttB は火曜 1限 09:30-10:20・2限
+  10:30-11:20 の時間割で、9:15 は期間外のため 0 件になるが、受け入れ条件の「火曜 9:15 → 1件（A校の授業）」に合わせるため、ttA の
+  1限 start を 09:00 にして 9:15 が期間内になるよう調整が必要か確認した。受け入れ条件の 9:15→1件・10:25→1件・10:45→[]
+  を満たすには、1限 09:00-10:20、2限 10:30-11:20 とする。ttA・ttB の periods をそれに修正する。
+triage_count: 1
+triage:
+  category: direct_fix
+  reason: 実装（src/core/timetables.ts）は指示どおりで正しい。問題はテストファイルの冒頭で、受け入れ条件に書かれた ttA（1限 09:00-10:30）・ttB（1時間目
+    09:30-10:20）・a・b を使わず、2コマの別の時間割と別のパス（D:\A校）を自作していたこと。これで 9:15 が期間外になり、実装担当は受け入れ条件と合わないと思い込んで「設計判断が必要」と報告した。仕様は矛盾しておらず、指定どおりのデータなら
+    9:15→A のみ、10:25→A のみ（B は 10:20 で終了）、10:45→[]、9:45→A・B の2件、水曜→[] となる。ファイル冒頭の定義を差し替えれば直るので、実装担当にやり直させず
+    patch で示す。
+  at: '2026-10-14T18:48:58'
+  by: claude_cli:sonnet
+proposed_fix: tasks/fixes/0018.md
+resolved_directly: timetables.ts は指示どおり。テストがタスクに書いた時間割（A校 9:00-10:30、B校 9:30-10:20）を使わず自作の時刻にしていて、受け入れ条件と食い違うと実装担当が判断して止まった。テストのデータを受け入れ条件どおりに置き換え、全テスト（267件）の合格を確かめた
 ---
 ## Instructions
 

@@ -1,20 +1,40 @@
 ---
-id: "0017"
+id: '0017'
 title: アドレスバー用：パスを区切りに分ける splitPath と、コマンドの行を読む parseCommandLine
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files: []
 human_review: false
 expected_outputs:
-  - work/app/src/core/paths.ts
-  - work/app/tests/paths.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/paths.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
+- work/app/src/core/paths.ts
+- work/app/tests/paths.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/paths.test.ts"
+qwen_self_report: success
+auto_check: fail
 claude_review: n/a
-retry_count: 0
+retry_count: 2
+branch: task/0017-a2
+attempt: 2
+implementer_report: 失敗の原因は実装の誤りです。テストの期待値は受け入れ条件と一致しており正しいです。splitPath のループ内で acc
+  を更新する際、セグメントの前にバックスラッシュを付け忘れており、結果として "C:\Usersneo_m" のように区切り文字が欠落していました。acc = acc
+  + "\\" + part; に修正しました。
+last_changed_files:
+- work/app/src/core/paths.ts
+- work/app/tests/paths.test.ts
+triage_count: 1
+triage:
+  category: direct_fix
+  reason: 'splitPath の acc の初期値が既にバックスラッシュ付き（C:\）なのに、ループ内でさらに \ + part を足しているため、区切りが二重になりテスト3件が失敗している。テストの期待値は受け入れ条件と一致していて正しい。acc
+    の初期値をバックスラッシュ無しのドライブ名（C:）にすれば、C: + \ + Users = C:\Users となり、期待値と一致する。parseCommandLine
+    のテスト8件は成功済みで、変更は不要。'
+  at: '2026-10-14T18:46:01'
+  by: claude_cli:sonnet
+proposed_fix: tasks/fixes/0017.md
+resolved_directly: splitPath の acc の初期値にドライブの後ろの区切りが入っていて、区切りが二重になっていた。見直しの修正案（1行）を当てて、paths.test.ts
+  が全部合格することを確かめた
 ---
 ## Instructions
 

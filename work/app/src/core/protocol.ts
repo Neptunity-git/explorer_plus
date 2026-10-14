@@ -1,4 +1,4 @@
-import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
+import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, QUICK_ACCESS_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
 
 export type ParseResult =
   | { ok: true; message: ModToHostMessage }
@@ -133,8 +133,12 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { id, path, newName } };
     }
 
-    case "createFolder":
-      return { ok: true, params: {} };
+    case "createFolder": {
+      const { name } = params;
+      if (name === undefined) return { ok: true, params: {} };
+      if (!isString(name) || name.length < 1 || name.length > 255) return { ok: false };
+      return { ok: true, params: { name } };
+    }
 
     case "showMenu": {
       const { x, y, items, extra } = params;
@@ -205,6 +209,35 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     case "timetable.set": {
       if (!("timetable" in params)) return { ok: false };
       return { ok: true, params: { timetable: params.timetable } };
+    }
+
+    case "timetable.delete":
+    case "views.list":
+    case "quickAccess.list":
+    case "recent.list":
+      return { ok: true, params: {} };
+
+    case "tabs.open": {
+      const { viewId, path, replace } = params;
+      if (!isNonEmptyString(viewId) || viewId.length > 64) return { ok: false };
+      const result: Record<string, unknown> = { viewId };
+      if (path !== undefined) {
+        if (!isNonEmptyString(path)) return { ok: false };
+        result.path = path;
+      }
+      if (replace !== undefined) {
+        if (typeof replace !== "boolean") return { ok: false };
+        result.replace = replace;
+      }
+      return { ok: true, params: result };
+    }
+
+    case "quickAccess.pin":
+    case "quickAccess.unpin": {
+      const { items } = params;
+      const parsedItems = parseRefArray(items, 1, QUICK_ACCESS_MAX_ITEMS);
+      if (!parsedItems.ok) return { ok: false };
+      return { ok: true, params: { items: parsedItems.refs } };
     }
 
     default:

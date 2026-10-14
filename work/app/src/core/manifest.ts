@@ -138,6 +138,13 @@ function checkDescription(raw: unknown, errors: string[]): string | undefined {
   return raw;
 }
 
+function checkLocation(raw: unknown, errors: string[]): "folder" | "none" | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === "folder" || raw === "none") return raw;
+  errors.push('location: must be "folder" or "none"');
+  return undefined;
+}
+
 export function validateManifest(
   raw: unknown,
   options?: { allowBuiltin?: boolean }
@@ -156,6 +163,7 @@ export function validateManifest(
   const entry = checkEntry(raw.entry, errors);
   const uses = checkUses(raw.uses, errors);
   const description = checkDescription(raw.description, errors);
+  const location = checkLocation(raw.location, errors);
 
   if (errors.length > 0) {
     return { ok: false, errors };
@@ -171,6 +179,9 @@ export function validateManifest(
   };
   if (description !== undefined) {
     manifest.description = description;
+  }
+  if (location !== undefined) {
+    manifest.location = location;
   }
 
   return { ok: true, manifest };

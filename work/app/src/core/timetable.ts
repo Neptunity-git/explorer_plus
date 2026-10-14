@@ -1,4 +1,4 @@
-import type { EntryRef, Timetable, TimetablePeriod, TimetablePlace, TimetableSlot } from "../api/types";
+import type { EntryRef, Timetable, TimetableOndemand, TimetablePeriod, TimetablePlace, TimetableSlot } from "../api/types";
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -208,12 +208,85 @@ export function validateTimetable(raw: unknown): TimetableResult {
     };
   }
 
+  // ---- ondemand ----
+  let ondemand: TimetableOndemand[] | undefined;
+  const rawOndemand = raw.ondemand;
+  if (rawOndemand !== undefined) {
+    if (!Array.isArray(rawOndemand)) {
+      errors.push("ondemand: must be an array");
+    } else if (rawOndemand.length > 50) {
+      errors.push("ondemand: must have at most 50 elements");
+    } else {
+      const ondemandOut: TimetableOndemand[] = [];
+      const seenOndemandIds = new Set<string>();
+      for (let i = 0; i < rawOndemand.length; i++) {
+        const o = rawOndemand[i];
+        if (!isPlainObject(o)) {
+          errors.push(`ondemand[${i}]: must be an object`);
+          continue;
+        }
+
+        const id = o.id;
+        if (typeof id !== "string" || id.length < 1 || id.length > 32) {
+          errors.push(`ondemand[${i}].id: must be a string of length 1-32`);
+        } else if (seenOndemandIds.has(id)) {
+          errors.push(`ondemand[${i}].id: must be unique`);
+        } else {
+          seenOndemandIds.add(id);
+        }
+
+        const title = o.title;
+        if (typeof title !== "string" || title.length < 1 || title.length > 60) {
+          errors.push(`ondemand[${i}].title: must be a string of length 1-60`);
+        }
+
+        const rawFolders = o.folders;
+        const folders: EntryRef[] = [];
+        if (!Array.isArray(rawFolders) || rawFolders.length > 5) {
+          errors.push(`ondemand[${i}].folders: must be an array of length 0-5`);
+        } else {
+          for (let j = 0; j < rawFolders.length; j++) {
+            const f = rawFolders[j];
+            if (!isPlainObject(f)) {
+              errors.push(`ondemand[${i}].folders: element ${j} must be an object`);
+              continue;
+            }
+            const fid = f.id;
+            const fpath = f.path;
+            if (typeof fid !== "string") {
+              errors.push(`ondemand[${i}].folders: element ${j} id must be a string`);
+            }
+            if (typeof fpath !== "string" || fpath.length === 0) {
+              errors.push(`ondemand[${i}].folders: element ${j} path must be a non-empty string`);
+            }
+            folders.push({
+              id: typeof fid === "string" ? fid : "",
+              path: typeof fpath === "string" ? fpath : "",
+            });
+          }
+        }
+
+        ondemandOut.push({
+          id: typeof id === "string" ? id : "",
+          title: typeof title === "string" ? title : "",
+          folders,
+        });
+      }
+      ondemand = ondemandOut;
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
 
+  const result: Timetable = { days, periods, slots, place };
+  if (ondemand !== undefined) {
+    result.ondemand = ondemand;
+  }
+
   return {
     ok: true,
-    timetable: { days, periods, slots, place },
+    timetable: result,
   };
 }
