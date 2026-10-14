@@ -20,6 +20,8 @@ export interface DragHost {
   /** ドラッグ中に、元のビューを見えなくしても、マウスの動きが届き続けるようにする（display:none にしない） */
   keepAlive(pane: HTMLElement | null): void;
   drop(items: EntryRef[], dest: string, effect: "move" | "copy"): Promise<void>;
+  /** マウスが本体の外へ出た：Windows のドラッグに切り替えて、普通のエクスプローラなどへ落とせるようにする（ADR 0016） */
+  dragOut(items: EntryRef[]): Promise<void>;
 }
 
 type Hit = { dest: string; label: string; box: Rect; tabId?: string };
@@ -43,6 +45,8 @@ export class DragController {
   private hoverTab: { id: string; since: number; timer: ReturnType<typeof setTimeout> } | null = null;
   private lastHit: Hit | null = null;
   private lastEffect: "move" | "copy" | null = null;
+  /** 本体の外（普通のエクスプローラなど）から持ってきたドラッグか。外へ出し直すことはしない */
+  private external = false;
 
   constructor(private readonly host: DragHost) {}
 
@@ -61,6 +65,13 @@ export class DragController {
     document.body.classList.add("dragging");
     this.host.keepAlive(this.host.tabs().find((t) => t.id === tabId)?.pane ?? null);
     this.move(x, y, false, false);
+  }
+
+  /** 普通のエクスプローラなど、アプリの外から持ってきたファイルのドラッグ（ADR 0016）。ファイルID は無いので空にする */
+  startExternal(tabId: string, paths: string[], x: number, y: number) {
+    this.start(tabId, paths.map((path) => ({ id: "", path })), x, y, []);
+    this.external = true;
+    this.host.requestTargets(tabId);
   }
 
   setTargets(tabId: string, targets: WindowTarget[]) {
@@ -108,6 +119,13 @@ export class DragController {
 
   move(x: number, y: number, ctrl: boolean, shift: boolean) {
     if (!this.ghost || !this.highlight) return;
+    // 本体の外へ出たら、Windows のドラッグに切り替える（ボタンを離すまでここへは戻らない）
+    if (!this.external && (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight)) {
+      const items = this.items;
+      this.cancel();
+      void this.host.dragOut(items);
+      return;
+    }
     const hit = this.hitTest(x, y);
     this.watchTab(hit);
     const effect = hit && hit.dest ? dropEffect(this.items.map((i) => i.path), hit.dest, { ctrl, shift }) : null;
@@ -140,6 +158,7 @@ export class DragController {
     this.lastHit = null;
     this.lastEffect = null;
     document.body.classList.remove("dragging");
+    this.external = false;
     this.host.keepAlive(null);
   }
 

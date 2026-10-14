@@ -953,6 +953,7 @@ dependencies = [
  "tauri-plugin-opener",
  "trash",
  "windows",
+ "windows-core",
 ]
 
 [[package]]

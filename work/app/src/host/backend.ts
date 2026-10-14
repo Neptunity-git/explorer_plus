@@ -41,6 +41,8 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   }
 }
 
+export type OneDriveAction = "share" | "copyLink" | "manageAccess" | "viewOnline";
+
 export const backend = {
   listDir: (path: string) => call<RawFolder>("list_dir", { path }),
   folderSizes: (paths: string[]) => call<number[]>("folder_sizes", { paths }),
@@ -63,6 +65,14 @@ export const backend = {
   clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
   openWith: (item: EntryRef) => call<void>("open_with", { item }),
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
+  /** アプリの外からドロップされたファイル（Windows が渡したパス）を移動・コピーする */
+  transferPaths: (paths: string[], dest: string, effect: "move" | "copy") => call<number>("transfer_paths", { paths, dest, effect }),
+  /** OneDrive の中のファイル・フォルダか */
+  onedriveContains: (item: EntryRef) => call<boolean>("onedrive_contains", { item }),
+  /** OneDrive の操作。Windows のメニューの項目を呼び、画面は OneDrive が出す */
+  onedriveAction: (item: EntryRef, action: OneDriveAction) => call<void>("onedrive_action", { item, action }),
+  /** アプリの外へのドラッグ。落とされる（取りやめる）まで戻らない */
+  dragOut: (items: EntryRef[]) => call<"dropped" | "cancelled">("drag_out", { items }),
   pathKind: (path: string) => call<"dir" | "file" | "none">("path_kind", { path }),
   runCommand: (file: string, args: string, cwd: string) => call<void>("run_command", { file, args, cwd }),
 };

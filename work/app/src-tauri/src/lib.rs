@@ -5,6 +5,7 @@ mod fsops;
 mod geo;
 mod icons;
 mod mods;
+mod shellmenu;
 mod transfer;
 
 /// 開発中だけ、環境変数 EXPLORER_PLUS_START_DIR のフォルダで起動する（試験の操作が、ふだんのフォルダに及ばないように）。
@@ -63,6 +64,10 @@ pub fn run() {
             transfer::clipboard_set,
             transfer::clipboard_paste,
             transfer::transfer,
+            transfer::transfer_paths,
+            transfer::drag_out,
+            shellmenu::onedrive_contains,
+            shellmenu::onedrive_action,
             transfer::open_with,
             geo::get_location,
             dev_start_dir,

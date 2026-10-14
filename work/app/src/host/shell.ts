@@ -3,7 +3,8 @@
 import type { EntryRef, KeyMessage, MenuItem, Rect, ViewInfo } from "../api/types";
 import { uniqueName } from "../core/names";
 import { parseCommandLine, splitPath } from "../core/paths";
-import { backend, BackendError, ICON_ORIGIN, type Place, type RawEntry, type RawFolder } from "./backend";
+import { backend, BackendError, ICON_ORIGIN, type OneDriveAction, type Place, type RawEntry, type RawFolder } from "./backend";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { moveItem } from "../core/drop";
 import { DragController, type WindowTarget } from "./drag";
 import { confirmDialog, playOpen, playTrash } from "./effects";
@@ -152,9 +153,20 @@ export class App {
     keepAlive: (pane) => {
       for (const t of this.tabs) t.pane.classList.toggle("drag-keep", t.pane === pane);
     },
+    dragOut: async (items) => {
+      try {
+        // マウスが本体の外へ出た。ここから先は Windows のドラッグ（落とされるまで戻らない）
+        const result = await backend.dragOut(items);
+        if (result === "dropped") this.refreshAll();
+      } catch (e) {
+        this.toast(`ドラッグできませんでした：${errorText(e)}`);
+      }
+    },
     drop: async (items, dest, effect) => {
       try {
-        await backend.transfer(items, dest, effect);
+        // ファイルID が空なのは、アプリの外から落とされたもの（パスは Windows が渡したもの）
+        if (items.length > 0 && items.every((i) => i.id === "")) await backend.transferPaths(items.map((i) => i.path), dest, effect);
+        else await backend.transfer(items, dest, effect);
       } catch (e) {
         if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`${effect === "move" ? "移動" : "コピー"}できませんでした：${errorText(e)}`);
       }
@@ -244,6 +256,18 @@ export class App {
     // ふだんはビューのランタイムが送ってくるが、ビューの外でボタンを離したときなどに、こちらで受け取る
     document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
     document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
+    // 普通のエクスプローラなど、アプリの外からファイルをドラッグしてきたとき（ADR 0016）。
+    // 位置は画面の実際の点の数で来るので、画面の倍率で割って、本体の画面の座標にする
+    void getCurrentWebview().onDragDropEvent((e) => {
+      const p = e.payload;
+      if (p.type === "leave") return this.drag.cancel();
+      const x = p.position.x / window.devicePixelRatio;
+      const y = p.position.y / window.devicePixelRatio;
+      if (p.type === "enter") this.active && this.drag.startExternal(this.active.tabId, p.paths, x, y);
+      else if (p.type === "over") this.drag.move(x, y, false, false);
+      else if (p.type === "drop") void this.drag.end(x, y, false, false, false);
+    });
+
     document.addEventListener("keydown", (e) => this.drag.active && e.key === "Escape" && void this.drag.end(0, 0, false, false, true));
 
     document.addEventListener("keydown", (e) => {
@@ -704,6 +728,9 @@ export class App {
       const allFolders = raws.every((r) => r?.isDir);
       const single = items.length === 1 ? items[0] : null;
       const pinned = single ? quickAccess.has(single) : false;
+      // OneDrive の中なら、OneDrive の操作を出す。中身は Windows のメニューの項目を呼ぶ（画面は OneDrive が出す。ADR 0016）
+      const onedrive = single ? await backend.onedriveContains(single).catch(() => false) : false;
+      const od = (label: string, action: OneDriveAction) => ({ label, run: run(() => backend.onedriveAction(single!, action)) });
       lines.push(
         // 「開く」はメニューに出さない（ダブルクリック・Enter で足りる。ADR 0015 判断5）。「プログラムから開く」はファイルのときだけ
         ...(single && raws[0] && !raws[0].isDir ? [{ label: "プログラムから開く…", run: run(() => backend.openWith(single)) }] : []),
@@ -718,6 +745,9 @@ export class App {
           run: () => single && (pinned ? quickAccess.unpin([single]) : quickAccess.pin([single])),
         },
         "separator",
+        ...(onedrive
+          ? [od("OneDrive で共有…", "share"), od("OneDrive のリンクをコピー", "copyLink"), od("OneDrive のアクセス許可の管理…", "manageAccess"), od("オンラインで表示", "viewOnline"), "separator" as const]
+          : []),
         { label: "タグ…", run: run(() => tagPicker(items)) },
         { label: "時間割のコマに結びつける…", disabled: !single || !allFolders, run: run(() => slotPicker(items[0], (m) => this.toast(m))) },
         "separator",

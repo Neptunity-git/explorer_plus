@@ -5,17 +5,19 @@
 use crate::fsops::{verify, EntryRef};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND};
-use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
+use windows::core::{w, BOOL, HRESULT, PCWSTR};
+use windows::Win32::Foundation::{DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, HANDLE, HGLOBAL, HWND, S_OK};
+use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, IDataObject, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-use windows::Win32::System::Ole::CF_HDROP;
+use windows::Win32::System::Ole::{DoDragDrop, IDropSource, IDropSource_Impl, OleInitialize, CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_MOVE, DROPEFFECT_NONE};
+use windows::Win32::System::SystemServices::{MK_LBUTTON, MODIFIERKEYS_FLAGS};
+use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    DragQueryFileW, FileOperation, IFileOperation, IShellItem, SHCreateItemFromParsingName, DROPFILES, FOF_ALLOWUNDO,
-    FOF_RENAMEONCOLLISION, HDROP,
+    DragQueryFileW, FileOperation, IFileOperation, IShellItem, BHID_DataObject, IShellItemArray, SHCreateItemFromParsingName, SHCreateShellItemArrayFromIDLists, SHParseDisplayName, DROPFILES,
+    FOF_ALLOWUNDO, FOF_RENAMEONCOLLISION, HDROP,
 };
 
 /// エクスプローラの「切り取りかコピーか」の印（DROPEFFECT_MOVE = 2、DROPEFFECT_COPY | DROPEFFECT_LINK = 5）
@@ -217,6 +219,85 @@ pub async fn transfer(window: tauri::WebviewWindow, items: Vec<EntryRef>, dest: 
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// 普通のエクスプローラなど、アプリの外からドロップされたファイルを dest へ移動・コピーする（ADR 0016）。
+/// パスは Windows が渡してきたもの（本体の画面だけが呼ぶ。MOD は呼べない）なので、ファイルID の確かめはない
+#[tauri::command]
+pub async fn transfer_paths(window: tauri::WebviewWindow, paths: Vec<String>, dest: String, effect: String) -> Result<usize, String> {
+    let owner = owner_hwnd(&window).map(|h| h.0 as isize);
+    tauri::async_runtime::spawn_blocking(move || {
+        let is_move = match effect.as_str() {
+            "move" => true,
+            "copy" => false,
+            _ => return Err(format!("invalid: effect {}", effect)),
+        };
+        if paths.is_empty() {
+            return Ok(0);
+        }
+        shell_transfer(&paths, &dest, is_move, owner.map(|h| HWND(h as _)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// ドラッグの「持ち主」側の約束事。ボタンを離したら落とす・Esc で取りやめる
+#[windows::core::implement(IDropSource)]
+struct DragSource;
+
+impl IDropSource_Impl for DragSource_Impl {
+    fn QueryContinueDrag(&self, escape_pressed: BOOL, key_state: MODIFIERKEYS_FLAGS) -> HRESULT {
+        if escape_pressed.as_bool() {
+            DRAGDROP_S_CANCEL
+        } else if key_state.0 & MK_LBUTTON.0 == 0 {
+            DRAGDROP_S_DROP
+        } else {
+            S_OK
+        }
+    }
+
+    fn GiveFeedback(&self, _effect: DROPEFFECT) -> HRESULT {
+        DRAGDROP_S_USEDEFAULTCURSORS
+    }
+}
+
+/// アプリの外（普通のエクスプローラ・デスクトップなど）へファイルをドラッグして落とす（ADR 0016）。
+/// マウスのボタンが押されている間だけ呼ぶ。落とされるまで戻らない。戻り値は "dropped"（どこかに落とされた）か "cancelled"。
+/// 同期のコマンドなので、画面を動かしているスレッドで動く（OLE のドラッグはそのスレッドで動かす決まり）
+#[tauri::command]
+pub fn drag_out(items: Vec<EntryRef>) -> Result<String, String> {
+    let paths = verified_paths(&items)?;
+    if paths.is_empty() {
+        return Ok("none".into());
+    }
+    unsafe {
+        let _ = OleInitialize(None);
+        let mut pidls: Vec<*mut ITEMIDLIST> = Vec::new();
+        for p in &paths {
+            let w = wide(p);
+            let mut pidl: *mut ITEMIDLIST = std::ptr::null_mut();
+            if SHParseDisplayName(PCWSTR(w.as_ptr()), None, &mut pidl, 0, None).is_err() {
+                for q in &pidls {
+                    CoTaskMemFree(Some(*q as _));
+                }
+                return Err(format!("not-found: {}", p));
+            }
+            pidls.push(pidl);
+        }
+        let list: Vec<*const ITEMIDLIST> = pidls.iter().map(|p| *p as *const ITEMIDLIST).collect();
+        // 項目のまとまり（エクスプローラで選んだときと同じもの）から、ドラッグで渡すデータを作ってもらう
+        let data: Result<IDataObject, _> = SHCreateShellItemArrayFromIDLists(&list).and_then(|arr: IShellItemArray| arr.BindToHandler(None, &BHID_DataObject));
+        for q in &pidls {
+            CoTaskMemFree(Some(*q as _));
+        }
+        let data = data.map_err(|e| format!("io: {}", e))?;
+        let source: IDropSource = DragSource.into();
+        let mut effect = DROPEFFECT_NONE;
+        let hr = DoDragDrop(&data, &source, DROPEFFECT_COPY | DROPEFFECT_MOVE, &mut effect);
+        // 移動のときは、落とした先（エクスプローラ）が自分で移動して、結果は「何もしない」と返ってくる（Windows の決まり）。
+        // なので、結果ではなく「落とされたか」で答える
+        Ok(if hr == DRAGDROP_S_DROP { "dropped" } else { "cancelled" }.into())
+    }
 }
 
 /// 「プログラムから開く」：Windows の「アプリを選ぶ」画面を出し、選んだアプリで開く（ADR 0015 判断5）。
