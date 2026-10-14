@@ -1,4 +1,4 @@
-import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, RESOLVE_MAX_REFS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
+import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
 
 export type ParseResult =
   | { ok: true; message: ModToHostMessage }
@@ -151,6 +151,56 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
         result.extra = parsedExtra;
       }
       return { ok: true, params: result };
+    }
+
+    case "tags.list":
+    case "timetable.get":
+    case "timetable.current":
+      return { ok: true, params: {} };
+
+    case "tags.create": {
+      const { name, color } = params;
+      if (!isString(name) || name.length < 1 || name.length > TAG_NAME_MAX) return { ok: false };
+      if (!isString(color) || color.length < 1 || color.length > 16) return { ok: false };
+      return { ok: true, params: { name, color } };
+    }
+
+    case "tags.update": {
+      const { id, name, color } = params;
+      if (!isNonEmptyString(id) || id.length > 64) return { ok: false };
+      if (name !== undefined && (!isString(name) || name.length < 1 || name.length > TAG_NAME_MAX)) return { ok: false };
+      if (color !== undefined && (!isString(color) || color.length < 1 || color.length > 16)) return { ok: false };
+      if (name === undefined && color === undefined) return { ok: false };
+      const result: Record<string, unknown> = { id };
+      if (name !== undefined) result.name = name;
+      if (color !== undefined) result.color = color;
+      return { ok: true, params: result };
+    }
+
+    case "tags.delete": {
+      const { id } = params;
+      if (!isNonEmptyString(id) || id.length > 64) return { ok: false };
+      return { ok: true, params: { id } };
+    }
+
+    case "tags.assign": {
+      const { items, tagId, on } = params;
+      const parsedItems = parseRefArray(items, 1, TAG_ASSIGN_MAX_ITEMS);
+      if (!parsedItems.ok) return { ok: false };
+      if (!isNonEmptyString(tagId) || tagId.length > 64) return { ok: false };
+      if (typeof on !== "boolean") return { ok: false };
+      return { ok: true, params: { items: parsedItems.refs, tagId, on } };
+    }
+
+    case "tags.entries": {
+      const { tagId } = params;
+      if (!isNonEmptyString(tagId) || tagId.length > 64) return { ok: false };
+      return { ok: true, params: { tagId } };
+    }
+
+    case "timetable.set": {
+      if (!("timetable" in params)) return { ok: false };
+      return { ok: true, params: { timetable: params.timetable } };
     }
 
     default:
