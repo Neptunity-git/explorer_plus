@@ -25,6 +25,9 @@ export function isSameOrInside(path: string, folder: string): boolean {
   if (p === f) {
     return true;
   }
+  if (f.endsWith("\\")) {
+    return p.startsWith(f);
+  }
   return p.startsWith(f + "\\");
 }
 
