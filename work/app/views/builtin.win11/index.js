@@ -351,6 +351,10 @@ list.addEventListener("contextmenu", (ev) => {
 
 // ---- マウスとキーボード ----
 
+// ドラッグ＆ドロップ（ADR 0015 判断2）：押したまま少し動かすとドラッグになる。そこから先は本体が受け持つ
+let pressed = null; // { x, y, index, deferSelect }
+const DRAG_START_PX = 6;
+
 list.addEventListener("mousedown", (ev) => {
   if (ev.button !== 0) return;
   const tr = ev.target.closest(".item");
@@ -361,8 +365,42 @@ list.addEventListener("mousedown", (ev) => {
     }
     return;
   }
-  select(Number(tr.dataset.index), { ctrl: ev.ctrlKey, shift: ev.shiftKey });
+  const i = Number(tr.dataset.index);
+  // すでに選んでいる項目を押したときは、離すまで選び直さない（複数選んだままドラッグできるように。Win11 と同じ）
+  const deferSelect = selected.has(rows[i].path) && !ev.ctrlKey && !ev.shiftKey;
+  if (!deferSelect) select(i, { ctrl: ev.ctrlKey, shift: ev.shiftKey });
+  pressed = { x: ev.clientX, y: ev.clientY, index: i, deferSelect };
 });
+
+list.addEventListener("mousemove", (ev) => {
+  if (!pressed || editing || !(ev.buttons & 1)) return;
+  if (Math.hypot(ev.clientX - pressed.x, ev.clientY - pressed.y) < DRAG_START_PX) return;
+  const items = selectedEntries();
+  pressed = null;
+  if (items.length > 0) ep.drag.start({ items, x: ev.clientX, y: ev.clientY, targets: dropTargets() }).catch(report);
+});
+
+list.addEventListener("mouseup", () => {
+  if (pressed?.deferSelect) select(pressed.index);
+  pressed = null;
+});
+
+/** このビューの中の、落とせる場所（見えているフォルダの行・アイコン。選んでいるものは除く） */
+function dropTargets() {
+  const out = [];
+  for (const el of list.querySelectorAll(".item")) {
+    const e = rows[Number(el.dataset.index)];
+    if (e.kind !== "folder" || selected.has(e.path)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) continue;
+    out.push({ entry: e, rect: r });
+    if (out.length >= 500) break;
+  }
+  return out;
+}
+
+// ドラッグ中にこのタブへ切り替わったら、落とせる場所を知らせ直す
+ep.onDragTargets(() => ep.drag.targets(dropTargets()).catch(report));
 
 list.addEventListener("dblclick", (ev) => {
   const tr = ev.target.closest(".item");
@@ -370,7 +408,14 @@ list.addEventListener("dblclick", (ev) => {
 });
 
 list.addEventListener("keydown", (ev) => {
-  if (editing || rows.length === 0) return;
+  if (editing) return;
+  // 貼り付けは、空のフォルダでもできるように先に見る
+  if (ev.ctrlKey && !ev.shiftKey && ev.code === "KeyV") {
+    ev.preventDefault();
+    ep.clipboard.paste().catch(report);
+    return;
+  }
+  if (rows.length === 0) return;
   const current = cursor ?? -1;
   // 大アイコンでは、上下は1段（横に並んでいる数）ずつ、左右は1つずつ動く
   const perRow = mode === "large" ? Math.max(1, Math.floor((list.clientWidth - 16) / TILE_WIDTH)) : 1;
@@ -396,6 +441,11 @@ list.addEventListener("keydown", (ev) => {
     if (items.length > 0) ep.trash(items, { from: rectOf(current) }).catch(report);
   } else if (ev.key === "Backspace") {
     ep.navigateUp().catch(report);
+  } else if (ev.ctrlKey && !ev.shiftKey && (ev.code === "KeyC" || ev.code === "KeyX")) {
+    // 切り取り・コピー（ADR 0015 判断1）。Windows のエクスプローラにも貼り付けられる
+    ev.preventDefault();
+    const items = selectedEntries();
+    if (items.length > 0) (ev.code === "KeyX" ? ep.clipboard.cut(items) : ep.clipboard.copy(items)).catch(report);
   } else if (ev.key === "a" && ev.ctrlKey) {
     ev.preventDefault();
     selected = new Set(rows.map((e) => e.path));

@@ -24,6 +24,7 @@ import { storageFor } from "./view-storage";
 import { tagService } from "./tag-service";
 import { timetableService } from "./timetable-service";
 import { quickAccess, recentItems } from "./ref-list-service";
+import type { WindowTarget } from "./drag";
 
 export type LoadedView = { manifest: Manifest; source: "builtin" | "user" };
 
@@ -46,6 +47,14 @@ export interface TabActions {
   listViews(): ViewInfo[];
   /** 新しいタブを開く。replace なら、このタブを置き換える */
   openTab(viewId: string, path?: string, replace?: boolean): Promise<void>;
+  // ↓ 切り取り・コピー・貼り付けと、ドラッグ＆ドロップ（ADR 0015）。座標は本体の画面の座標
+  clipboardSet(items: EntryRef[], cut: boolean): Promise<void>;
+  /** 今のフォルダへ貼り付け、貼り付けた数を返す */
+  clipboardPaste(): Promise<number>;
+  dragStart(items: EntryRef[], x: number, y: number, targets: WindowTarget[]): void;
+  dragTargets(targets: WindowTarget[]): void;
+  dragMove(x: number, y: number, ctrl: boolean, shift: boolean): void;
+  dragEnd(x: number, y: number, ctrl: boolean, shift: boolean, cancel: boolean): Promise<void>;
 }
 
 /** 並べ替えのためだけに Entry を作るときの uses（余計な情報を付けない） */
@@ -139,6 +148,17 @@ export class ViewHost {
 
   setTheme(theme: "light" | "dark") {
     if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "theme", data: theme });
+  }
+
+  /** ドラッグ中にこのビューのタブへ切り替わった。落とせる場所を知らせ直してもらう（ADR 0015 判断2） */
+  requestDragTargets() {
+    if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "dragTargets", data: null });
+  }
+
+  /** ビューの中の落とせる場所（iframe の中の座標）を、本体の画面の座標に直す */
+  private toWindowTargets(targets: { id: string; path: string; x: number; y: number; width: number; height: number }[]): WindowTarget[] {
+    const box = this.iframe.getBoundingClientRect();
+    return targets.map((t) => ({ ref: { id: t.id, path: t.path }, rect: { x: box.x + t.x, y: box.y + t.y, width: t.width, height: t.height } }));
   }
 
   /** ビューに「この項目の名前の変更を始めて」と頼む（対応していないビューは無視する） */
@@ -315,6 +335,26 @@ export class ViewHost {
         return quickAccess.unpin(p.items);
       case "recent.list":
         return (await recentItems.entries()).map((r) => toEntry(r, this.uses));
+      case "clipboard.copy":
+        return this.tab.clipboardSet(p.items, false);
+      case "clipboard.cut":
+        return this.tab.clipboardSet(p.items, true);
+      case "clipboard.paste":
+        return { count: await this.tab.clipboardPaste() };
+      case "drag.start": {
+        const box = this.iframe.getBoundingClientRect();
+        return this.tab.dragStart(p.items, box.x + p.x, box.y + p.y, this.toWindowTargets(p.targets));
+      }
+      case "drag.targets":
+        return this.tab.dragTargets(this.toWindowTargets(p.targets));
+      case "drag.move": {
+        const box = this.iframe.getBoundingClientRect();
+        return this.tab.dragMove(box.x + p.x, box.y + p.y, p.ctrl, p.shift);
+      }
+      case "drag.end": {
+        const box = this.iframe.getBoundingClientRect();
+        return this.tab.dragEnd(box.x + p.x, box.y + p.y, p.ctrl, p.shift, p.cancel);
+      }
     }
   }
 

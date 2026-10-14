@@ -59,6 +59,10 @@ export const backend = {
   appDataLoad: (name: AppDataName) => call<string | null>("app_data_load", { name }),
   appDataSave: (name: AppDataName, json: string) => call<void>("app_data_save", { name, json }),
   fileIds: (paths: string[]) => call<string[]>("file_ids", { paths }),
+  clipboardSet: (items: EntryRef[], cut: boolean) => call<void>("clipboard_set", { items, cut }),
+  clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
+  openWith: (item: EntryRef) => call<void>("open_with", { item }),
+  transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
   pathKind: (path: string) => call<"dir" | "file" | "none">("path_kind", { path }),
   runCommand: (file: string, args: string, cwd: string) => call<void>("run_command", { file, args, cwd }),
 };

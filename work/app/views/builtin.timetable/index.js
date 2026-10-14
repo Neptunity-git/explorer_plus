@@ -31,6 +31,7 @@ document.head.appendChild(
       .tui-grid th.period { cursor: context-menu; }
       .empty-state { padding: 24px 2ch; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
       .ondemand-add { padding: 4px 1ch 2px; }
+      .memo { color: var(--tui-accent); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     `,
   }),
 );
@@ -122,11 +123,12 @@ function openFolder(ref) {
   ep.open(ref, { newTab: true }).catch(() => say(`フォルダが見つかりません：${ref.path}`, true));
 }
 
-function classMenu(item, setFolders, setTitle, remove) {
+function classMenu(item, setFolders, setTitle, remove, setMemo) {
   const linked = item?.folders[0];
   return [
     linked && { id: "open", label: "フォルダを開く", run: () => openFolder(linked) },
     { id: "title", label: item?.title ? "授業名を変える…" : "授業名を入れる…", run: setTitle },
+    { id: "memo", label: item?.memo ? "メモを変える…" : "メモ…（教室・持ち物など）", run: setMemo },
     { id: "create", label: "授業のフォルダを作って結びつける…", run: async () => {
       const ref = await createClassFolder(item?.title || "").catch(report);
       if (ref) setFolders([ref]);
@@ -148,6 +150,10 @@ const cellActions = (r, c) => {
     const title = await ask({ label: "授業名:", value: s?.title || "", okLabel: "決める" });
     if (title !== null) save(withSlot(r, c, (x) => ({ ...x, title })));
   };
+  const setMemo = async () => {
+    const memo = await ask({ label: "メモ:", value: s?.memo || "", placeholder: "例：301教室・教科書を持っていく", okLabel: "決める" });
+    if (memo !== null) save(withSlot(r, c, (x) => ({ ...x, memo: memo.slice(0, 200) })));
+  };
   return {
     slot: s,
     setTitle,
@@ -156,6 +162,7 @@ const cellActions = (r, c) => {
       (folders) => save(withSlot(r, c, (x) => ({ ...x, folders }))),
       setTitle,
       () => save(withSlot(r, c, () => null), "コマを消しました"),
+      setMemo,
     ),
     open: () => (s?.folders[0] ? openFolder(s.folders[0]) : setTitle()),
   };
@@ -276,6 +283,7 @@ function renderGrid() {
           Object.assign(document.createElement("div"), { textContent: s.title || "（授業名なし）" }),
           Object.assign(document.createElement("div"), { className: "tui-dim", textContent: s.folders[0] ? `▸ ${s.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
         );
+        if (s.memo) td.append(Object.assign(document.createElement("div"), { className: "memo", textContent: s.memo, title: s.memo }));
       } else {
         td.append(Object.assign(document.createElement("div"), { className: "tui-dim", textContent: "·" }));
       }
@@ -311,7 +319,8 @@ function renderOndemand() {
     row.className = "tui-row";
     row.append(
       Object.assign(document.createElement("span"), { textContent: o.title }),
-      Object.assign(document.createElement("span"), { className: "tui-grow tui-dim", textContent: o.folders[0] ? `▸ ${o.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
+      Object.assign(document.createElement("span"), { className: "tui-dim", textContent: o.folders[0] ? `▸ ${o.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
+      Object.assign(document.createElement("span"), { className: "tui-grow memo", textContent: o.memo || "" }),
     );
     const setTitle = async () => {
       const title = await ask({ label: "授業名:", value: o.title, okLabel: "決める" });
@@ -319,8 +328,12 @@ function renderOndemand() {
     };
     row.title = "ダブルクリックで開く／右クリックでメニュー";
     row.ondblclick = () => (o.folders[0] ? openFolder(o.folders[0]) : setTitle());
+    const setMemo = async () => {
+      const memo = await ask({ label: "メモ:", value: o.memo || "", placeholder: "例：毎週金曜までに視聴", okLabel: "決める" });
+      if (memo !== null) save(withOndemand(o, (x) => ({ ...x, memo: memo.slice(0, 200) })));
+    };
     row.oncontextmenu = (e) =>
-      menu(e, classMenu(o, (folders) => save(withOndemand(o, (x) => ({ ...x, folders }))), setTitle, () => save(withOndemand(o, () => null), "消しました")));
+      menu(e, classMenu(o, (folders) => save(withOndemand(o, (x) => ({ ...x, folders }))), setTitle, () => save(withOndemand(o, () => null), "消しました"), setMemo));
     box.append(row);
   }
   const add = document.createElement("div");

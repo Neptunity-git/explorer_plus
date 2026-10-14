@@ -331,7 +331,7 @@ pub async fn resolve(refs: Vec<EntryRef>) -> Result<Vec<Option<RawEntry>>, Strin
 
 /// MOD から頼まれた ref が、本当にそのファイルを指しているかを確かめる。
 /// ID が一致しないもの（MOD が適当なパスを作って渡したもの）は断る。
-fn verify(r: &EntryRef) -> Result<PathBuf, String> {
+pub(crate) fn verify(r: &EntryRef) -> Result<PathBuf, String> {
     let p = PathBuf::from(&r.path);
     if !p.exists() {
         return Err(format!("not-found: {}", r.path));

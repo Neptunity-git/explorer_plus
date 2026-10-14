@@ -152,3 +152,19 @@ button { font: inherit; color: inherit; }
 .place-icon { width: 16px; height: 16px; flex: none; }
 .place-home-view { font-weight: 600; }
 .picker-group { margin: 10px 0 2px; font-size: 12px; color: var(--muted); }
+
+/* ---- ドラッグ＆ドロップ・タブの並べ替え（ADR 0015） ---- */
+.drag-ghost {
+  position: fixed; z-index: 300; pointer-events: none; max-width: 420px; padding: 6px 10px; border-radius: 6px;
+  background: var(--accent); color: #fff; box-shadow: var(--shadow); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+:root[data-theme="dark"] .drag-ghost { color: #000; }
+.drag-ghost.no-drop { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+.drag-highlight { position: fixed; z-index: 290; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.drag-highlight[hidden] { display: none; }
+body.dragging, body.dragging * { cursor: default !important; }
+/* ドラッグを始めたビューは、別のタブに切り替わっても消さずに後ろに残す（消すとマウスの動きが届かなくなる） */
+.view-pane.drag-keep:not(.active) { display: block; opacity: 0; z-index: 0; }
+.view-pane.active { z-index: 1; }
+.tab { transition: transform 150ms ease; }
+.tab.tab-dragging { transition: none; z-index: 2; position: relative; box-shadow: var(--shadow); }

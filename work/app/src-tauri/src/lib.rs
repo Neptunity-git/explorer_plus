@@ -5,6 +5,7 @@ mod fsops;
 mod geo;
 mod icons;
 mod mods;
+mod transfer;
 
 /// 開発中だけ、環境変数 EXPLORER_PLUS_START_DIR のフォルダで起動する（試験の操作が、ふだんのフォルダに及ばないように）。
 /// リリース版では常に None
@@ -59,6 +60,10 @@ pub fn run() {
             fsops::file_ids,
             fsops::path_kind,
             fsops::run_command,
+            transfer::clipboard_set,
+            transfer::clipboard_paste,
+            transfer::transfer,
+            transfer::open_with,
             geo::get_location,
             dev_start_dir,
         ])

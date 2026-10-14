@@ -4,6 +4,8 @@ import type { EntryRef, KeyMessage, MenuItem, Rect, ViewInfo } from "../api/type
 import { uniqueName } from "../core/names";
 import { parseCommandLine, splitPath } from "../core/paths";
 import { backend, BackendError, ICON_ORIGIN, type Place, type RawEntry, type RawFolder } from "./backend";
+import { moveItem } from "../core/drop";
+import { DragController, type WindowTarget } from "./drag";
 import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
@@ -99,6 +101,12 @@ class Tab implements TabActions {
   shortcut = (key: KeyMessage) => this.app.handleKey(key);
   listViews = () => this.app.viewInfos();
   openTab = (viewId: string, path?: string, replace?: boolean) => this.app.openTabById(this, viewId, path, replace);
+  clipboardSet = (items: EntryRef[], cut: boolean) => backend.clipboardSet(items, cut);
+  clipboardPaste = () => this.app.paste(this);
+  dragStart = (items: EntryRef[], x: number, y: number, targets: WindowTarget[]) => this.app.drag.start(this.tabId, items, x, y, targets);
+  dragTargets = (targets: WindowTarget[]) => this.app.drag.setTargets(this.tabId, targets);
+  dragMove = (x: number, y: number, ctrl: boolean, shift: boolean) => this.app.drag.move(x, y, ctrl, shift);
+  dragEnd = (x: number, y: number, ctrl: boolean, shift: boolean, cancel: boolean) => this.app.drag.end(x, y, ctrl, shift, cancel);
 }
 
 export class App {
@@ -126,6 +134,44 @@ export class App {
     /** 最初に開くフォルダ（開発中に、試験用のフォルダで起動するため。ふだんは null） */
     private readonly startDir: string | null = null,
   ) {}
+
+  // ---- ドラッグ＆ドロップ（ADR 0015 判断2） ----
+
+  readonly drag = new DragController({
+    tabs: () =>
+      this.tabs.map((t) => ({ id: t.tabId, button: t.button, folder: t.folderView ? (t.folder?.path ?? null) : null, pane: t.pane, active: t === this.active })),
+    activateTab: (id) => {
+      const t = this.tabs.find((x) => x.tabId === id);
+      if (t) this.activate(t, false);
+    },
+    requestTargets: (id) => this.tabs.find((x) => x.tabId === id)?.host.requestDragTargets(),
+    keepAlive: (pane) => {
+      for (const t of this.tabs) t.pane.classList.toggle("drag-keep", t.pane === pane);
+    },
+    drop: async (items, dest, effect) => {
+      try {
+        await backend.transfer(items, dest, effect);
+      } catch (e) {
+        if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`${effect === "move" ? "移動" : "コピー"}できませんでした：${errorText(e)}`);
+      }
+      this.refreshAll();
+    },
+  });
+
+  /** 貼り付け（ADR 0015 判断1）。今のフォルダへ */
+  async paste(tab: Tab): Promise<number> {
+    if (!tab.folderView || !tab.folder) throw new BackendError({ code: "not-found", message: "no folder is open" });
+    try {
+      return await backend.clipboardPaste(tab.folder.path);
+    } finally {
+      this.refreshAll();
+    }
+  }
+
+  /** ファイルの移動・コピーの後、フォルダを開いているタブをすべて読み直す（移動元と移動先のどちらも新しくなるように） */
+  private refreshAll() {
+    for (const t of this.tabs) if (t.folderView && t.folder) void this.navigate(t, t.folder.path, false).catch(() => {});
+  }
 
   mount(root: HTMLElement) {
     document.documentElement.dataset.theme = currentTheme();
@@ -176,6 +222,12 @@ export class App {
     document.addEventListener("contextmenu", (e) => {
       if (!(e.target instanceof Element && e.target.closest("input, textarea"))) e.preventDefault();
     });
+
+    // ドラッグ中、マウスが本体の画面（タブ・アドレスバーなど）に来たときの動きも追う。
+    // ふだんはビューのランタイムが送ってくるが、ビューの外でボタンを離したときなどに、こちらで受け取る
+    document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
+    document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
+    document.addEventListener("keydown", (e) => this.drag.active && e.key === "Escape" && void this.drag.end(0, 0, false, false, true));
 
     document.addEventListener("keydown", (e) => {
       // F5・Ctrl+R はブラウザの再読み込みを止めて、フォルダの読み直しにする
@@ -237,6 +289,7 @@ export class App {
       if (i > 0) this.crumbs.append(el("span", "crumb-sep", "›"));
       const b = el("button", "crumb", c.label);
       b.title = c.path;
+      b.dataset.dropPath = c.path; // ドラッグ＆ドロップで、ここへ落とせる
       b.onclick = (e) => {
         e.stopPropagation();
         if (this.active) void this.navigate(this.active, c.path).catch(() => {});
@@ -306,6 +359,7 @@ export class App {
     for (const p of this.places) {
       const b = el("button", `place place-${p.kind}`, p.kind === "drive" ? `ドライブ ${p.name}` : (labels[p.kind] ?? p.name));
       b.title = p.path;
+      b.dataset.dropPath = p.path;
       b.onclick = () => void this.goTo(p.path);
       this.sidebar.appendChild(b);
     }
@@ -326,6 +380,7 @@ export class App {
       icon.alt = "";
       b.append(icon, el("span", undefined, r.name));
       b.title = r.path;
+      b.dataset.dropPath = r.path;
       b.onclick = () => void this.goTo(r.path);
       b.oncontextmenu = (e) => {
         e.preventDefault();
@@ -375,6 +430,7 @@ export class App {
   /** view のタブを開く。フォルダと関係するビューなら path（無ければよく使う場所）へ移動する。at はタブの並びの位置 */
   async openTab(view: LoadedView, path?: string, at?: number) {
     const tab = new Tab(this, view);
+    this.enableTabReorder(tab);
     const i = at ?? this.tabs.length;
     this.tabs.splice(i, 0, tab);
     this.tabStrip.insertBefore(tab.button, this.tabStrip.children[i] ?? null);
@@ -413,7 +469,7 @@ export class App {
     if (this.active === tab) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)]);
   }
 
-  activate(tab: Tab) {
+  activate(tab: Tab, focus = true) {
     this.active = tab;
     for (const t of this.tabs) {
       const on = t === tab;
@@ -423,7 +479,61 @@ export class App {
     this.viewSelect.value = tab.view.manifest.id;
     this.endEditAddress();
     this.updateChrome();
-    tab.host.focus();
+    if (focus) tab.host.focus();
+  }
+
+  // ---- タブの並べ替え（ADR 0015 判断3）：ドラッグすると、まわりのタブが滑らかに避ける ----
+
+  private enableTabReorder(tab: Tab) {
+    const b = tab.button;
+    b.addEventListener("pointerdown", (down) => {
+      if (down.button !== 0 || (down.target as HTMLElement).closest(".tab-close")) return;
+      const startX = down.clientX;
+      const from = this.tabs.indexOf(tab);
+      const rects = this.tabs.map((t) => t.button.getBoundingClientRect());
+      let moving = false;
+      let to = from;
+      const onMove = (e: PointerEvent) => {
+        const dx = e.clientX - startX;
+        if (!moving && Math.abs(dx) < 5) return;
+        if (!moving) {
+          moving = true;
+          b.setPointerCapture(down.pointerId);
+          b.classList.add("tab-dragging");
+        }
+        b.style.transform = `translateX(${dx}px)`;
+        // 動かしているタブの真ん中が、ほかのタブの真ん中を越えたら、そのタブを1つ分ずらす
+        const center = rects[from].x + rects[from].width / 2 + dx;
+        to = from;
+        rects.forEach((r, i) => {
+          if (i === from) return;
+          const mid = r.x + r.width / 2;
+          if (i > from && center > mid) to = Math.max(to, i);
+          if (i < from && center < mid) to = Math.min(to, i);
+        });
+        this.tabs.forEach((t, i) => {
+          if (i === from) return;
+          const shift = from < to && i > from && i <= to ? -rects[from].width - 2 : from > to && i < from && i >= to ? rects[from].width + 2 : 0;
+          t.button.style.transform = shift ? `translateX(${shift}px)` : "";
+        });
+      };
+      const onUp = () => {
+        b.removeEventListener("pointermove", onMove);
+        b.removeEventListener("pointerup", onUp);
+        b.removeEventListener("pointercancel", onUp);
+        if (!moving) return;
+        b.classList.remove("tab-dragging");
+        // 並べ替えたあとは、ずらしたぶんを外し、本当の位置に入れ直す
+        for (const t of this.tabs) t.button.style.transform = "";
+        if (to !== from) {
+          this.tabs = moveItem(this.tabs, from, to);
+          for (const t of this.tabs) this.tabStrip.appendChild(t.button);
+        }
+      };
+      b.addEventListener("pointermove", onMove);
+      b.addEventListener("pointerup", onUp);
+      b.addEventListener("pointercancel", onUp);
+    });
   }
 
   private updateChrome() {
@@ -578,9 +688,11 @@ export class App {
       const single = items.length === 1 ? items[0] : null;
       const pinned = single ? quickAccess.has(single) : false;
       lines.push(
-        { label: "開く", shortcut: "Enter", run: run(() => (single ? this.open(tab, single) : Promise.all(items.filter((_, i) => !raws[i]?.isDir).map((r) => backend.openEntry(r))))) },
+        // 「開く」はメニューに出さない（ダブルクリック・Enter で足りる。ADR 0015 判断5）。「プログラムから開く」はファイルのときだけ
+        ...(single && raws[0] && !raws[0].isDir ? [{ label: "プログラムから開く…", run: run(() => backend.openWith(single)) }] : []),
         { label: "新しいタブで開く", disabled: !allFolders, run: run(async () => { for (const r of items) await this.openTab(tab.folderView ? tab.view : this.defaultView(), r.path); }) },
         "separator",
+        // 切り取り・コピー・貼り付けはメニューに出さない（知っていて当然の操作なので、キーだけにする。ADR 0015 判断1）
         { label: "名前の変更", shortcut: "F2", disabled: !single || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
         { label: "パスのコピー", run: copyPaths(items.map((r) => r.path)) },
         {

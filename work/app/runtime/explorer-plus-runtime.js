@@ -12,6 +12,7 @@
   const timetableListeners = new Set();
   const quickAccessListeners = new Set();
   const recentListeners = new Set();
+  const dragTargetListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
   let theme = "light";
@@ -88,6 +89,8 @@
         for (const cb of quickAccessListeners) safely(cb);
       } else if (m.event === "recent") {
         for (const cb of recentListeners) safely(cb);
+      } else if (m.event === "dragTargets") {
+        for (const cb of dragTargetListeners) safely(cb);
       }
     }
   });
@@ -220,5 +223,79 @@
       recentListeners.add(cb);
       return () => recentListeners.delete(cb);
     },
+    // ↓ 2026-10-14 に追加（切り取り・コピー・貼り付け、ドラッグ＆ドロップ。ADR 0015）
+    clipboard: Object.freeze({
+      copy: (entries) => call("clipboard.copy", { items: entries.map(toRef) }).then(() => undefined),
+      cut: (entries) => call("clipboard.cut", { items: entries.map(toRef) }).then(() => undefined),
+      /** このビューが開いているフォルダへ貼り付ける。{ count } が返る */
+      paste: () => call("clipboard.paste"),
+    }),
+    drag: Object.freeze({
+      /**
+       * ドラッグを始める（マウスのボタンを押したまま動かし始めたときに呼ぶ）。
+       * opts: { items: Entry[], x, y（MouseEvent の clientX・clientY）, targets?: [{ entry, rect }]（このビューの中の、落とせるフォルダと、その位置） }
+       * あとはランタイムがマウスの動きを本体へ送り、離したところで本体が移動・コピーする
+       */
+      start(opts) {
+        const targets = toTargets(opts.targets || []);
+        return call("drag.start", { items: opts.items.map(toRef), x: opts.x, y: opts.y, targets }).then(() => followDrag());
+      },
+      /** 落とせる場所を知らせ直す（onDragTargets で頼まれたとき） */
+      targets: (list) => call("drag.targets", { targets: toTargets(list) }).then(() => undefined),
+    }),
+    /** ドラッグ中にこのビューのタブへ切り替わったときに呼ばれる。ep.drag.targets(…) で落とせる場所を知らせる */
+    onDragTargets(cb) {
+      dragTargetListeners.add(cb);
+      return () => dragTargetListeners.delete(cb);
+    },
   });
+
+  // ---- ドラッグの間、マウスの動きを本体へ送る（iframe の中で押したボタンの動きは、離すまでこの iframe に届くため） ----
+
+  function toTargets(list) {
+    return list.map((t) => {
+      const r = t.rect;
+      return { id: t.entry.id, path: t.entry.path, x: r.x !== undefined ? r.x : r.left, y: r.y !== undefined ? r.y : r.top, width: r.width, height: r.height };
+    });
+  }
+
+  let lastPointerId = null;
+  window.addEventListener("pointerdown", (e) => (lastPointerId = e.pointerId), true);
+
+  function followDrag() {
+    let pending = null;
+    let frame = 0;
+    const send = () => {
+      frame = 0;
+      if (pending) call("drag.move", pending);
+      pending = null;
+    };
+    const onMove = (e) => {
+      pending = { x: e.clientX, y: e.clientY, ctrl: e.ctrlKey, shift: e.shiftKey };
+      if (!frame) frame = requestAnimationFrame(send);
+    };
+    const finish = (e, cancel) => {
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("keydown", onKey, true);
+      if (frame) cancelAnimationFrame(frame);
+      call("drag.end", { x: e.clientX || 0, y: e.clientY || 0, ctrl: !!e.ctrlKey, shift: !!e.shiftKey, cancel });
+    };
+    const onUp = (e) => finish(e, false);
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish(e, true);
+      }
+    };
+    // iframe の外へマウスが出ても動きを受け取れるように、押しているポインタをこのページで捕まえる
+    try {
+      if (lastPointerId !== null) document.documentElement.setPointerCapture(lastPointerId);
+    } catch {
+      // 捕まえられなくても、多くの場合は届く
+    }
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("keydown", onKey, true);
+  }
 })();

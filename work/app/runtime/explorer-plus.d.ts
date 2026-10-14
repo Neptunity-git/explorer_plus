@@ -91,6 +91,8 @@ declare global {
       periodId: string;
       title: string;
       folders: EntryRef[];
+      /** 短いメモ（0〜200 文字） */
+      memo?: string;
     }
 
     interface Timetable {
@@ -99,7 +101,7 @@ declare global {
       slots: TimetableSlot[];
       place: { latitude: number; longitude: number; radius: number } | null;
       /** オンデマンドの授業（曜日・時限なし）。省略は「なし」 */
-      ondemand?: { id: string; title: string; folders: EntryRef[] }[];
+      ondemand?: { id: string; title: string; folders: EntryRef[]; memo?: string }[];
     }
 
     interface ViewInfo {
@@ -195,6 +197,24 @@ declare global {
       /** uses に "recent" が要る（このアプリで開いたファイル、新しい順） */
       readonly recent: { list(): Promise<Entry[]> };
       onRecent(cb: () => void): () => void;
+
+      /** 切り取り・コピー・貼り付け。Windows のエクスプローラと同じ形式なので、エクスプローラとの間でも貼り付けられる */
+      readonly clipboard: {
+        copy(entries: EntryRef[]): Promise<void>;
+        cut(entries: EntryRef[]): Promise<void>;
+        /** このビューが開いているフォルダへ貼り付ける */
+        paste(): Promise<{ count: number }>;
+      };
+      /**
+       * ドラッグ＆ドロップ。ボタンを押したまま動かし始めたら start を呼ぶ。そこから先は、ランタイムがマウスの動きを本体へ送り、
+       * 本体が落とせる場所（targets・アドレスバー・左の欄・タブ）を光らせ、離したら移動・コピーする（Win11 と同じ決まり）
+       */
+      readonly drag: {
+        start(opts: { items: EntryRef[]; x: number; y: number; targets?: { entry: EntryRef; rect: RectLike }[] }): Promise<void>;
+        targets(list: { entry: EntryRef; rect: RectLike }[]): Promise<void>;
+      };
+      /** ドラッグ中にこのビューのタブへ切り替わったとき。drag.targets で落とせる場所を知らせる */
+      onDragTargets(cb: () => void): () => void;
     }
   }
 }
