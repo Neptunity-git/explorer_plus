@@ -346,6 +346,11 @@ ep.tags.list().then((list) => {
 }, report);
 ep.onTags(setTags); // この直後に、本体が今のフォルダを送り直してくるので、そこで描き直される
 
+// タブを切り替えてこのビューに戻ってきたら、キーボードの操作が一覧に届くようにする
+window.addEventListener("focus", () => {
+  if (!editing) list.focus();
+});
+
 ep.onAction(({ action, entry }) => {
   if (action === "rename") beginRename(entry.path);
 });

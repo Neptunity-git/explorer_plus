@@ -210,6 +210,8 @@ export class ViewHost {
       case "ready":
         if (!this.isReady) {
           this.isReady = true;
+          // 表示中のタブなら、キーボードの操作がすぐビューに届くようにする
+          if (this.iframe.closest(".view-pane.active") && !document.querySelector(".dialog-backdrop, .menu-backdrop")) this.iframe.focus();
           // 返事が届いた後にフォルダが届くよう、次の順番で送る
           setTimeout(() => this.pushFolder(), 0);
         }

@@ -253,6 +253,11 @@ document.addEventListener("keydown", (ev) => {
   (pane === "tags" ? onTagsKey : onItemsKey)(ev);
 });
 
+// タブを切り替えて戻ってきたら、キーボードの操作が届くようにする
+window.addEventListener("focus", () => {
+  if (!prompt) (pane === "tags" ? $tags : $items).focus();
+});
+
 // タグの一覧が変わった（ほかのビューで付けた・名前を変えた、など）ら描き直す
 ep.onTags(async (next) => {
   const keep = currentTag()?.id;

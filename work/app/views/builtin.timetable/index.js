@@ -333,6 +333,11 @@ document.addEventListener("keydown", (ev) => {
   (pane === "grid" ? onGridKey : onPeriodsKey)(ev);
 });
 
+// タブを切り替えて戻ってきたら、キーボードの操作が届くようにする
+window.addEventListener("focus", () => {
+  if (!prompt) (pane === "grid" ? $grid : $periods).focus();
+});
+
 // ---- 今の授業（30秒ごとに確かめる） ----
 
 async function refreshNow() {

@@ -4,6 +4,7 @@
 import type { EntryRef, Tag, TimetableSlot } from "../api/types";
 import { sameRef } from "../core/tags";
 import { BackendError } from "./backend";
+import { blockBackground } from "./effects";
 import { TAG_PALETTE, tagService } from "./tag-service";
 import { timetableService } from "./timetable-service";
 
@@ -29,6 +30,8 @@ function panel(title: string): { body: HTMLElement; footer: HTMLElement; close: 
   document.body.appendChild(backdrop);
   let resolve!: () => void;
   const done = new Promise<void>((r) => (resolve = r));
+  const previous = document.activeElement as HTMLElement | null;
+  const unblock = blockBackground();
   const onKey = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -38,6 +41,8 @@ function panel(title: string): { body: HTMLElement; footer: HTMLElement; close: 
   const close = () => {
     document.removeEventListener("keydown", onKey, true);
     backdrop.remove();
+    unblock();
+    previous?.focus();
     resolve();
   };
   document.addEventListener("keydown", onKey, true);
@@ -147,5 +152,7 @@ export function slotPicker(folder: EntryRef, notify: (message: string) => void):
   const cancel = el("button", undefined, "閉じる");
   cancel.onclick = close;
   footer.append(cancel);
+  // キーボードだけでも選べるように（Tab・Shift+Tab で移動、Enter で決定）
+  (body.querySelector("button") ?? cancel).focus();
   return done;
 }

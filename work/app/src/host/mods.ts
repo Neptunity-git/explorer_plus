@@ -24,5 +24,8 @@ export async function loadViews(): Promise<{ views: LoadedView[]; problems: ModP
     if (r.ok) views.push({ manifest: r.manifest, source: src.source });
     else problems.push({ dir: src.dir, errors: r.errors });
   }
+  // ビューの一覧の並び：標準の Win11 風を先頭に、次にほかの標準ビュー、最後にユーザーの MOD（それぞれの中はフォルダの名前順のまま）
+  const rank = (v: LoadedView) => (v.manifest.id === "builtin.win11" ? 0 : v.source === "builtin" ? 1 : 2);
+  views.sort((a, b) => rank(a) - rank(b));
   return { views, problems };
 }

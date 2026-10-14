@@ -2,6 +2,19 @@
 // 気持ちいいアニメーションは第2段階で作り込む（proposal.md）。ここではその出どころ（Rect）を受け取る形だけ用意する。
 import type { Rect } from "../api/types";
 
+/**
+ * 確認の画面・メニューなどを開いている間、後ろ（タブ・アドレスバー・ビュー）を操作できなくする。
+ * inert にすると、クリックもキーボードのフォーカスも届かなくなる（ビューの iframe も含めて）。戻す関数を返す
+ */
+export function blockBackground(): () => void {
+  const app = document.getElementById("app");
+  if (!app || app.inert) return () => {};
+  app.inert = true;
+  return () => {
+    app.inert = false;
+  };
+}
+
 /** 「はい」なら true。Enter で決定、Esc でやめる */
 export function confirmDialog(message: string, okLabel: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -23,10 +36,14 @@ export function confirmDialog(message: string, okLabel: string): Promise<boolean
     buttons.append(ok, cancel);
     box.append(text, buttons);
     backdrop.appendChild(box);
+    const previous = document.activeElement as HTMLElement | null;
+    const unblock = blockBackground();
     document.body.appendChild(backdrop);
     const done = (v: boolean) => {
       document.removeEventListener("keydown", onKey, true);
       backdrop.remove();
+      unblock();
+      previous?.focus();
       resolve(v);
     };
     const onKey = (e: KeyboardEvent) => {
