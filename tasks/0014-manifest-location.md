@@ -1,21 +1,31 @@
 ---
-id: "0014"
+id: '0014'
 title: manifest の location（フォルダと関係するか）を検査する
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/manifest.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/manifest.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/manifest-location.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/manifest.test.ts tests/manifest-entry.test.ts tests/manifest-location.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/tests/manifest-location.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/manifest.test.ts tests/manifest-entry.test.ts
+  tests/manifest-location.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0014-a1
+attempt: 1
+implementer_report: manifest.ts に checkLocation を追加し、validateManifest で location を検証・反映するように
+  edits で修正。受け入れ条件を検証する tests/manifest-location.test.ts を新規作成。
+last_changed_files:
+- work/app/tests/manifest-location.test.ts
+- work/app/src/core/manifest.ts
+review_reason: checkLocation関数の実装が仕様通り。validateManifestでの検証と反映も指示通り。テストファイルは6つのケースで受け入れ条件をすべて検証。既存テスト・型チェック・自動テストすべて合格。指示外の変更なし。
 ---
 ## Instructions
 
