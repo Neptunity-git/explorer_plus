@@ -1,0 +1,14 @@
+{
+  "task_id": "0008",
+  "phase": "resolve",
+  "started_at": "2026-10-14T14:32:16",
+  "events": [
+    {
+      "at": "2026-10-14T14:32:16",
+      "kind": "resolved_directly",
+      "note": "Qwen の1回目の実装（protocol.ts）は完成していた。テストの vitest の import 抜けと、result.message.params の型の絞り込み不足（tsc で落ちる）を main で直し、showMenu の失敗ケース4件を足した。2回目の試行は、直してあるファイルに同じ edits を当てて「変更なし」で止まった"
+    }
+  ],
+  "resulting_status": "done",
+  "finished_at": "2026-10-14T14:32:16"
+}
