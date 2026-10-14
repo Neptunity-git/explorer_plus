@@ -1,7 +1,7 @@
 /* 色は、ランタイムが用意する CSS 変数（--ep-*）を使う。ライト・ダークの切り替えに自動で追従する */
 body { margin: 0; font-size: 13px; user-select: none; overflow: hidden; }
 body.resizing, body.resizing * { cursor: col-resize !important; }
-.list { height: 100vh; overflow: auto; outline: none; }
+.list { height: calc(100vh - 34px); overflow: auto; outline: none; }
 table { border-collapse: collapse; table-layout: fixed; min-width: 100%; }
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--ep-bg); text-align: left; font-weight: normal; color: var(--ep-muted);
@@ -34,3 +34,16 @@ input.rename {
 .empty { padding: 40px; text-align: center; color: var(--ep-muted); }
 /* タグの色の点 */
 .tag-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* 表示の切り替え（詳細／大アイコン） */
+.bar { height: 34px; display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--ep-border); }
+.bar button { font: inherit; font-size: 12px; color: var(--ep-fg); background: transparent; border: 0; border-radius: 4px; padding: 4px 10px; }
+.bar button:hover { background: var(--ep-hover); }
+.bar button.on { background: var(--ep-selected); }
+/* 大アイコン（縮小画像）。.tile の幅は index.js の TILE_WIDTH と合わせる */
+.tiles { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; }
+.tile { width: 120px; padding: 6px 4px; border-radius: 4px; border: 1px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.tile:hover { background: var(--ep-hover); }
+.tile.selected { background: var(--ep-selected); border-color: var(--ep-selected-border); }
+.tile-img { width: 96px; height: 96px; object-fit: contain; }
+.tile .name-cell { justify-content: center; max-width: 100%; }
+.tile .name-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; text-align: center; word-break: break-all; font-size: 12px; }

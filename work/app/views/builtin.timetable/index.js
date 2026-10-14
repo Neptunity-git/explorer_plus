@@ -1,5 +1,8 @@
-// 標準のビュー「時間割」（ADR 0010・0011）。曜日×時限の表で、今の授業のコマを光らせる。
-// 時限（名前・時刻）と曜日は、すべてユーザーが決める（特定の学校に合わせない）。
+// 標準のビュー「時間割」（ADR 0010・0012・0013）。学校のフォルダ（例：学業\A校）ごとの時間割。
+// 曜日×時限の表と、その下のオンデマンドの授業。コマにフォルダを結びつけ、今の授業を光らせる。
+// 操作はマウスが主：クリックで選ぶ、ダブルクリックで開く、右クリックでメニュー。キーボードでも使える。
+import { ask, button, confirm, pick } from "/__runtime/tui.js";
+
 const ep = window.explorerPlus;
 
 const DAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"];
@@ -18,134 +21,54 @@ const EXAMPLE_PERIODS = [
 ];
 
 document.head.appendChild(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/__runtime/tui.css" }));
+document.head.appendChild(
+  Object.assign(document.createElement("style"), {
+    textContent: `
+      .wrap { flex: 1; min-height: 0; overflow: auto; padding: 14px 10px 4px; display: flex; flex-direction: column; gap: 16px; }
+      .wrap > .tui-box { flex: none; }
+      .tui-grid td { cursor: default; height: 3.4em; }
+      .tui-grid td:hover { background: color-mix(in srgb, var(--tui-fg) 7%, transparent); }
+      .tui-grid th.period { cursor: context-menu; }
+      .empty-state { padding: 24px 2ch; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+      .ondemand-add { padding: 4px 1ch 2px; }
+    `,
+  }),
+);
+
 document.body.className = "tui";
 document.body.innerHTML = `
-  <div class="tui-main">
-    <section class="tui-box" style="flex: 3" id="grid-box">
-      <span class="tui-box-title" id="grid-title">時間割</span>
-      <div class="tui-scroll" id="grid" tabindex="0"></div>
-    </section>
-    <section class="tui-box" style="flex: 1; min-width: 26ch" id="periods-box">
-      <span class="tui-box-title">時限</span>
-      <div class="tui-scroll" id="periods" tabindex="0"></div>
-    </section>
-  </div>
-  <div class="tui-message" id="message"></div>
-  <footer class="tui-footer" id="keys"></footer>`;
+  <div class="tui-toolbar" id="toolbar"></div>
+  <div class="wrap" id="wrap"></div>
+  <div class="tui-message" id="message"></div>`;
 
-const $grid = document.getElementById("grid");
-const $gridTitle = document.getElementById("grid-title");
-const $periods = document.getElementById("periods");
+const $toolbar = document.getElementById("toolbar");
+const $wrap = document.getElementById("wrap");
 const $message = document.getElementById("message");
-const $keys = document.getElementById("keys");
 
-let tt = { days: [1, 2, 3, 4, 5], periods: [], slots: [], place: null };
+let folder = null; // 今のフォルダ（学校のフォルダ）
+let tt = null; // このフォルダの時間割（無ければ null）
 let now = null; // { slot, period } | null
-let row = 0; // 時限（periods の番号）
-let col = 0; // 曜日（tt.days の番号）
-let pane = "grid"; // "grid" | "periods"
-let prompt = null;
-let confirming = null;
+let sel = { r: 0, c: 0 }; // 選んでいるコマ（時限の番号・曜日の番号）
 
 function say(text, isError = false) {
   $message.textContent = text;
   $message.classList.toggle("is-error", isError);
 }
 
+const report = (err) => say(`できませんでした：${(err && err.message ? err.message : String(err)).split("\n")[0]}`, true);
+
 const slotAt = (r, c) => {
-  const p = tt.periods[r];
-  const d = tt.days[c];
+  const p = tt?.periods[r];
+  const d = tt?.days[c];
   return p && d !== undefined ? tt.slots.find((s) => s.day === d && s.periodId === p.id) || null : null;
 };
 
-function clamp() {
-  row = Math.max(0, Math.min(row, tt.periods.length - 1));
-  col = Math.max(0, Math.min(col, tt.days.length - 1));
-}
-
-// ---- 描画 ----
-
-function renderKeys() {
-  const k = (key, label) => `<span><span class="tui-key">${key}</span>${label}</span>`;
-  if (tt.periods.length === 0) {
-    $keys.innerHTML = [k("t", "例（90分×5）を入れる"), k("a", "時限を足す"), k("w", "曜日を切り替え")].join("");
-    return;
-  }
-  $keys.innerHTML =
-    pane === "grid"
-      ? [k("hjkl", "移動"), k("Enter", "フォルダを開く"), k("e", "授業名"), k("f", "フォルダ"), k("x", "コマを消す"), k("w", "曜日"), k("p", "時限の編集")].join("")
-      : [k("j/k", "移動"), k("a", "足す"), k("e", "変える"), k("d", "消す"), k("Esc", "表へ戻る")].join("");
-}
-
-function renderGrid() {
-  $grid.textContent = "";
-  const nowText = now ? `　今：${DAY_NAMES[now.slot.day]} ${now.period.label} ${now.slot.title}` : "";
-  $gridTitle.textContent = `時間割${nowText}`;
-  if (tt.periods.length === 0) {
-    $grid.innerHTML = `<div class="tui-row tui-dim">時限がまだありません。<span class="tui-key">t</span>で例を入れるか、<span class="tui-key">a</span>で足してください。</div>`;
-    return;
-  }
-  const table = document.createElement("table");
-  table.className = "tui-grid";
-  table.style.width = "100%";
-  const head = table.createTHead().insertRow();
-  head.appendChild(Object.assign(document.createElement("th"), { textContent: "" })).style.width = "13ch";
-  for (const d of tt.days) head.appendChild(Object.assign(document.createElement("th"), { textContent: DAY_NAMES[d] }));
-  const body = table.createTBody();
-  tt.periods.forEach((p, r) => {
-    const tr = body.insertRow();
-    const th = document.createElement("th");
-    th.innerHTML = `${p.label}<br><span class="tui-dim">${p.start}-${p.end}</span>`;
-    tr.appendChild(th);
-    tt.days.forEach((d, c) => {
-      const td = tr.insertCell();
-      const s = slotAt(r, c);
-      if (s) {
-        td.append(
-          Object.assign(document.createElement("div"), { textContent: s.title || "（授業名なし）" }),
-          Object.assign(document.createElement("div"), { className: "tui-dim", textContent: s.folders[0] ? `▸ ${s.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
-        );
-      } else {
-        td.append(Object.assign(document.createElement("div"), { className: "tui-dim", textContent: "·" }));
-      }
-      if (pane === "grid" && r === row && c === col) td.classList.add("is-cursor");
-      if (now && s && now.slot.day === s.day && now.slot.periodId === s.periodId) td.classList.add("is-now");
-      td.onclick = () => {
-        row = r;
-        col = c;
-        pane = "grid";
-        renderAll();
-      };
-      td.ondblclick = () => openCell();
-    });
-  });
-  $grid.appendChild(table);
-}
-
-function renderPeriods() {
-  $periods.textContent = "";
-  if (tt.periods.length === 0) {
-    $periods.innerHTML = `<div class="tui-row tui-dim">なし</div>`;
-    return;
-  }
-  tt.periods.forEach((p, i) => {
-    const r = document.createElement("div");
-    r.className = "tui-row";
-    if (i === row) r.classList.add(pane === "periods" ? "is-selected" : "is-cursor");
-    r.append(
-      Object.assign(document.createElement("span"), { textContent: p.label }),
-      Object.assign(document.createElement("span"), { className: "tui-grow tui-dim", textContent: `${p.start}-${p.end}` }),
-    );
-    $periods.appendChild(r);
-  });
-}
-
-function renderAll() {
-  clamp();
-  renderGrid();
-  renderPeriods();
-  renderKeys();
-  (pane === "grid" ? $grid : $periods).focus();
+/** ビュー独自の項目だけの右クリックのメニュー（本体が描く。ADR 0013 判断2） */
+async function menu(e, entries) {
+  e.preventDefault();
+  const list = entries.filter(Boolean);
+  const { chosen } = await ep.showMenu({ x: e.clientX, y: e.clientY, items: [], extra: list.map(({ id, label }) => ({ id, label })) });
+  list.find((m) => m.id === chosen)?.run();
 }
 
 // ---- 保存（本体が検査する。誤りは下の行に出す） ----
@@ -156,9 +79,9 @@ async function save(next, done) {
     now = await ep.timetable.current().catch(() => null);
     if (done) say(done);
   } catch (err) {
-    say(`保存できませんでした：${(err.message || "").split("\n")[0]}`, true);
+    report(err);
   }
-  renderAll();
+  render();
 }
 
 function withSlot(r, c, change) {
@@ -171,196 +94,292 @@ function withSlot(r, c, change) {
   return { ...tt, slots };
 }
 
-// ---- 入力 ----
-
-function ask(label, initial, onDone) {
-  $message.classList.remove("is-error");
-  $message.textContent = `${label} `;
-  const input = Object.assign(document.createElement("input"), { className: "tui-input", value: initial, spellcheck: false });
-  input.style.width = "48ch";
-  $message.appendChild(input);
-  prompt = input;
-  input.focus();
-  input.select();
-  input.onkeydown = (ev) => {
-    ev.stopPropagation();
-    if (ev.key === "Escape" || ev.key === "Enter") {
-      prompt = null;
-      say("");
-      if (ev.key === "Enter") onDone(input.value);
-      else renderAll();
-    }
-  };
+function withOndemand(item, change) {
+  const list = tt.ondemand || [];
+  const next = change(item ? { ...item } : null);
+  return { ...tt, ondemand: item ? list.flatMap((x) => (x === item ? (next ? [next] : []) : [x])) : [...list, next] };
 }
 
-/** "6限 18:00 19:30" の形を読む */
+// ---- 授業のフォルダ（結びつける・作る・開く） ----
+
+const subfolders = () => (folder?.entries || []).filter((e) => e.kind === "folder" && !e.hidden);
+
+/** このフォルダ（学校）の中のフォルダから選ぶ */
+async function chooseSubfolder(title) {
+  const items = subfolders().map((e) => ({ label: e.name, value: { id: e.id, path: e.path } }));
+  return pick({ title: `「${title || "このコマ"}」に結びつけるフォルダ`, items, empty: "このフォルダの中にフォルダがありません（「授業のフォルダを作る」で作れます）" });
+}
+
+/** 授業名でフォルダを作って結びつける（学校のフォルダの下にできる。ADR 0012 判断1） */
+async function createClassFolder(title) {
+  const name = await ask({ label: "作るフォルダの名前:", value: title, okLabel: "作る" });
+  if (!name) return null;
+  const e = await ep.createFolder(name);
+  return { id: e.id, path: e.path };
+}
+
+function openFolder(ref) {
+  ep.open(ref, { newTab: true }).catch(() => say(`フォルダが見つかりません：${ref.path}`, true));
+}
+
+function classMenu(item, setFolders, setTitle, remove) {
+  const linked = item?.folders[0];
+  return [
+    linked && { id: "open", label: "フォルダを開く", run: () => openFolder(linked) },
+    { id: "title", label: item?.title ? "授業名を変える…" : "授業名を入れる…", run: setTitle },
+    { id: "create", label: "授業のフォルダを作って結びつける…", run: async () => {
+      const ref = await createClassFolder(item?.title || "").catch(report);
+      if (ref) setFolders([ref]);
+    } },
+    { id: "choose", label: "このフォルダの中から結びつける…", run: async () => {
+      const ref = await chooseSubfolder(item?.title);
+      if (ref) setFolders([ref]);
+    } },
+    linked && { id: "unlink", label: "フォルダの結びつけを外す", run: () => setFolders([]) },
+    item && { id: "remove", label: "消す", run: remove },
+  ];
+}
+
+// ---- コマ・時限・オンデマンドの操作 ----
+
+const cellActions = (r, c) => {
+  const s = slotAt(r, c);
+  const setTitle = async () => {
+    const title = await ask({ label: "授業名:", value: s?.title || "", okLabel: "決める" });
+    if (title !== null) save(withSlot(r, c, (x) => ({ ...x, title })));
+  };
+  return {
+    slot: s,
+    setTitle,
+    menu: classMenu(
+      s,
+      (folders) => save(withSlot(r, c, (x) => ({ ...x, folders }))),
+      setTitle,
+      () => save(withSlot(r, c, () => null), "コマを消しました"),
+    ),
+    open: () => (s?.folders[0] ? openFolder(s.folders[0]) : setTitle()),
+  };
+};
+
 function parsePeriodText(text) {
-  const m = /^\s*(\S+)\s+(\d{1,2}:\d{2})\s*[-〜~ ]\s*(\d{1,2}:\d{2})\s*$/.exec(text);
+  const m = /^\s*(\S+)\s+(\d{1,2}:\d{2})\s*[-〜~ ]\s*(\d{1,2}:\d{2})\s*$/.exec(text || "");
   if (!m) return null;
   const pad = (t) => (t.length === 4 ? `0${t}` : t);
   return { label: m[1], start: pad(m[2]), end: pad(m[3]) };
 }
 
-function newPeriodId() {
-  let n = tt.periods.length + 1;
-  while (tt.periods.some((p) => p.id === `p${n}`)) n++;
-  return `p${n}`;
+function newId(prefix, list) {
+  let n = list.length + 1;
+  while (list.some((x) => x.id === `${prefix}${n}`)) n++;
+  return `${prefix}${n}`;
 }
 
-// ---- 操作 ----
+async function addPeriod() {
+  const text = await ask({ label: "時限（名前 始まり 終わり）:", placeholder: "例：6限 18:00 19:30", okLabel: "足す" });
+  if (text === null) return;
+  const p = parsePeriodText(text);
+  if (!p) return say("「6限 18:00 19:30」の形で入れてください", true);
+  save({ ...tt, periods: [...tt.periods, { id: newId("p", tt.periods), ...p }] });
+}
 
-function openCell() {
-  const s = slotAt(row, col);
-  if (!s || !s.folders[0]) {
-    say("このコマにはフォルダが結びついていません。f でパスを入れるか、ほかのビューでフォルダを右クリック →「時間割のコマに結びつける…」");
+async function editPeriod(p) {
+  const text = await ask({ label: "時限（名前 始まり 終わり）:", value: `${p.label} ${p.start} ${p.end}`, okLabel: "変える" });
+  if (text === null) return;
+  const q = parsePeriodText(text);
+  if (!q) return say("「1限 09:00 10:30」の形で入れてください", true);
+  save({ ...tt, periods: tt.periods.map((x) => (x === p ? { ...x, ...q } : x)) });
+}
+
+async function deletePeriod(p) {
+  const n = tt.slots.filter((s) => s.periodId === p.id).length;
+  if (await confirm({ message: `時限「${p.label}」を消しますか？${n ? `（この時限のコマ ${n} 個も消えます）` : ""}`, okLabel: "消す" })) {
+    save({ ...tt, periods: tt.periods.filter((x) => x !== p), slots: tt.slots.filter((s) => s.periodId !== p.id) });
+  }
+}
+
+async function addOndemand() {
+  const title = await ask({ label: "オンデマンドの授業名:", okLabel: "足す" });
+  if (title) save(withOndemand(null, () => ({ id: newId("o", tt.ondemand || []), title, folders: [] })));
+}
+
+// ---- 描画 ----
+
+function renderToolbar() {
+  $toolbar.textContent = "";
+  if (!tt) return;
+  if (tt.periods.length === 0) {
+    $toolbar.append(button("例（90分×5）を入れる", () => save({ ...tt, periods: EXAMPLE_PERIODS.map(([label, start, end], i) => ({ id: `p${i + 1}`, label, start, end })) }, "例を入れました。時限は右クリックで変えられます"), { accent: true }));
+  }
+  const i = DAY_SETS.findIndex((set) => set.join() === tt.days.join());
+  const daysLabel = i === 0 ? "月〜金" : i === 1 ? "月〜土" : i === 2 ? "日〜土" : "曜日";
+  $toolbar.append(
+    button("＋ 時限", addPeriod),
+    button(`曜日：${daysLabel}`, () => save({ ...tt, days: DAY_SETS[(i + 1) % DAY_SETS.length] }), { title: "押すたびに 月〜金 → 月〜土 → 日〜土 と切り替わる" }),
+    button("＋ オンデマンド", addOndemand),
+    button("この時間割を消す", async () => {
+      if (await confirm({ message: `「${folder.name}」の時間割を消しますか？（フォルダは消えません）`, okLabel: "消す" })) {
+        await ep.timetable.delete().catch(report);
+      }
+    }),
+  );
+}
+
+function renderEmpty() {
+  const box = document.createElement("section");
+  box.className = "tui-box";
+  box.innerHTML = `<span class="tui-box-title">時間割</span>`;
+  const inner = document.createElement("div");
+  inner.className = "empty-state";
+  inner.append(
+    Object.assign(document.createElement("div"), { textContent: `「${folder?.name ?? ""}」には、まだ時間割がありません。` }),
+    Object.assign(document.createElement("div"), { className: "tui-dim", textContent: "学校ごとのフォルダ（例：学業\\A校）を開いて作ると、授業のフォルダをその中に作れます。2つの学校に通っていても、学校ごとに時間割を持てます。" }),
+    button("このフォルダに時間割を作る", () => save({ days: [1, 2, 3, 4, 5], periods: [], slots: [], place: null, ondemand: [] }, "時間割を作りました"), { accent: true }),
+  );
+  box.append(inner);
+  $wrap.append(box);
+}
+
+function renderGrid() {
+  const box = document.createElement("section");
+  box.className = "tui-box";
+  const nowText = now ? `　今：${DAY_NAMES[now.slot.day]} ${now.period.label} ${now.slot.title}` : "";
+  box.innerHTML = `<span class="tui-box-title">時間割 — ${folder.name}${nowText}</span>`;
+  if (tt.periods.length === 0) {
+    box.append(Object.assign(document.createElement("div"), { className: "tui-row tui-dim", textContent: "時限がまだありません。上の［例を入れる］か［＋ 時限］で足してください。" }));
+    $wrap.append(box);
     return;
   }
-  ep.open(s.folders[0], { newTab: true }).catch(() => say(`フォルダが見つかりません：${s.folders[0].path}`, true));
-}
-
-function onGridKey(ev) {
-  if (tt.periods.length === 0) return onEmptyKey(ev);
-  const s = slotAt(row, col);
-  switch (ev.key) {
-    case "h":
-    case "ArrowLeft":
-      col--;
-      return renderAll();
-    case "l":
-    case "ArrowRight":
-      col++;
-      return renderAll();
-    case "k":
-    case "ArrowUp":
-      row--;
-      return renderAll();
-    case "j":
-    case "ArrowDown":
-      row++;
-      return renderAll();
-    case "Enter":
-      return openCell();
-    case "e":
-      ev.preventDefault();
-      return ask("授業名:", s ? s.title : "", (title) => save(withSlot(row, col, (x) => ({ ...x, title }))));
-    case "f":
-      ev.preventDefault();
-      return ask("フォルダのパス（貼り付け可）:", s && s.folders[0] ? s.folders[0].path : "", (path) =>
-        save(withSlot(row, col, (x) => ({ ...x, folders: path.trim() ? [{ id: "", path: path.trim().replace(/^"|"$/g, "") }] : [] }))),
-      );
-    case "x":
-      if (s) save(withSlot(row, col, () => null), "コマを消しました");
-      return;
-    case "w":
-      return cycleDays();
-    case "p":
-      pane = "periods";
-      return renderAll();
-  }
-}
-
-function onEmptyKey(ev) {
-  if (ev.key === "t") {
-    const periods = EXAMPLE_PERIODS.map(([label, start, end], i) => ({ id: `p${i + 1}`, label, start, end }));
-    save({ ...tt, periods }, "例を入れました。p で時限を自由に変えられます");
-  } else if (ev.key === "a") {
-    ev.preventDefault();
-    addPeriod();
-  } else if (ev.key === "w") {
-    cycleDays();
-  }
-}
-
-function cycleDays() {
-  const i = DAY_SETS.findIndex((set) => set.join() === tt.days.join());
-  save({ ...tt, days: DAY_SETS[(i + 1) % DAY_SETS.length] });
-}
-
-function addPeriod() {
-  ask("時限（名前 始まり 終わり。例：6限 18:00 19:30）:", "", (text) => {
-    const p = parsePeriodText(text);
-    if (!p) return say("「6限 18:00 19:30」の形で入れてください", true);
-    save({ ...tt, periods: [...tt.periods, { id: newPeriodId(), ...p }] });
+  const table = document.createElement("table");
+  table.className = "tui-grid";
+  table.style.width = "100%";
+  const head = table.createTHead().insertRow();
+  head.appendChild(document.createElement("th")).style.width = "13ch";
+  for (const d of tt.days) head.appendChild(Object.assign(document.createElement("th"), { textContent: DAY_NAMES[d] }));
+  const body = table.createTBody();
+  tt.periods.forEach((p, r) => {
+    const tr = body.insertRow();
+    const th = document.createElement("th");
+    th.className = "period";
+    th.innerHTML = `${p.label}<br><span class="tui-dim">${p.start}-${p.end}</span>`;
+    th.title = "右クリックで時限を変える・消す";
+    th.oncontextmenu = (e) => menu(e, [
+      { id: "edit", label: "時限を変える…", run: () => editPeriod(p) },
+      { id: "delete", label: "時限を消す", run: () => deletePeriod(p) },
+    ]);
+    th.ondblclick = () => editPeriod(p);
+    tr.appendChild(th);
+    tt.days.forEach((d, c) => {
+      const td = tr.insertCell();
+      const s = slotAt(r, c);
+      if (s) {
+        td.append(
+          Object.assign(document.createElement("div"), { textContent: s.title || "（授業名なし）" }),
+          Object.assign(document.createElement("div"), { className: "tui-dim", textContent: s.folders[0] ? `▸ ${s.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
+        );
+      } else {
+        td.append(Object.assign(document.createElement("div"), { className: "tui-dim", textContent: "·" }));
+      }
+      if (r === sel.r && c === sel.c) td.classList.add("is-cursor");
+      if (now && s && now.slot.day === s.day && now.slot.periodId === s.periodId) td.classList.add("is-now");
+      td.title = "ダブルクリックで開く（空のコマなら授業名を入れる）／右クリックでメニュー";
+      td.onclick = () => {
+        sel = { r, c };
+        render();
+      };
+      td.ondblclick = () => cellActions(r, c).open();
+      td.oncontextmenu = (e) => {
+        sel = { r, c };
+        render();
+        menu(e, cellActions(r, c).menu);
+      };
+    });
   });
+  box.append(table);
+  $wrap.append(box);
 }
 
-function onPeriodsKey(ev) {
-  const p = tt.periods[row];
-  switch (ev.key) {
-    case "j":
-    case "ArrowDown":
-      row++;
-      return renderAll();
-    case "k":
-    case "ArrowUp":
-      row--;
-      return renderAll();
-    case "a":
-      ev.preventDefault();
-      return addPeriod();
-    case "e":
-      ev.preventDefault();
-      if (!p) return;
-      return ask("時限（名前 始まり 終わり）:", `${p.label} ${p.start} ${p.end}`, (text) => {
-        const q = parsePeriodText(text);
-        if (!q) return say("「1限 09:00 10:30」の形で入れてください", true);
-        save({ ...tt, periods: tt.periods.map((x) => (x === p ? { ...x, ...q } : x)) });
-      });
-    case "d": {
-      if (!p) return;
-      const n = tt.slots.filter((s) => s.periodId === p.id).length;
-      confirming = () => save({ ...tt, periods: tt.periods.filter((x) => x !== p), slots: tt.slots.filter((s) => s.periodId !== p.id) });
-      say(`時限「${p.label}」を消しますか？${n ? `（この時限のコマ ${n} 個も消えます）` : ""}  y で消す / ほかのキーでやめる`);
-      return;
-    }
-    case "Escape":
-    case "h":
-    case "ArrowLeft":
-      pane = "grid";
-      return renderAll();
+function renderOndemand() {
+  const box = document.createElement("section");
+  box.className = "tui-box";
+  box.innerHTML = `<span class="tui-box-title">オンデマンド（曜日・時限の無い授業）</span>`;
+  const list = tt.ondemand || [];
+  if (list.length === 0) {
+    box.append(Object.assign(document.createElement("div"), { className: "tui-row tui-dim", textContent: "まだありません。" }));
   }
+  for (const o of list) {
+    const row = document.createElement("div");
+    row.className = "tui-row";
+    row.append(
+      Object.assign(document.createElement("span"), { textContent: o.title }),
+      Object.assign(document.createElement("span"), { className: "tui-grow tui-dim", textContent: o.folders[0] ? `▸ ${o.folders[0].path.split("\\").pop()}` : "フォルダなし" }),
+    );
+    const setTitle = async () => {
+      const title = await ask({ label: "授業名:", value: o.title, okLabel: "決める" });
+      if (title) save(withOndemand(o, (x) => ({ ...x, title })));
+    };
+    row.title = "ダブルクリックで開く／右クリックでメニュー";
+    row.ondblclick = () => (o.folders[0] ? openFolder(o.folders[0]) : setTitle());
+    row.oncontextmenu = (e) =>
+      menu(e, classMenu(o, (folders) => save(withOndemand(o, (x) => ({ ...x, folders }))), setTitle, () => save(withOndemand(o, () => null), "消しました")));
+    box.append(row);
+  }
+  const add = document.createElement("div");
+  add.className = "ondemand-add";
+  add.append(button("＋ オンデマンドを足す", addOndemand));
+  box.append(add);
+  $wrap.append(box);
 }
+
+function render() {
+  $wrap.textContent = "";
+  renderToolbar();
+  if (!folder) return;
+  if (!tt) return renderEmpty();
+  sel = { r: Math.max(0, Math.min(sel.r, tt.periods.length - 1)), c: Math.max(0, Math.min(sel.c, tt.days.length - 1)) };
+  renderGrid();
+  renderOndemand();
+}
+
+// ---- キーボード（補助） ----
 
 document.addEventListener("keydown", (ev) => {
-  if (prompt || ev.ctrlKey || ev.altKey) return;
-  if (confirming) {
-    const run = confirming;
-    confirming = null;
-    say("");
-    if (ev.key === "y") run();
-    return;
-  }
-  (pane === "grid" ? onGridKey : onPeriodsKey)(ev);
-});
-
-// タブを切り替えて戻ってきたら、キーボードの操作が届くようにする
-window.addEventListener("focus", () => {
-  if (!prompt) (pane === "grid" ? $grid : $periods).focus();
+  if (!tt || tt.periods.length === 0 || ev.ctrlKey || ev.altKey || ev.target.tagName === "INPUT") return;
+  const move = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[ev.key];
+  if (move) {
+    sel = { r: sel.r + move[0], c: sel.c + move[1] };
+    render();
+  } else if (ev.key === "Enter") cellActions(sel.r, sel.c).open();
+  else if (ev.key === "F2") cellActions(sel.r, sel.c).setTitle();
+  else if (ev.key === "Delete" && slotAt(sel.r, sel.c)) save(withSlot(sel.r, sel.c, () => null), "コマを消しました");
+  else return;
+  ev.preventDefault();
 });
 
 // ---- 今の授業（30秒ごとに確かめる） ----
 
 async function refreshNow() {
-  const next = await ep.timetable.current().catch(() => null);
+  const next = tt ? await ep.timetable.current().catch(() => null) : null;
   const key = (x) => (x ? `${x.slot.day}:${x.slot.periodId}` : "");
   if (key(next) !== key(now)) {
     now = next;
-    renderAll();
+    render();
   }
 }
 
-ep.onTimetable(async (next) => {
-  tt = next;
-  now = await ep.timetable.current().catch(() => null);
-  renderAll();
+ep.onFolder((f) => {
+  const moved = !folder || folder.path !== f.path;
+  folder = f;
+  if (!moved) render(); // 同じフォルダの読み直し（授業のフォルダを作った、など）
 });
 
-ep.ready().then(async () => {
-  tt = await ep.timetable.get();
-  now = await ep.timetable.current().catch(() => null);
+// フォルダが変わったとき・時間割が変わったときに届く（ADR 0012）
+ep.onTimetable(async (next) => {
+  tt = next;
+  now = tt ? await ep.timetable.current().catch(() => null) : null;
   // 最初は、今日の曜日の列に合わせる
-  const today = tt.days.indexOf(new Date().getDay());
-  if (today >= 0) col = today;
-  renderAll();
-  setInterval(refreshNow, 30_000);
+  const today = tt ? tt.days.indexOf(new Date().getDay()) : -1;
+  if (today >= 0 && !document.querySelector(".is-cursor")) sel = { r: 0, c: today };
+  render();
 });
+
+setInterval(refreshNow, 30_000);

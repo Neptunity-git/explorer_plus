@@ -57,6 +57,8 @@ pub fn run() {
             mods::app_data_load,
             mods::app_data_save,
             fsops::file_ids,
+            fsops::path_kind,
+            fsops::run_command,
             geo::get_location,
             dev_start_dir,
         ])

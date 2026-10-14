@@ -1,4 +1,5 @@
-// explorer_plus のビュー MOD の API（第1版）の型。MOD のフォルダにコピーするか、/// <reference path="…"> で読み込むと、
+// explorer_plus のビュー MOD の API（第1版）の型。TUI 風の部品は /__runtime/tui.css と /__runtime/tui.js。
+// manifest.json には location（"folder" か "none"）も書ける。MOD のフォルダにコピーするか、/// <reference path="…"> で読み込むと、
 // window.explorerPlus の補完とエラーチェックが効く（ADR 0007 判断1）。
 // 約束事の説明：docs/design/mod-api-v1.md（本体の型の正本は src/api/types.ts。食い違ったら本体の型が正しい）
 
@@ -30,9 +31,13 @@ declare global {
       iconKind?: IconKind;
       /** uses に "tags" があるときだけ（付いているタグの id） */
       tags?: string[];
+      /** uses に "thumbnails" があるときだけ。Windows の縮小画像。URL の size=（32〜256）で大きさを変えられる */
+      thumbnailUrl?: string;
     }
 
     interface FolderSnapshot {
+      /** フォルダ自身のファイルID（取れなければ ""）。フォルダごとに何かを覚えるときに使う */
+      id: string;
       path: string;
       name: string;
       parentPath: string | null;
@@ -93,6 +98,16 @@ declare global {
       periods: TimetablePeriod[];
       slots: TimetableSlot[];
       place: { latitude: number; longitude: number; radius: number } | null;
+      /** オンデマンドの授業（曜日・時限なし）。省略は「なし」 */
+      ondemand?: { id: string; title: string; folders: EntryRef[] }[];
+    }
+
+    interface ViewInfo {
+      id: string;
+      name: string;
+      description?: string;
+      /** "none" はフォルダと関係ないビュー（manifest の location） */
+      location: "folder" | "none";
     }
 
     type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | null;
@@ -135,8 +150,8 @@ declare global {
 
       /** 名前の変更。使えない名前は "invalid"、同じ名前があれば "exists" */
       rename(entry: EntryRef, newName: string): Promise<Entry>;
-      /** 今のフォルダに「新しいフォルダー」を作る。続けて onAction に { action: "rename" } が届く */
-      createFolder(): Promise<Entry>;
+      /** 今のフォルダにフォルダを作る。name を省略すると「新しいフォルダー」を作り、続けて onAction に { action: "rename" } が届く */
+      createFolder(name?: string): Promise<Entry>;
       /** 右クリックのメニューを本体が出す。x・y は MouseEvent の clientX・clientY。extra の項目が選ばれたら chosen にその id */
       showMenu(opts: { x: number; y: number; items: EntryRef[]; extra?: MenuItem[] }): Promise<{ chosen: string | null }>;
       onAction(cb: (a: { action: "rename"; entry: Entry }) => void): () => void;
@@ -153,14 +168,33 @@ declare global {
       };
       onTags(cb: (tags: Tag[]) => void): () => void;
 
-      /** uses に "timetable" が要る */
+      /** uses に "timetable" が要る。時間割は、このビューが開いているフォルダのもの（学校のフォルダごと） */
       readonly timetable: {
-        get(): Promise<Timetable>;
+        /** このフォルダに時間割が無ければ null */
+        get(): Promise<Timetable | null>;
         /** 本体が検査する。誤りがあれば "invalid"（message に誤りの一覧） */
         set(timetable: Timetable): Promise<Timetable>;
+        delete(): Promise<void>;
         current(): Promise<CurrentClass>;
       };
-      onTimetable(cb: (timetable: Timetable) => void): () => void;
+      /** 時間割が変わったとき、フォルダが変わったときに呼ばれる */
+      onTimetable(cb: (timetable: Timetable | null) => void): () => void;
+
+      readonly views: { list(): Promise<ViewInfo[]> };
+      readonly tabs: {
+        /** 新しいタブを開く。replace: true ならこのタブを置き換える。path を省略すると、フォルダと関係するビューでは今のフォルダ */
+        open(viewId: string, opts?: { path?: string; replace?: boolean }): Promise<void>;
+      };
+      /** uses に "quickAccess" が要る */
+      readonly quickAccess: {
+        list(): Promise<Entry[]>;
+        pin(entries: EntryRef[]): Promise<void>;
+        unpin(entries: EntryRef[]): Promise<void>;
+      };
+      onQuickAccess(cb: () => void): () => void;
+      /** uses に "recent" が要る（このアプリで開いたファイル、新しい順） */
+      readonly recent: { list(): Promise<Entry[]> };
+      onRecent(cb: () => void): () => void;
     }
   }
 }

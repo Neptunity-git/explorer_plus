@@ -1,0 +1,10 @@
+{
+  "id": "builtin.home",
+  "name": "ホーム",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["quickAccess", "recent", "icons"],
+  "location": "none",
+  "description": "新しいタブで開くページ。どのビューで開くかを選び、クイックアクセスや最近使った項目から開く（ADR 0014 判断2）"
+}

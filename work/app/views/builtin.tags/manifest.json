@@ -1,9 +1,10 @@
 {
   "id": "builtin.tags",
   "name": "タグ",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "entry": "index.js",
   "uses": ["tags"],
-  "description": "タグごとに、そのタグが付いたファイル・フォルダをまとめて見せる。TUI 風（ADR 0011）"
+  "location": "none",
+  "description": "タグごとに、そのタグが付いたファイル・フォルダをまとめて見せる。見た目は TUI 風、操作はマウスが主（ADR 0010・0013）"
 }

@@ -94,3 +94,30 @@ body.tui {
 
 .tui-message { padding: 2px 10px; min-height: 1.6em; color: var(--tui-dim); }
 .tui-message.is-error { color: var(--tui-warn); }
+
+/* ---- マウスで操作する部品（tui.js。ADR 0013） ---- */
+.tui-button {
+  font: inherit; color: var(--tui-fg); background: transparent; border: 1px solid var(--tui-line);
+  padding: 0 1ch; cursor: pointer; white-space: nowrap;
+}
+.tui-button::before { content: "["; color: var(--tui-dim); margin-right: 0.5ch; }
+.tui-button::after { content: "]"; color: var(--tui-dim); margin-left: 0.5ch; }
+.tui-button:hover, .tui-button:focus-visible { border-color: var(--tui-accent); color: var(--tui-accent); outline: none; }
+.tui-button.is-accent { color: var(--tui-accent); border-color: var(--tui-accent); }
+.tui-toolbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 10px 0; }
+.tui-row { cursor: default; }
+.tui-row:hover:not(.is-selected) { background: color-mix(in srgb, var(--tui-fg) 7%, transparent); }
+.tui-ask {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 1ch;
+  padding: 6px 10px; background: var(--tui-bg); border-top: 1px solid var(--tui-accent);
+}
+.tui-ask .tui-input { flex: 1; }
+.tui-ask-label { white-space: nowrap; }
+.tui-shade { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: color-mix(in srgb, var(--tui-bg) 60%, transparent); }
+.tui-pick { width: min(560px, 90vw); max-height: 70vh; background: var(--tui-bg); padding-top: 14px; }
+.tui-pick-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 10px 2px; }
+.tui-swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 10px; }
+.tui-swatch { width: 28px; height: 28px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.tui-swatch.is-current, .tui-swatch:hover, .tui-swatch:focus-visible { border-color: var(--tui-fg); outline: none; }
+.tui-swatch-row { display: flex; align-items: center; gap: 1ch; padding: 6px 10px; }
+.tui-swatch-row input[type="color"] { width: 32px; height: 24px; border: 1px solid var(--tui-line); background: transparent; padding: 0; }

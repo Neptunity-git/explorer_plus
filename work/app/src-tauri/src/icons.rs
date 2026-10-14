@@ -26,7 +26,10 @@ use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO
 pub const PER_FILE_EXTS: &[&str] = &["exe", "lnk", "ico", "url", "msi", "cur", "ani"];
 
 #[derive(Default)]
-pub struct IconCache(Mutex<HashMap<String, Vec<u8>>>);
+pub struct IconCache {
+    icons: Mutex<HashMap<String, Vec<u8>>>,
+    thumbs: Mutex<HashMap<String, Vec<u8>>>,
+}
 
 fn image_list_for(size: u32) -> i32 {
     (match size {
@@ -83,6 +86,49 @@ fn icon_png(target: &str, use_attributes: bool, is_dir: bool, size: u32) -> Resu
         let _ = DeleteObject(HGDIOBJ(ii.hbmMask.0));
         for p in px.chunks_mut(4) {
             p.swap(0, 2); // BGRA -> RGBA
+        }
+        encode_png(&px, w as u32, h as u32)
+    }
+}
+
+/// Windows が作る縮小画像（サムネイル。ADR 0014 判断6）。画像・PDF・動画などで、Windows が持っている絵を使う
+fn thumbnail_png(path: &str, size: u32) -> Result<Vec<u8>, String> {
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_RESIZETOFIT};
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let name: Vec<u16> = std::ffi::OsStr::new(path).encode_wide().chain(std::iter::once(0)).collect();
+        let factory: IShellItemImageFactory =
+            SHCreateItemFromParsingName(PCWSTR(name.as_ptr()), None).map_err(|e| e.to_string())?;
+        let s = size as i32;
+        let hbm = factory
+            .GetImage(SIZE { cx: s, cy: s }, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK)
+            .map_err(|e| e.to_string())?;
+        let mut bm = BITMAP::default();
+        GetObjectW(HGDIOBJ(hbm.0), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _));
+        let (w, h) = (bm.bmWidth, bm.bmHeight);
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: w,
+            biHeight: -h,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        };
+        let mut px = vec![0u8; (w * h * 4) as usize];
+        let hdc = CreateCompatibleDC(None);
+        GetDIBits(hdc, hbm, 0, h as u32, Some(px.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
+        let _ = DeleteDC(hdc);
+        let _ = DeleteObject(HGDIOBJ(hbm.0));
+        // 透明度を持たない絵（写真など）は、取り出すと全部透明（アルファが 0）になるので、不透明に直す
+        let has_alpha = px.chunks(4).any(|p| p[3] != 0);
+        for p in px.chunks_mut(4) {
+            p.swap(0, 2); // BGRA -> RGBA
+            if !has_alpha {
+                p[3] = 255;
+            }
         }
         encode_png(&px, w as u32, h as u32)
     }
@@ -161,6 +207,32 @@ fn plan(path: &str, query: &str) -> Option<(String, String, bool, bool, u32)> {
     None
 }
 
+/// 縮小画像は数が多くなるので、覚えておくのはこの数まで（超えたら覚え直す）
+const THUMB_CACHE_MAX: usize = 400;
+
+/// /thumb?path=<パス>&size=<32〜256>&m=<更新日時>。m はファイルが変わったら別のものとして作り直すための印
+fn thumb_response(cache: &IconCache, query: &str) -> Response<Vec<u8>> {
+    let Some(path) = query_param(query, "path") else {
+        return Response::builder().status(StatusCode::BAD_REQUEST).body(Vec::new()).unwrap();
+    };
+    let size = query_param(query, "size").and_then(|s| s.parse::<u32>().ok()).unwrap_or(96).clamp(32, 256);
+    let key = format!("thumb:{}:{}:{}", path.to_lowercase(), size, query_param(query, "m").unwrap_or_default());
+    if let Some(png) = cache.thumbs.lock().unwrap().get(&key) {
+        return png_response(png.clone());
+    }
+    match thumbnail_png(&path, size) {
+        Ok(png) => {
+            let mut thumbs = cache.thumbs.lock().unwrap();
+            if thumbs.len() >= THUMB_CACHE_MAX {
+                thumbs.clear();
+            }
+            thumbs.insert(key, png.clone());
+            png_response(png)
+        }
+        Err(_) => Response::builder().status(StatusCode::NOT_FOUND).body(Vec::new()).unwrap(),
+    }
+}
+
 const KIND_LAUNCH_SVG: &str = include_str!("../assets/kind-launch.svg");
 const KIND_CONFIG_SVG: &str = include_str!("../assets/kind-config.svg");
 
@@ -179,15 +251,18 @@ pub fn handle(cache: &IconCache, request: &Request<Vec<u8>>) -> Response<Vec<u8>
             .body(svg.as_bytes().to_vec())
             .unwrap();
     }
+    if uri.path() == "/thumb" {
+        return thumb_response(cache, uri.query().unwrap_or(""));
+    }
     let Some((key, target, by_ext, is_dir, size)) = plan(uri.path(), uri.query().unwrap_or("")) else {
         return Response::builder().status(StatusCode::BAD_REQUEST).body(Vec::new()).unwrap();
     };
-    if let Some(png) = cache.0.lock().unwrap().get(&key) {
+    if let Some(png) = cache.icons.lock().unwrap().get(&key) {
         return png_response(png.clone());
     }
     match icon_png(&target, by_ext, is_dir, size) {
         Ok(png) => {
-            cache.0.lock().unwrap().insert(key, png.clone());
+            cache.icons.lock().unwrap().insert(key, png.clone());
             png_response(png)
         }
         Err(_) => Response::builder().status(StatusCode::NOT_FOUND).body(Vec::new()).unwrap(),
@@ -225,6 +300,22 @@ mod tests {
     #[test]
     fn makes_png_for_extension() {
         let png = icon_png("x.txt", true, false, 32).unwrap();
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+    }
+}
+
+#[cfg(test)]
+mod thumb_tests {
+    use super::*;
+
+    #[test]
+    fn makes_thumbnail_for_wallpaper() {
+        // Windows 11 に入っている壁紙で試す（無い環境では試さない）
+        let p = r"C:\Windows\Web\Wallpaper\Windows\img0.jpg";
+        if !std::path::Path::new(p).exists() {
+            return;
+        }
+        let png = thumbnail_png(p, 96).unwrap();
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
     }
 }

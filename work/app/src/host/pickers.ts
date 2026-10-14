@@ -1,7 +1,7 @@
 // 右クリックのメニューから開く、本体の小さな画面（ADR 0010）。
 //   タグを付ける：選んだ項目に、タグを付けたり外したりする。新しいタグもここで作れる
 //   時間割のコマに結びつける：選んだフォルダを、時間割のコマに結びつける
-import type { EntryRef, Tag, TimetableSlot } from "../api/types";
+import type { EntryRef, Tag, Timetable, TimetableSlot } from "../api/types";
 import { sameRef } from "../core/tags";
 import { BackendError } from "./backend";
 import { blockBackground } from "./effects";
@@ -117,37 +117,45 @@ export function tagPicker(items: EntryRef[]): Promise<void> {
   return done;
 }
 
-function slotLabel(s: TimetableSlot): string {
-  const p = timetableService.get().periods.find((x) => x.id === s.periodId);
+function slotLabel(tt: Timetable, s: TimetableSlot): string {
+  const p = tt.periods.find((x) => x.id === s.periodId);
   return `${DAY_NAMES[s.day]} ${p ? `${p.label}（${p.start}〜${p.end}）` : s.periodId}　${s.title || "（授業名なし）"}`;
 }
 
-/** 選んだフォルダを、時間割のコマに結びつける */
+/** 選んだフォルダを、時間割のコマ（またはオンデマンドの授業）に結びつける。時間割は学校のフォルダごと（ADR 0012） */
 export function slotPicker(folder: EntryRef, notify: (message: string) => void): Promise<void> {
-  const tt = timetableService.get();
   const { body, footer, close, done } = panel("時間割のコマに結びつける");
-  const order = (s: TimetableSlot) => s.day * 100 + tt.periods.findIndex((p) => p.id === s.periodId);
-  const slots = [...tt.slots].sort((a, b) => order(a) - order(b));
-  if (slots.length === 0) {
-    body.append(el("div", "picker-empty", "コマがまだありません。時間割ビューで、授業のコマを作ってください。"));
+  const entries = timetableService.all();
+  if (entries.length === 0) {
+    body.append(el("div", "picker-empty", "時間割がまだありません。学校のフォルダを開いて、時間割ビューで作ってください。"));
   }
-  for (const s of slots) {
-    const linked = s.folders.some((f) => sameRef(f, folder));
-    const row = el("button", "picker-row picker-choice", `${linked ? "✓ " : ""}${slotLabel(s)}`);
+  const choose = (label: string, linked: boolean, save: () => Promise<unknown>) => {
+    const row = el("button", "picker-row picker-choice", `${linked ? "✓ " : ""}${label}`);
     row.onclick = async () => {
-      const next = {
-        ...tt,
-        slots: tt.slots.map((x) => (x === s ? { ...x, folders: [folder] } : x)),
-      };
       try {
-        await timetableService.set(next);
-        notify(`「${s.title || slotLabel(s)}」に結びつけました`);
+        await save();
+        notify(`「${label.trim()}」に結びつけました`);
         close();
       } catch (e) {
         notify(`結びつけられませんでした：${errorText(e)}`);
       }
     };
     body.appendChild(row);
+  };
+  for (const { folder: school, timetable: tt } of entries) {
+    body.append(el("div", "picker-group", school.path.split("\\").pop() || school.path));
+    const order = (s: TimetableSlot) => s.day * 100 + tt.periods.findIndex((p) => p.id === s.periodId);
+    for (const s of [...tt.slots].sort((a, b) => order(a) - order(b))) {
+      choose(slotLabel(tt, s), s.folders.some((f) => sameRef(f, folder)), () =>
+        timetableService.set(school, { ...tt, slots: tt.slots.map((x) => (x === s ? { ...x, folders: [folder] } : x)) }),
+      );
+    }
+    for (const o of tt.ondemand ?? []) {
+      choose(`オンデマンド　${o.title}`, o.folders.some((f) => sameRef(f, folder)), () =>
+        timetableService.set(school, { ...tt, ondemand: (tt.ondemand ?? []).map((x) => (x === o ? { ...x, folders: [folder] } : x)) }),
+      );
+    }
+    if (tt.slots.length === 0 && !(tt.ondemand ?? []).length) body.append(el("div", "picker-empty", "コマがまだありません"));
   }
   const cancel = el("button", undefined, "閉じる");
   cancel.onclick = close;

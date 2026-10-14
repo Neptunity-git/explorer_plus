@@ -10,6 +10,8 @@
   const actionListeners = new Set();
   const tagListeners = new Set();
   const timetableListeners = new Set();
+  const quickAccessListeners = new Set();
+  const recentListeners = new Set();
   let lastFolder = null;
   let theme = "light";
 
@@ -80,6 +82,10 @@
         for (const cb of tagListeners) safely(cb, m.data);
       } else if (m.event === "timetable") {
         for (const cb of timetableListeners) safely(cb, m.data);
+      } else if (m.event === "quickAccess") {
+        for (const cb of quickAccessListeners) safely(cb);
+      } else if (m.event === "recent") {
+        for (const cb of recentListeners) safely(cb);
       }
     }
   });
@@ -141,7 +147,8 @@
     resolve: (refs) => call("resolve", { refs: refs.map(toRef) }),
     // ↓ 2026-10-14 に追加（ADR 0009）
     rename: (entry, newName) => call("rename", Object.assign(toRef(entry), { newName })),
-    createFolder: () => call("createFolder"),
+    /** name を省略すると「新しいフォルダー」（作った後に onAction で rename が届く）。name を渡すとその名前で作る */
+    createFolder: (name) => call("createFolder", name !== undefined ? { name } : {}),
     /** opts: { x, y, items: Entry[], extra?: [{ id, label }] }。x・y はこのページの中の座標（MouseEvent の clientX・clientY） */
     showMenu: (opts) =>
       call("showMenu", Object.assign({ x: opts.x, y: opts.y, items: (opts.items || []).map(toRef) }, opts.extra ? { extra: opts.extra } : {})),
@@ -163,14 +170,42 @@
       tagListeners.add(cb);
       return () => tagListeners.delete(cb);
     },
+    /** 時間割は、このビューが開いているフォルダのもの（ADR 0012） */
     timetable: Object.freeze({
       get: () => call("timetable.get"),
       set: (timetable) => call("timetable.set", { timetable }),
+      delete: () => call("timetable.delete").then(() => undefined),
       current: () => call("timetable.current"),
     }),
+    /** 時間割が変わったとき、フォルダが変わったときに呼ばれる（無ければ null） */
     onTimetable(cb) {
       timetableListeners.add(cb);
       return () => timetableListeners.delete(cb);
+    },
+    // ↓ 2026-10-14 に追加（ホーム・クイックアクセス。ADR 0014）
+    views: Object.freeze({
+      list: () => call("views.list"),
+    }),
+    tabs: Object.freeze({
+      /** opts: { path?, replace?: true（このタブを置き換える） } */
+      open: (viewId, opts) =>
+        call("tabs.open", Object.assign({ viewId }, opts && opts.path ? { path: opts.path } : {}, opts && opts.replace ? { replace: true } : {})).then(() => undefined),
+    }),
+    quickAccess: Object.freeze({
+      list: () => call("quickAccess.list"),
+      pin: (entries) => call("quickAccess.pin", { items: entries.map(toRef) }).then(() => undefined),
+      unpin: (entries) => call("quickAccess.unpin", { items: entries.map(toRef) }).then(() => undefined),
+    }),
+    onQuickAccess(cb) {
+      quickAccessListeners.add(cb);
+      return () => quickAccessListeners.delete(cb);
+    },
+    recent: Object.freeze({
+      list: () => call("recent.list"),
+    }),
+    onRecent(cb) {
+      recentListeners.add(cb);
+      return () => recentListeners.delete(cb);
     },
   });
 })();

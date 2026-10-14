@@ -8,10 +8,37 @@ css.rel = "stylesheet";
 css.href = new URL("./style.css", import.meta.url).href;
 document.head.appendChild(css);
 
+// 表示の切り替え（詳細／大アイコン。ADR 0014 判断6）。Win11 と同じく Ctrl+Shift+6 で詳細、Ctrl+Shift+2 で大アイコン
+const bar = document.createElement("div");
+bar.className = "bar";
+const modeButtons = {
+  details: Object.assign(document.createElement("button"), { textContent: "≡ 詳細", title: "詳細 (Ctrl+Shift+6)" }),
+  large: Object.assign(document.createElement("button"), { textContent: "▦ 大アイコン", title: "大アイコン (Ctrl+Shift+2)" }),
+};
+for (const [m, b] of Object.entries(modeButtons)) {
+  b.onclick = () => setMode(m);
+  bar.appendChild(b);
+}
+document.body.appendChild(bar);
+
 const list = document.createElement("div");
 list.className = "list";
 list.tabIndex = 0;
 document.body.appendChild(list);
+
+let mode = "details"; // "details" | "large"
+const TILE_WIDTH = 124; // 大アイコンの1つ分の幅（style.css の .tile と合わせる）
+
+function setMode(m) {
+  mode = m;
+  for (const [k, b] of Object.entries(modeButtons)) b.classList.toggle("on", k === mode);
+  ep.storage.set("mode", mode).catch(report);
+  if (folder) render();
+}
+ep.storage
+  .get("mode")
+  .then((saved) => setMode(saved === "large" ? "large" : "details"))
+  .catch(report);
 
 let folder = null; // 今のフォルダ（FolderSnapshot）
 let rows = []; // 表示している順の Entry
@@ -84,13 +111,56 @@ function sortedRows() {
 
 // ---- 描画 ----
 
+/** 名前の横に、付いているタグを色の点で出す（名前は点にマウスを乗せると出る） */
+function appendTagDots(cell, e) {
+  for (const id of e.tags || []) {
+    const t = tagById.get(id);
+    if (!t) continue;
+    const dot = Object.assign(document.createElement("span"), { className: "tag-dot", title: t.name });
+    dot.style.background = t.color;
+    cell.appendChild(dot);
+  }
+}
+
+/** 大アイコンの絵：ファイルは Windows の縮小画像（画像・PDF・動画など）、フォルダなどは大きいアイコン */
+function bigImage(e) {
+  if (e.kind === "file" && e.thumbnailUrl && e.iconKind === "system") return e.thumbnailUrl;
+  return (e.iconUrl || "").replace("size=32", "size=256");
+}
+
+function renderTiles() {
+  const grid = document.createElement("div");
+  grid.className = "tiles";
+  rows.forEach((e, i) => {
+    const tile = document.createElement("div");
+    tile.className = "tile item";
+    tile.dataset.index = String(i);
+    tile.title = e.name;
+    if (selected.has(e.path)) tile.classList.add("selected");
+    const img = Object.assign(document.createElement("img"), { className: "tile-img", src: bigImage(e), alt: "", loading: "lazy", decoding: "async" });
+    // 縮小画像が作れないファイルは、アイコンに戻す
+    img.onerror = () => {
+      if (e.iconUrl && img.src !== e.iconUrl) img.src = e.iconUrl;
+    };
+    const cell = document.createElement("div");
+    cell.className = "name-cell";
+    cell.appendChild(Object.assign(document.createElement("span"), { className: "name-text", textContent: e.name }));
+    appendTagDots(cell, e);
+    tile.append(img, cell);
+    grid.appendChild(tile);
+  });
+  list.appendChild(grid);
+}
+
 function render() {
   rows = sortedRows();
   list.textContent = "";
+  list.classList.toggle("large", mode === "large");
   if (rows.length === 0) {
     list.appendChild(Object.assign(document.createElement("div"), { className: "empty", textContent: "このフォルダーは空です。" }));
     return;
   }
+  if (mode === "large") return renderTiles();
   const table = document.createElement("table");
   const colgroup = document.createElement("colgroup");
   for (const c of COLUMNS) colgroup.appendChild(Object.assign(document.createElement("col"), { className: `col-${c.key}` })).style.width = `${widths[c.key]}px`;
@@ -116,6 +186,7 @@ function render() {
   const body = table.createTBody();
   rows.forEach((e, i) => {
     const tr = body.insertRow();
+    tr.className = "item";
     tr.dataset.index = String(i);
     if (selected.has(e.path)) tr.classList.add("selected");
     const name = tr.insertCell();
@@ -124,14 +195,7 @@ function render() {
     cell.className = "name-cell";
     if (e.iconUrl) cell.appendChild(Object.assign(document.createElement("img"), { src: e.iconUrl, alt: "", loading: "lazy" }));
     cell.appendChild(Object.assign(document.createElement("span"), { className: "name-text", textContent: e.name }));
-    // 付いているタグを、色の点で出す（名前は点にマウスを乗せると出る）
-    for (const id of e.tags || []) {
-      const t = tagById.get(id);
-      if (!t) continue;
-      const dot = Object.assign(document.createElement("span"), { className: "tag-dot", title: t.name });
-      dot.style.background = t.color;
-      cell.appendChild(dot);
-    }
+    appendTagDots(cell, e);
     name.appendChild(cell);
     Object.assign(tr.insertCell(), { className: "modified", textContent: formatDate(e.modified) });
     Object.assign(tr.insertCell(), { className: "type", textContent: typeLabel(e) });
@@ -166,12 +230,13 @@ function startResize(ev, key, table) {
 
 // ---- 選択 ----
 
+// 詳細の行（tr.item）と大アイコンの1つ（div.item）は、どちらも data-index で行の番号を持つ
 function rowElement(i) {
-  return list.querySelector(`tr[data-index="${i}"]`);
+  return list.querySelector(`.item[data-index="${i}"]`);
 }
 
 function paintSelection() {
-  for (const tr of list.querySelectorAll("tbody tr")) tr.classList.toggle("selected", selected.has(rows[Number(tr.dataset.index)].path));
+  for (const el of list.querySelectorAll(".item")) el.classList.toggle("selected", selected.has(rows[Number(el.dataset.index)].path));
 }
 
 function select(i, { ctrl = false, shift = false } = {}) {
@@ -273,7 +338,7 @@ function openMenu(x, y) {
 
 list.addEventListener("contextmenu", (ev) => {
   ev.preventDefault();
-  const tr = ev.target.closest("tbody tr");
+  const tr = ev.target.closest(".item");
   if (tr) {
     const i = Number(tr.dataset.index);
     if (!selected.has(rows[i].path)) select(i);
@@ -288,7 +353,7 @@ list.addEventListener("contextmenu", (ev) => {
 
 list.addEventListener("mousedown", (ev) => {
   if (ev.button !== 0) return;
-  const tr = ev.target.closest("tbody tr");
+  const tr = ev.target.closest(".item");
   if (!tr) {
     if (!ev.target.closest("thead")) {
       selected.clear();
@@ -300,16 +365,22 @@ list.addEventListener("mousedown", (ev) => {
 });
 
 list.addEventListener("dblclick", (ev) => {
-  const tr = ev.target.closest("tbody tr");
+  const tr = ev.target.closest(".item");
   if (tr && !editing) openAt(Number(tr.dataset.index));
 });
 
 list.addEventListener("keydown", (ev) => {
   if (editing || rows.length === 0) return;
   const current = cursor ?? -1;
-  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+  // 大アイコンでは、上下は1段（横に並んでいる数）ずつ、左右は1つずつ動く
+  const perRow = mode === "large" ? Math.max(1, Math.floor((list.clientWidth - 16) / TILE_WIDTH)) : 1;
+  const step = { ArrowDown: perRow, ArrowUp: -perRow, ...(mode === "large" ? { ArrowRight: 1, ArrowLeft: -1 } : {}) }[ev.key];
+  if (ev.ctrlKey && ev.shiftKey && (ev.code === "Digit6" || ev.code === "Digit2")) {
     ev.preventDefault();
-    const next = Math.max(0, Math.min(rows.length - 1, current + (ev.key === "ArrowDown" ? 1 : -1)));
+    setMode(ev.code === "Digit2" ? "large" : "details");
+  } else if (step !== undefined) {
+    ev.preventDefault();
+    const next = Math.max(0, Math.min(rows.length - 1, current + step));
     select(next, { shift: ev.shiftKey });
   } else if (ev.key === "Home" || ev.key === "End") {
     ev.preventDefault();

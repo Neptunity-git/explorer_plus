@@ -32,6 +32,8 @@ export function toEntry(raw: RawEntry, uses: ReadonlySet<Use>, folderSizes?: Rea
     e.iconUrl = iconUrlFor(raw, ext);
   }
   if (uses.has("tags")) e.tags = tagService.tagsOf({ id: raw.id, path: raw.path });
+  // m（更新日時）を付けて、ファイルが変わったら作り直してもらう（ADR 0014 判断6）
+  if (uses.has("thumbnails")) e.thumbnailUrl = `${ICON_ORIGIN}/thumb?path=${encodeURIComponent(raw.path)}&size=96&m=${raw.modified}`;
   return e;
 }
 

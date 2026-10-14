@@ -1,16 +1,19 @@
-// 本体の画面：タブ、アドレスバー、ビューの切り替え、よく使う場所、状態の表示。
+// 本体の画面：タブ、アドレスバー、ビューの切り替え、左の欄（クイックアクセス・よく使う場所）、状態の表示。
 // ファイルの中身の見せ方はビュー（MOD）に任せ、ここは「どのフォルダを、どのビューで」を管理する。
-import type { EntryRef, KeyMessage, MenuItem, Rect } from "../api/types";
+import type { EntryRef, KeyMessage, MenuItem, Rect, ViewInfo } from "../api/types";
 import { uniqueName } from "../core/names";
-import { backend, BackendError, type Place, type RawEntry, type RawFolder } from "./backend";
+import { parseCommandLine, splitPath } from "../core/paths";
+import { backend, BackendError, ICON_ORIGIN, type Place, type RawEntry, type RawFolder } from "./backend";
 import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
-import { slotPicker, tagPicker } from "./pickers";
-import { timetableService } from "./timetable-service";
 import type { ModProblem } from "./mods";
+import { slotPicker, tagPicker } from "./pickers";
+import { quickAccess, recentItems } from "./ref-list-service";
+import { timetableService } from "./timetable-service";
 import { ViewHost, type LoadedView, type TabActions } from "./view-host";
 
 const DEFAULT_VIEW_ID = "builtin.win11";
+const HOME_VIEW_ID = "builtin.home";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -23,6 +26,11 @@ function currentTheme(): "light" | "dark" {
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** フォルダと関係するビューか（manifest の location。ADR 0014 判断1） */
+const isFolderView = (v: LoadedView) => (v.manifest.location ?? "folder") === "folder";
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 let tabCounter = 0;
 
 class Tab implements TabActions {
@@ -34,11 +42,11 @@ class Tab implements TabActions {
   folder: RawFolder | null = null;
   back: string[] = [];
   forward: string[] = [];
-  host: ViewHost;
+  readonly host: ViewHost;
 
   constructor(
     private readonly app: App,
-    public view: LoadedView,
+    readonly view: LoadedView,
   ) {
     const close = el("button", "tab-close", "×");
     close.title = "タブを閉じる (Ctrl+W)";
@@ -46,12 +54,22 @@ class Tab implements TabActions {
       e.stopPropagation();
       app.closeTab(this);
     };
-    // 標準以外のビューのタブには、ビューの名前を小さく出す（同じフォルダを別のビューで並べたとき見分けるため）
-    this.badge.textContent = view.manifest.id === DEFAULT_VIEW_ID ? "" : view.manifest.name;
+    if (isFolderView(view)) {
+      // 標準以外のビューのタブには、ビューの名前を小さく出す（同じフォルダを別のビューで並べたとき見分けるため）
+      this.badge.textContent = view.manifest.id === DEFAULT_VIEW_ID ? "" : view.manifest.name;
+    } else {
+      // フォルダと関係ないビュー（ホーム・タグなど）は、タブの名前をビューの名前にする
+      this.label.textContent = view.manifest.name;
+      this.button.title = view.manifest.name;
+    }
     this.button.append(this.label, this.badge, close);
     this.button.onclick = () => app.activate(this);
     this.button.onauxclick = (e) => e.button === 1 && app.closeTab(this);
     this.host = new ViewHost(this.pane, view, this);
+  }
+
+  get folderView(): boolean {
+    return isFolderView(this.view);
   }
 
   setFolder(folder: RawFolder) {
@@ -76,18 +94,24 @@ class Tab implements TabActions {
   open = (ref: EntryRef, from?: Rect, newTab?: boolean) => this.app.open(this, ref, from, newTab);
   trash = (refs: EntryRef[], from?: Rect) => this.app.trash(this, refs, from);
   rename = (ref: EntryRef, newName: string) => this.app.rename(this, ref, newName);
-  createFolder = () => this.app.createFolder(this);
+  createFolder = (name?: string) => this.app.createFolder(this, name);
   showMenu = (x: number, y: number, items: EntryRef[], extra: MenuItem[]) => this.app.showMenu(this, x, y, items, extra);
   shortcut = (key: KeyMessage) => this.app.handleKey(key);
+  listViews = () => this.app.viewInfos();
+  openTab = (viewId: string, path?: string, replace?: boolean) => this.app.openTabById(this, viewId, path, replace);
 }
 
 export class App {
   private tabs: Tab[] = [];
   private active: Tab | null = null;
   private readonly tabStrip = el("div", "tab-strip");
+  private readonly navRow = el("div", "nav-row");
+  private readonly addressBar = el("div", "address-bar");
+  private readonly crumbs = el("div", "crumbs");
   private readonly address = el("input", "address");
   private readonly viewSelect = el("select", "view-select");
   private readonly sidebar = el("nav", "sidebar");
+  private readonly quickList = el("div", "quick-list");
   private readonly content = el("main", "content");
   private readonly status = el("footer", "status");
   private readonly backBtn = el("button", "nav-btn", "←");
@@ -112,7 +136,7 @@ export class App {
 
     const newTab = el("button", "tab-new", "+");
     newTab.title = "新しいタブ (Ctrl+T)";
-    newTab.onclick = () => void this.openTab(this.active?.folder?.path ?? this.homePath());
+    newTab.onclick = () => void this.openHome();
     const tabsRow = el("div", "tabs-row");
     tabsRow.append(this.tabStrip, newTab);
 
@@ -124,15 +148,7 @@ export class App {
     this.forwardBtn.onclick = () => this.goForward();
     this.upBtn.onclick = () => this.active && void this.active.navigateUp();
     this.refreshBtn.onclick = () => this.refresh();
-    this.address.spellcheck = false;
-    this.address.title = "場所 (Ctrl+L)";
-    this.address.onkeydown = (e) => {
-      if (e.key === "Enter" && this.active) void this.navigate(this.active, this.address.value.trim());
-      if (e.key === "Escape") {
-        this.address.value = this.active?.folder?.path ?? "";
-        this.active?.host.focus();
-      }
-    };
+    this.mountAddressBar();
     for (const v of this.views) {
       const o = el("option", undefined, v.manifest.name);
       o.value = v.manifest.id;
@@ -145,16 +161,16 @@ export class App {
       const t = this.active;
       if (!v || !t) return;
       this.viewSelect.value = t.view.manifest.id;
-      void this.openTab(t.folder?.path ?? this.homePath(), v);
+      void this.openTab(v, t.folder?.path ?? this.homePath());
     };
-    const navRow = el("div", "nav-row");
-    navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.address, this.nowBtn, this.viewSelect);
+    this.navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.addressBar, this.nowBtn, this.viewSelect);
     this.startNowWatch();
 
     this.renderSidebar();
+    quickAccess.onChange(() => void this.renderQuickAccess());
     const body = el("div", "body");
     body.append(this.sidebar, this.content);
-    root.append(tabsRow, navRow, body, this.status);
+    root.append(tabsRow, this.navRow, body, this.status);
 
     document.addEventListener("keydown", (e) => {
       // F5・Ctrl+R はブラウザの再読み込みを止めて、フォルダの読み直しにする
@@ -170,7 +186,9 @@ export class App {
 
     for (const p of this.problems) console.warn(`MOD を読み込めませんでした: ${p.dir}\n${p.errors.join("\n")}`);
     if (this.problems.length > 0) this.toast(`読み込めない MOD が ${this.problems.length} 個あります（詳細は開発者ツールのコンソール）`);
-    void this.openTab(this.homePath());
+    // 起動したらホームを開く（開発中に試験用のフォルダを指定したときは、そのフォルダ）
+    if (this.startDir) void this.openTab(this.defaultView(), this.startDir);
+    else void this.openHome();
   }
 
   private homePath(): string {
@@ -182,6 +200,91 @@ export class App {
     );
   }
 
+  // ---- アドレスバー（ADR 0014 判断5）：区切りごとに押せる。空いている所を押すと入力。コマンドも起動できる ----
+
+  private mountAddressBar() {
+    this.address.spellcheck = false;
+    this.address.hidden = true;
+    this.addressBar.title = "場所 (Ctrl+L)。cmd・powershell などのコマンドも入れられます";
+    this.addressBar.append(this.crumbs, this.address);
+    this.addressBar.onclick = (e) => {
+      if (e.target === this.addressBar || e.target === this.crumbs) this.editAddress();
+    };
+    this.address.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void this.submitAddress(this.address.value);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        this.endEditAddress();
+        this.active?.host.focus();
+      }
+    };
+    this.address.onblur = () => this.endEditAddress();
+  }
+
+  private renderCrumbs() {
+    this.crumbs.textContent = "";
+    const path = this.active?.folder?.path;
+    if (!path) return;
+    const parts = splitPath(path);
+    parts.forEach((c, i) => {
+      if (i > 0) this.crumbs.append(el("span", "crumb-sep", "›"));
+      const b = el("button", "crumb", c.label);
+      b.title = c.path;
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (this.active) void this.navigate(this.active, c.path).catch(() => {});
+      };
+      this.crumbs.append(b);
+    });
+    // 深い場所でも、今いる所（右端）が見えるように
+    this.crumbs.scrollLeft = this.crumbs.scrollWidth;
+  }
+
+  private editAddress() {
+    const t = this.active;
+    if (!t?.folderView) return;
+    this.crumbs.hidden = true;
+    this.address.hidden = false;
+    this.address.value = t.folder?.path ?? "";
+    this.address.focus();
+    this.address.select();
+  }
+
+  private endEditAddress() {
+    this.address.hidden = true;
+    this.crumbs.hidden = false;
+  }
+
+  /** フォルダなら移動、ファイルなら開く、どちらでもなければコマンドとして今のフォルダで起動する */
+  private async submitAddress(text: string) {
+    const t = this.active;
+    const value = text.trim().replace(/^"(.*)"$/, "$1");
+    if (!t || !value) return this.endEditAddress();
+    const kind = await backend.pathKind(value).catch(() => "none" as const);
+    try {
+      if (kind === "dir") {
+        await this.navigate(t, value);
+      } else if (kind === "file") {
+        const [id] = await backend.fileIds([value]);
+        await this.open(t, { id, path: value });
+      } else {
+        const cmd = parseCommandLine(text);
+        if (!cmd) return;
+        await backend.runCommand(cmd.file, cmd.args, t.folder?.path ?? "").catch(() => {
+          throw new Error(`「${value}」というフォルダ・ファイル・コマンドは見つかりません`);
+        });
+      }
+      this.endEditAddress();
+      t.host.focus();
+    } catch (e) {
+      if (!(e instanceof BackendError)) this.toast(errorText(e));
+    }
+  }
+
+  // ---- 左の欄：クイックアクセス（ADR 0014 判断3）と、よく使う場所 ----
+
   private renderSidebar() {
     const labels: Record<string, string> = {
       home: "ホーム",
@@ -192,25 +295,105 @@ export class App {
       music: "ミュージック",
       videos: "ビデオ",
     };
+    const homeBtn = el("button", "place place-home-view", "⌂ ホーム");
+    homeBtn.onclick = () => void this.openHome(true);
+    this.sidebar.append(homeBtn, el("div", "side-head", "クイックアクセス"), this.quickList, el("div", "side-head", "場所"));
     for (const p of this.places) {
       const b = el("button", `place place-${p.kind}`, p.kind === "drive" ? `ドライブ ${p.name}` : (labels[p.kind] ?? p.name));
       b.title = p.path;
-      b.onclick = () => this.active && void this.navigate(this.active, p.path);
+      b.onclick = () => void this.goTo(p.path);
       this.sidebar.appendChild(b);
     }
+    void this.renderQuickAccess();
   }
+
+  private async renderQuickAccess() {
+    const items = await quickAccess.entries().catch(() => [] as RawEntry[]);
+    this.quickList.textContent = "";
+    if (items.length === 0) {
+      this.quickList.append(el("div", "side-empty", "フォルダを右クリック →「クイックアクセスにピン留め」"));
+      return;
+    }
+    for (const r of items) {
+      const b = el("button", "place place-quick");
+      const icon = el("img", "place-icon");
+      icon.src = `${ICON_ORIGIN}/ext/folder?size=16`;
+      icon.alt = "";
+      b.append(icon, el("span", undefined, r.name));
+      b.title = r.path;
+      b.onclick = () => void this.goTo(r.path);
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        const ref = { id: r.id, path: r.path };
+        void showMenu(e.clientX, e.clientY, [
+          { label: "開く", run: () => void this.goTo(r.path) },
+          { label: "新しいタブで開く", run: () => void this.openTab(this.defaultView(), r.path) },
+          "separator",
+          { label: "クイックアクセスから外す", run: () => quickAccess.unpin([ref]) },
+        ]);
+      };
+      this.quickList.append(b);
+    }
+  }
+
+  /** 左の欄などからフォルダへ行く。今のタブがフォルダと関係ないビュー（ホームなど）なら、そのタブを標準のビューに置き換える */
+  private async goTo(path: string) {
+    const t = this.active;
+    if (!t) return;
+    if (t.folderView) await this.navigate(t, path).catch(() => {});
+    else await this.replaceTab(t, this.defaultView(), path);
+  }
+
+  // ---- タブ ----
 
   private defaultView(): LoadedView {
     return this.views.find((v) => v.manifest.id === DEFAULT_VIEW_ID) ?? this.views[0];
   }
 
-  async openTab(path: string, view = this.active?.view ?? this.defaultView()) {
+  viewInfos(): ViewInfo[] {
+    return this.views.map((v) => ({
+      id: v.manifest.id,
+      name: v.manifest.name,
+      ...(v.manifest.description !== undefined ? { description: v.manifest.description } : {}),
+      location: v.manifest.location ?? "folder",
+    }));
+  }
+
+  /** 新しいタブをホームで開く（ホームのビューが無ければ、標準のビューでよく使う場所を開く）。replace なら今のタブを置き換える */
+  private async openHome(replace = false) {
+    const home = this.views.find((v) => v.manifest.id === HOME_VIEW_ID);
+    if (!home) return this.openTab(this.defaultView(), this.homePath());
+    if (replace && this.active) return this.replaceTab(this.active, home);
+    return this.openTab(home);
+  }
+
+  /** view のタブを開く。フォルダと関係するビューなら path（無ければよく使う場所）へ移動する。at はタブの並びの位置 */
+  async openTab(view: LoadedView, path?: string, at?: number) {
     const tab = new Tab(this, view);
-    this.tabs.push(tab);
-    this.tabStrip.appendChild(tab.button);
+    const i = at ?? this.tabs.length;
+    this.tabs.splice(i, 0, tab);
+    this.tabStrip.insertBefore(tab.button, this.tabStrip.children[i] ?? null);
     this.content.appendChild(tab.pane);
     this.activate(tab);
-    await this.navigate(tab, path, false);
+    if (tab.folderView) await this.navigate(tab, path ?? this.homePath(), false).catch(() => {});
+    return tab;
+  }
+
+  /** タブを、別のビュー（とフォルダ）で置き換える（ホームから開くとき。Win11 と同じく、ホームのタブがそのフォルダになる） */
+  private async replaceTab(old: Tab, view: LoadedView, path?: string) {
+    const i = this.tabs.indexOf(old);
+    await this.openTab(view, path, i < 0 ? undefined : i);
+    this.tabs = this.tabs.filter((t) => t !== old);
+    old.destroy();
+  }
+
+  /** ビューから頼まれた tabs.open */
+  async openTabById(from: Tab, viewId: string, path?: string, replace = false) {
+    const view = this.views.find((v) => v.manifest.id === viewId);
+    if (!view) throw new BackendError({ code: "not-found", message: `view ${viewId}` });
+    const target = isFolderView(view) ? (path ?? from.folder?.path ?? this.homePath()) : undefined;
+    if (replace) await this.replaceTab(from, view, target);
+    else await this.openTab(view, target);
   }
 
   closeTab(tab: Tab) {
@@ -233,18 +416,21 @@ export class App {
       t.pane.classList.toggle("active", on);
     }
     this.viewSelect.value = tab.view.manifest.id;
+    this.endEditAddress();
     this.updateChrome();
     tab.host.focus();
   }
 
   private updateChrome() {
     const t = this.active;
-    this.address.value = t?.folder?.path ?? "";
+    // フォルダと関係ないビューのタブでは、アドレスバーと戻る・進むを隠す（ADR 0014 判断1）
+    this.navRow.classList.toggle("no-location", !!t && !t.folderView);
+    this.renderCrumbs();
     this.backBtn.disabled = !t || t.back.length === 0;
     this.forwardBtn.disabled = !t || t.forward.length === 0;
     this.upBtn.disabled = !t?.folder?.parentPath;
-    this.status.textContent = t?.folder ? `${t.folder.entries.length} 個の項目` : "";
-    document.title = t?.folder ? `${t.folder.name} - explorer_plus` : "explorer_plus";
+    this.status.textContent = t?.folderView && t.folder ? `${t.folder.entries.length} 個の項目` : "";
+    document.title = t?.folder ? `${t.folder.name} - explorer_plus` : t ? `${t.view.manifest.name} - explorer_plus` : "explorer_plus";
   }
 
   async navigate(tab: Tab, path: string, record = true) {
@@ -254,7 +440,6 @@ export class App {
     } catch (e) {
       const msg = e instanceof BackendError && e.apiError.code === "not-found" ? `フォルダが見つかりません：${path}` : `開けませんでした：${path}`;
       this.toast(msg);
-      if (tab === this.active) this.address.value = tab.folder?.path ?? "";
       throw e;
     }
     if (record && tab.folder && tab.folder.path !== folder.path) {
@@ -283,7 +468,7 @@ export class App {
 
   refresh() {
     const t = this.active;
-    if (t?.folder) void this.navigate(t, t.folder.path, false);
+    if (t?.folderView && t.folder) void this.navigate(t, t.folder.path, false);
   }
 
   /** newTab：フォルダを、今のタブではなく新しいタブ（標準のビュー）で開く（タグビュー・時間割ビューから開くとき） */
@@ -298,52 +483,53 @@ export class App {
       target = { id: found.id, path: found.path };
     }
     if (isDir) {
-      if (newTab) await this.openTab(target.path, this.defaultView());
+      if (newTab || !tab.folderView) await this.openTab(this.defaultView(), target.path);
       else await this.navigate(tab, target.path);
       return;
     }
     playOpen(from);
     await backend.openEntry(target);
+    // 開いたファイルを「最近使った項目」に残す（ホームで出す。ADR 0014 判断2）
+    recentItems.push(target);
   }
 
-  // ---- 今の授業（ADR 0010。どのビューを開いていても、アドレスバーの横に出す） ----
+  // ---- 今の授業（ADR 0010・0012。すべての時間割から。どのビューを開いていても、アドレスバーの横に出す） ----
 
   private readonly nowBtn = el("button", "now-class");
-  private nowFolder: EntryRef | null = null;
 
   private async updateNow() {
-    let label = "";
-    this.nowFolder = null;
-    try {
-      const now = await timetableService.current();
-      if (now) {
-        label = `今：${now.slot.title || now.period.label}`;
-        this.nowFolder = now.slot.folders[0] ?? null;
-      }
-    } catch (e) {
-      console.warn("current class failed", e);
-    }
-    this.nowBtn.textContent = label;
-    this.nowBtn.hidden = !label;
-    this.nowBtn.title = this.nowFolder ? `${this.nowFolder.path} を新しいタブで開く` : "このコマにはフォルダが結びついていません（右クリックのメニューで結びつけられます）";
-    this.nowBtn.classList.toggle("no-folder", !this.nowFolder);
+    const all = await timetableService.allNow().catch(() => []);
+    const first = all[0];
+    this.nowBtn.hidden = !first;
+    if (!first) return;
+    const name = (c: (typeof all)[number]) => c.slot.title || c.period.label;
+    this.nowBtn.textContent = `今：${name(first)}${all.length > 1 ? ` ほか${all.length - 1}` : ""}`;
+    const hasFolder = all.some((c) => c.slot.folders[0]);
+    this.nowBtn.classList.toggle("no-folder", !hasFolder);
+    this.nowBtn.title = all.map((c) => `${name(c)}（${c.folder.path.split("\\").pop()}）`).join("\n");
+    this.nowBtn.onclick = (e) => {
+      const openClass = (c: (typeof all)[number]) => {
+        const f = c.slot.folders[0];
+        if (!f) return this.toast(`「${name(c)}」にはフォルダが結びついていません。時間割ビューで結びつけられます`);
+        // 今のタブは壊さず、新しいタブで開く（ADR 0009 判断3）
+        if (this.active) void this.open(this.active, f, undefined, true).catch(() => this.toast(`フォルダが見つかりません：${f.path}`));
+      };
+      if (all.length === 1) return openClass(first);
+      // 2つの学校の授業が重なっているときは、選んでもらう
+      const r = this.nowBtn.getBoundingClientRect();
+      void showMenu(r.x, r.bottom + 4, all.map((c) => ({ label: `${name(c)}（${c.folder.path.split("\\").pop()}）`, run: () => openClass(c) })));
+      e.stopPropagation();
+    };
   }
 
   private startNowWatch() {
     this.nowBtn.hidden = true;
-    this.nowBtn.onclick = () => {
-      if (!this.nowFolder) {
-        this.toast("このコマにはフォルダが結びついていません。フォルダを右クリックして「時間割のコマに結びつける…」を選んでください");
-        return;
-      }
-      // 今のタブは壊さず、新しいタブで開く（ADR 0009 判断3）
-      const t = this.active;
-      if (t) void this.open(t, this.nowFolder, undefined, true).catch(() => this.toast(`フォルダが見つかりません：${this.nowFolder?.path}`));
-    };
     void this.updateNow();
     timetableService.onChange(() => void this.updateNow());
     setInterval(() => void this.updateNow(), 30_000);
   }
+
+  // ---- ファイルの操作 ----
 
   async trash(tab: Tab, refs: EntryRef[], from?: Rect): Promise<number> {
     const names = refs.map((r) => r.path.split("\\").pop() ?? r.path);
@@ -363,13 +549,12 @@ export class App {
     return raw;
   }
 
-  /** 今のフォルダに、重ならない名前で「新しいフォルダー」を作り、ビューに名前の変更を始めてもらう */
-  async createFolder(tab: Tab): Promise<RawEntry> {
+  /** 今のフォルダに新しいフォルダを作り、ビューに名前の変更を始めてもらう。name が無ければ重ならない「新しいフォルダー」 */
+  async createFolder(tab: Tab, name?: string): Promise<RawEntry> {
     if (!tab.folder) throw new BackendError({ code: "not-found", message: "no folder is open" });
-    const name = uniqueName("新しいフォルダー", tab.folder.entries.map((e) => e.name));
-    const raw = await backend.createFolder(tab.folder.path, name);
+    const raw = await backend.createFolder(tab.folder.path, name ?? uniqueName("新しいフォルダー", tab.folder.entries.map((e) => e.name)));
     await this.navigate(tab, tab.folder.path, false);
-    tab.host.requestRename(raw);
+    if (name === undefined) tab.host.requestRename(raw);
     return raw;
   }
 
@@ -379,25 +564,33 @@ export class App {
     const raws = items.map((r) => tab.folder?.entries.find((e) => e.path === r.path));
     const run = (work: () => Promise<unknown>) => () =>
       void work().catch((e) => {
-        if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`できませんでした：${e instanceof Error ? e.message : String(e)}`);
+        if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`できませんでした：${errorText(e)}`);
       });
     const copyPaths = (paths: string[]) => run(() => navigator.clipboard.writeText(paths.map((p) => `"${p}"`).join("\r\n")));
     const lines: MenuLine[] = [];
     if (items.length > 0) {
       const allFolders = raws.every((r) => r?.isDir);
+      const single = items.length === 1 ? items[0] : null;
+      const pinned = single ? quickAccess.has(single) : false;
       lines.push(
-        { label: "開く", shortcut: "Enter", run: run(() => (items.length === 1 ? this.open(tab, items[0]) : Promise.all(items.filter((_, i) => !raws[i]?.isDir).map((r) => backend.openEntry(r))))) },
-        { label: "新しいタブで開く", disabled: !allFolders, run: run(async () => { for (const r of items) await this.openTab(r.path, tab.view); }) },
+        { label: "開く", shortcut: "Enter", run: run(() => (single ? this.open(tab, single) : Promise.all(items.filter((_, i) => !raws[i]?.isDir).map((r) => backend.openEntry(r))))) },
+        { label: "新しいタブで開く", disabled: !allFolders, run: run(async () => { for (const r of items) await this.openTab(tab.folderView ? tab.view : this.defaultView(), r.path); }) },
         "separator",
-        { label: "名前の変更", shortcut: "F2", disabled: items.length !== 1 || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
+        { label: "名前の変更", shortcut: "F2", disabled: !single || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
         { label: "パスのコピー", run: copyPaths(items.map((r) => r.path)) },
+        {
+          label: pinned ? "クイックアクセスから外す" : "クイックアクセスにピン留め",
+          disabled: !single || !allFolders,
+          run: () => single && (pinned ? quickAccess.unpin([single]) : quickAccess.pin([single])),
+        },
         "separator",
         { label: "タグ…", run: run(() => tagPicker(items)) },
-        { label: "時間割のコマに結びつける…", disabled: items.length !== 1 || !raws[0]?.isDir, run: run(() => slotPicker(items[0], (m) => this.toast(m))) },
+        { label: "時間割のコマに結びつける…", disabled: !single || !allFolders, run: run(() => slotPicker(items[0], (m) => this.toast(m))) },
         "separator",
         { label: "ごみ箱へ送る", shortcut: "Delete", run: run(() => this.trash(tab, items)) },
       );
-    } else {
+    } else if (tab.folderView && extra.length === 0) {
+      // 項目を選ばずに右クリックしたとき。ビューが自分の項目（extra）だけを出したいときは、標準の項目を足さない
       lines.push(
         { label: "新しいフォルダー", shortcut: "Ctrl+Shift+N", disabled: !tab.folder, run: run(() => this.createFolder(tab)) },
         { label: "最新の情報に更新", shortcut: "F5", run: () => this.refresh() },
@@ -407,6 +600,7 @@ export class App {
     if (extra.length > 0) {
       lines.push("separator", ...extra.map((m) => ({ label: m.label, run: () => (chosen = m.id) })));
     }
+    if (lines.length === 0) return null;
     await showMenu(x, y, lines);
     return chosen;
   }
@@ -420,12 +614,12 @@ export class App {
       return true;
     }
     if (k.ctrl && k.shift && !k.alt && key === "n") {
-      if (t) void this.createFolder(t).catch((e) => this.toast(`フォルダーを作れませんでした：${e instanceof Error ? e.message : String(e)}`));
+      if (t?.folderView) void this.createFolder(t).catch((e) => this.toast(`フォルダーを作れませんでした：${errorText(e)}`));
       return true;
     }
     if (k.ctrl && !k.alt) {
       if (key === "t") {
-        void this.openTab(t?.folder?.path ?? this.homePath());
+        void this.openHome();
         return true;
       }
       if (key === "w") {
@@ -433,8 +627,7 @@ export class App {
         return true;
       }
       if (key === "l") {
-        this.address.focus();
-        this.address.select();
+        this.editAddress();
         return true;
       }
       if (key === "Tab" && t && this.tabs.length > 1) {

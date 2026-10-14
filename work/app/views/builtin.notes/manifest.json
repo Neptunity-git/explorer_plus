@@ -1,0 +1,10 @@
+{
+  "id": "builtin.notes",
+  "name": "ノート",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": [],
+  "location": "folder",
+  "description": "フォルダごとに1ページのノート。そのフォルダを開くと、そのフォルダのノートが出て、その場で書ける（ADR 0014 判断4）"
+}

@@ -12,6 +12,7 @@ import {
   type Rect,
   type TreeNode,
   type Use,
+  type ViewInfo,
 } from "../api/types";
 import { sortEntries } from "../core/entries";
 import { parseModMessage } from "../core/protocol";
@@ -22,6 +23,7 @@ import { toEntry, toSnapshot } from "./snapshot";
 import { storageFor } from "./view-storage";
 import { tagService } from "./tag-service";
 import { timetableService } from "./timetable-service";
+import { quickAccess, recentItems } from "./ref-list-service";
 
 export type LoadedView = { manifest: Manifest; source: "builtin" | "user" };
 
@@ -35,11 +37,15 @@ export interface TabActions {
   open(ref: EntryRef, from?: Rect, newTab?: boolean): Promise<void>;
   trash(refs: EntryRef[], from?: Rect): Promise<number>;
   rename(ref: EntryRef, newName: string): Promise<RawEntry>;
-  /** 今のフォルダに「新しいフォルダー」を作る。作った後、本体がビューに action（rename）を送る */
-  createFolder(): Promise<RawEntry>;
+  /** 今のフォルダに新しいフォルダを作る（name を省略すると「新しいフォルダー」）。作った後、本体がビューに action（rename）を送る */
+  createFolder(name?: string): Promise<RawEntry>;
   /** 右クリックのメニュー。MOD が足した項目が選ばれたらその id、それ以外は null */
   showMenu(x: number, y: number, items: EntryRef[], extra: MenuItem[]): Promise<string | null>;
   shortcut(key: KeyMessage): void;
+  /** 使えるビューの一覧（ホームで使う） */
+  listViews(): ViewInfo[];
+  /** 新しいタブを開く。replace なら、このタブを置き換える */
+  openTab(viewId: string, path?: string, replace?: boolean): Promise<void>;
 }
 
 /** 並べ替えのためだけに Entry を作るときの uses（余計な情報を付けない） */
@@ -90,13 +96,23 @@ export class ViewHost {
         }),
       );
     }
-    if (this.uses.has("timetable")) {
-      this.unsubscribe.push(
-        timetableService.onChange(() => {
-          if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "timetable", data: timetableService.get() });
-        }),
-      );
+    if (this.uses.has("timetable")) this.unsubscribe.push(timetableService.onChange(() => this.pushTimetable()));
+    if (this.uses.has("quickAccess")) {
+      this.unsubscribe.push(quickAccess.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "quickAccess", data: null })));
     }
+    if (this.uses.has("recent")) {
+      this.unsubscribe.push(recentItems.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "recent", data: null })));
+    }
+  }
+
+  /** 今のフォルダ（時間割はフォルダごと。ADR 0012） */
+  private folderRef(): EntryRef {
+    if (!this.folder) throw new HostError({ code: "not-found", message: "no folder is open" });
+    return { id: this.folder.id, path: this.folder.path };
+  }
+
+  private pushTimetable() {
+    if (this.isReady && this.folder) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "timetable", data: timetableService.get(this.folderRef()) });
   }
 
   private readonly unsubscribe: (() => void)[] = [];
@@ -114,9 +130,11 @@ export class ViewHost {
 
   /** タブのフォルダが変わった（または読み直した）ときに呼ぶ */
   setFolder(folder: RawFolder) {
+    const moved = this.folder?.path !== folder.path;
     this.folder = folder;
     this.generation++;
     if (this.isReady) this.pushFolder();
+    if (moved && this.uses.has("timetable")) this.pushTimetable();
   }
 
   setTheme(theme: "light" | "dark") {
@@ -213,7 +231,10 @@ export class ViewHost {
           // 表示中のタブなら、キーボードの操作がすぐビューに届くようにする
           if (this.iframe.closest(".view-pane.active") && !document.querySelector(".dialog-backdrop, .menu-backdrop")) this.iframe.focus();
           // 返事が届いた後にフォルダが届くよう、次の順番で送る
-          setTimeout(() => this.pushFolder(), 0);
+          setTimeout(() => {
+            this.pushFolder();
+            if (this.uses.has("timetable")) this.pushTimetable();
+          }, 0);
         }
         return { apiVersion: this.view.manifest.apiVersion, viewId: this.view.manifest.id, tabId: this.tab.tabId, theme: this.tab.theme() };
       case "open":
@@ -246,8 +267,13 @@ export class ViewHost {
         if (bad) throw new HostError(bad);
         return toEntry(await this.tab.rename({ id: p.id, path: p.path }, p.newName), this.uses);
       }
-      case "createFolder":
-        return toEntry(await this.tab.createFolder(), this.uses);
+      case "createFolder": {
+        if (p.name !== undefined) {
+          const bad = validateFileName(p.name);
+          if (bad) throw new HostError(bad);
+        }
+        return toEntry(await this.tab.createFolder(p.name), this.uses);
+      }
       case "showMenu": {
         const box = this.iframe.getBoundingClientRect();
         return { chosen: await this.tab.showMenu(box.x + p.x, box.y + p.y, p.items, p.extra ?? []) };
@@ -268,12 +294,27 @@ export class ViewHost {
         return tagService.assign(p.items, p.tagId, p.on);
       case "tags.entries":
         return (await tagService.entries(p.tagId)).map((r) => toEntry(r, this.uses));
+      // 時間割は、このビューが開いているフォルダのもの（ADR 0012）
       case "timetable.get":
-        return timetableService.get();
+        return timetableService.get(this.folderRef());
       case "timetable.set":
-        return timetableService.set(p.timetable);
+        return timetableService.set(this.folderRef(), p.timetable);
+      case "timetable.delete":
+        return timetableService.delete(this.folderRef());
       case "timetable.current":
-        return timetableService.current();
+        return timetableService.current(this.folderRef());
+      case "views.list":
+        return this.tab.listViews();
+      case "tabs.open":
+        return this.tab.openTab(p.viewId, p.path, p.replace === true);
+      case "quickAccess.list":
+        return (await quickAccess.entries()).map((r) => toEntry(r, this.uses));
+      case "quickAccess.pin":
+        return quickAccess.pin(p.items);
+      case "quickAccess.unpin":
+        return quickAccess.unpin(p.items);
+      case "recent.list":
+        return (await recentItems.entries()).map((r) => toEntry(r, this.uses));
     }
   }
 

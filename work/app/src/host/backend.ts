@@ -16,6 +16,8 @@ export type RawFolder = { id: string; path: string; name: string; parentPath: st
 export type Place = { kind: string; name: string; path: string };
 export type ModSource = { source: "builtin" | "user"; dir: string; manifestText: string | null; error: string | null };
 export type Location = { latitude: number; longitude: number; accuracy: number };
+/** アプリ全体のデータの名前（Rust の mods.rs の APP_DATA_NAMES と同じ） */
+export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent";
 
 export class BackendError extends Error {
   constructor(readonly apiError: ApiError) {
@@ -54,9 +56,11 @@ export const backend = {
   viewStorageSave: (viewId: string, json: string) => call<void>("view_storage_save", { viewId, json }),
   getLocation: () => call<Location>("get_location"),
   devStartDir: () => call<string | null>("dev_start_dir"),
-  appDataLoad: (name: "tags" | "timetable") => call<string | null>("app_data_load", { name }),
-  appDataSave: (name: "tags" | "timetable", json: string) => call<void>("app_data_save", { name, json }),
+  appDataLoad: (name: AppDataName) => call<string | null>("app_data_load", { name }),
+  appDataSave: (name: AppDataName, json: string) => call<void>("app_data_save", { name, json }),
   fileIds: (paths: string[]) => call<string[]>("file_ids", { paths }),
+  pathKind: (path: string) => call<"dir" | "file" | "none">("path_kind", { path }),
+  runCommand: (file: string, args: string, cwd: string) => call<void>("run_command", { file, args, cwd }),
 };
 
 /** Windows では、Tauri の独自の通信先は http://<名前>.localhost になる */

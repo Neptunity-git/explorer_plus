@@ -2,7 +2,7 @@
 // 拡張子・並び順・アイコンの種類などの「見せ方の判断」は TypeScript の src/core に任せ、ここでは Windows から事実だけを取る。
 
 use serde::{Deserialize, Serialize};
-use std::os::windows::ffi::OsStringExt;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
@@ -409,6 +409,52 @@ pub async fn create_folder(parent: String, name: String) -> Result<RawEntry, Str
     .map_err(|e| e.to_string())?
 }
 
+/// アドレスバーに入れた文字が、フォルダか、ファイルか、どちらでもないか（どちらでもなければコマンドとして扱う。ADR 0014 判断5）
+#[tauri::command]
+pub fn path_kind(path: String) -> &'static str {
+    let p = Path::new(&path);
+    // "cmd" のような相対の名前は、アプリの作業場所からの相対パスと取り違えないよう、パスとして扱わない
+    if !p.is_absolute() {
+        return "none";
+    }
+    if p.is_dir() {
+        "dir"
+    } else if p.is_file() {
+        "file"
+    } else {
+        "none"
+    }
+}
+
+/// アドレスバーに入れたコマンドを、今のフォルダを作業場所にして起動する（Win11 で cmd と打つのと同じ）。
+/// ユーザーがアドレスバーに入れたときだけ、本体から呼ぶ（MOD からは呼べない）
+#[tauri::command]
+pub fn run_command(file: String, args: String, cwd: String) -> Result<(), String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    if file.is_empty() {
+        return Err("invalid: empty command".into());
+    }
+    let w = |s: &str| -> Vec<u16> { std::ffi::OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect() };
+    let (f, a, d, verb) = (w(&file), w(&args), w(&cwd), w("open"));
+    let r = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR(verb.as_ptr()),
+            PCWSTR(f.as_ptr()),
+            if args.is_empty() { PCWSTR::null() } else { PCWSTR(a.as_ptr()) },
+            if cwd.is_empty() { PCWSTR::null() } else { PCWSTR(d.as_ptr()) },
+            SW_SHOWNORMAL,
+        )
+    };
+    // ShellExecute は 32 以下を返したら失敗（見つからない、など）
+    if r.0 as usize <= 32 {
+        return Err(format!("not-found: {}", file));
+    }
+    Ok(())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
@@ -577,5 +623,30 @@ mod tests {
         assert!(rt(create_folder(parent.clone(), "新しいフォルダー".into())).unwrap_err().starts_with("exists"));
         assert!(rt(create_folder(parent, "a/b".into())).unwrap_err().starts_with("invalid"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod address_tests {
+    use super::*;
+
+    #[test]
+    fn path_kinds() {
+        let d = std::env::temp_dir();
+        assert_eq!(path_kind(d.to_string_lossy().into_owned()), "dir");
+        let f = d.join(format!("explorer-plus-kind-{}.txt", std::process::id()));
+        std::fs::write(&f, "x").unwrap();
+        assert_eq!(path_kind(f.to_string_lossy().into_owned()), "file");
+        std::fs::remove_file(&f).unwrap();
+        assert_eq!(path_kind(f.to_string_lossy().into_owned()), "none");
+        // 相対の名前（コマンドの名前など）はパスとして扱わない
+        assert_eq!(path_kind("cmd".into()), "none");
+        assert_eq!(path_kind("src".into()), "none");
+    }
+
+    #[test]
+    fn run_command_rejects_unknown() {
+        assert!(run_command("".into(), "".into(), "".into()).unwrap_err().starts_with("invalid"));
+        assert!(run_command("explorer-plus-no-such-command-xyz".into(), "".into(), "".into()).unwrap_err().starts_with("not-found"));
     }
 }
