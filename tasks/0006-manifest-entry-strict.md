@@ -1,21 +1,31 @@
 ---
-id: "0006"
+id: '0006'
 title: manifest の entry の検査を、Rust 側の配信と同じ厳しさにする
-status: todo
-depends_on: ["0001"]
+status: done
+depends_on:
+- '0001'
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/manifest.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/manifest.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/manifest-entry.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/manifest.test.ts tests/manifest-entry.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/tests/manifest-entry.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/manifest.test.ts tests/manifest-entry.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0006-a1
+attempt: 1
+implementer_report: 'checkEntry を修正: (4) バックスラッシュはどこにあっても拒否、(6) / で区切った部分が空・"."・".."
+  のいずれかでも拒否。新しいテスト work/app/tests/manifest-entry.test.ts を作成。'
+last_changed_files:
+- work/app/tests/manifest-entry.test.ts
+- work/app/src/core/manifest.ts
+review_reason: すべての受け入れ条件を満たしている。checkEntry関数の修正は要件通りで、テストは9つの拒否ケース・5つの受け入れケース・エラー形式を正しく検証している。既存テストも合格し、指示範囲外の変更はない。
 ---
 ## Instructions
 
