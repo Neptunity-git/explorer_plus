@@ -232,3 +232,26 @@ ep.onTimetable((tt) => { /* 時間割が変わった */ });
   `place`：`null` か `{ latitude, longitude, radius }`（「この場所にいるときだけ今の授業を出す」）
 - 今の授業：今の曜日と時刻（始まりを含み、終わりを含まない）に合う時限を、`periods` の順に見て、その曜日のコマがある最初のもの。
   `place` を設定していて、位置が取れたときだけ、`radius ＋ 位置の誤差` より遠ければ「今の授業なし」。位置が取れないときは時刻だけで決める
+
+## 2026-10-14（2回目）の変更（ADR 0012・0014。公開前なので意味を変えたものがある）
+
+- **時間割はフォルダごと**（ADR 0012）：`timetable.get` は、ビューが開いているフォルダの時間割（無ければ `null`）。`timetable.set` はそのフォルダに保存、
+  `timetable.delete` はそのフォルダの時間割を消す、`timetable.current` はそのフォルダの時間割での今の授業。知らせの `timetable` は、
+  時間割が変わったときと、フォルダが変わったときに届く（data は `Timetable | null`）
+- 時間割に `ondemand`（省略可能）：`[{ id, title, folders }]`。曜日・時限の無い授業
+- manifest に `location`（省略可能）：`"folder"`（既定）か `"none"`（フォルダと関係ない。タブでアドレスバーを隠す）
+- `FolderSnapshot` に `id`（フォルダ自身のファイルID）
+- `uses` に `thumbnails`：Entry に `thumbnailUrl`（Windows の縮小画像）
+- `createFolder` に `name`（省略可能）
+- 足した呼び出し：
+
+| method | params | 要る `uses` | 返すもの |
+|---|---|---|---|
+| `timetable.delete` | `{}` | `timetable` | なし |
+| `views.list` | `{}` | なし | `ViewInfo[]`（`{ id, name, description?, location }`） |
+| `tabs.open` | `{ viewId, path? }` | なし | なし（新しいタブを開く） |
+| `quickAccess.list` | `{}` | `quickAccess` | `Entry[]`（ピン留めしたフォルダ） |
+| `quickAccess.pin`・`quickAccess.unpin` | `{ items: [{ id, path }] }`（1〜100件） | `quickAccess` | なし |
+| `recent.list` | `{}` | `recent` | `Entry[]`（最近開いた項目、新しい順） |
+
+- 足した知らせ：`quickAccess`・`recent`（data は null。中身は list で取り直す）

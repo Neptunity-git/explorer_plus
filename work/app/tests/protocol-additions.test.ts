@@ -46,12 +46,13 @@ describe("rename", () => {
 });
 
 describe("createFolder", () => {
-  it("ignores the contents and returns empty params", () => {
-    const result = call(5, "createFolder", { name: "x" });
+  // 2026-10-14：createFolder は name を受け取るようになった（時間割ビューから授業名でフォルダを作るため。ADR 0012）
+  it("passes name through", () => {
+    const result = call(5, "createFolder", { name: "x", other: 1 });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.message).toMatchObject({ kind: "call", id: 5, method: "createFolder" });
-      expect((result.message as CallMessage).params).toEqual({});
+      expect((result.message as CallMessage).params).toEqual({ name: "x" });
     }
   });
 });

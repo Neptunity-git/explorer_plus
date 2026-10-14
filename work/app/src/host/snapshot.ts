@@ -41,5 +41,5 @@ export function toSnapshot(
   folderSizes?: ReadonlyMap<string, number>,
 ): FolderSnapshot {
   const entries = uses.has("entries") ? sortEntries(folder.entries.map((r) => toEntry(r, uses, folderSizes))) : [];
-  return { path: folder.path, name: folder.name, parentPath: folder.parentPath, entries };
+  return { id: folder.id, path: folder.path, name: folder.name, parentPath: folder.parentPath, entries };
 }

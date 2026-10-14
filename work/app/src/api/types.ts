@@ -11,7 +11,21 @@ export const PROTOCOL_VERSION = 1;
 
 /** manifest の uses に書ける名前 */
 // "tags"・"timetable" は 2026-10-14 に追加（ADR 0010）
-export const USES = ["entries", "size", "folderSize", "modified", "icons", "tree", "links", "tags", "timetable"] as const;
+// "quickAccess"・"recent"・"thumbnails" は 2026-10-14 に追加（ADR 0014）
+export const USES = [
+  "entries",
+  "size",
+  "folderSize",
+  "modified",
+  "icons",
+  "tree",
+  "links",
+  "tags",
+  "timetable",
+  "quickAccess",
+  "recent",
+  "thumbnails",
+] as const;
 export type Use = (typeof USES)[number];
 
 export type Manifest = {
@@ -23,6 +37,8 @@ export type Manifest = {
   /** 重複を除いた、宣言どおりの順 */
   uses: Use[];
   description?: string;
+  /** フォルダと関係するか（ADR 0014 判断1）。省略は "folder"。"none" のタブではアドレスバーを隠す */
+  location?: "folder" | "none";
 };
 
 // ---- データ ----
@@ -48,6 +64,8 @@ export type Entry = {
   iconKind?: IconKind;
   /** 付いているタグの id。uses に tags があるときだけ（付いていなければ []） */
   tags?: string[];
+  /** Windows が作る縮小画像（サムネイル）。uses に thumbnails があるときだけ。URL の size=（32〜256）で大きさを変えられる */
+  thumbnailUrl?: string;
 };
 
 // ---- タグ（ADR 0010。アプリ全体で1つ） ----
@@ -93,11 +111,27 @@ export type Timetable = {
   slots: TimetableSlot[];
   /** null なら場所の条件を使わない（時刻だけで判定） */
   place: TimetablePlace | null;
+  /** オンデマンドの授業（曜日・時限なし。ADR 0012 判断2）。省略は「なし」 */
+  ondemand?: TimetableOndemand[];
+};
+
+export type TimetableOndemand = {
+  /** 1〜32 文字。オンデマンドの中で重ならない */
+  id: string;
+  /** 授業名。1〜60 文字 */
+  title: string;
+  /** 結びつけるフォルダ（0〜5 個） */
+  folders: EntryRef[];
 };
 
 export type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | null;
 
+/** views.list で返すビューの情報（ホームで使う） */
+export type ViewInfo = { id: string; name: string; description?: string; location: "folder" | "none" };
+
 export type FolderSnapshot = {
+  /** フォルダ自身のファイルID（取れなければ ""）。ノートビューなど、フォルダごとに何かを覚えるときに使う */
+  id: string;
   path: string;
   name: string;
   /** ドライブの直下（"C:\\"）なら null */
@@ -161,7 +195,15 @@ export type CallMethod =
   | "tags.entries"
   | "timetable.get"
   | "timetable.set"
-  | "timetable.current";
+  | "timetable.current"
+  // ↓ 2026-10-14 に追加（ADR 0012・0014）
+  | "timetable.delete"
+  | "views.list"
+  | "tabs.open"
+  | "quickAccess.list"
+  | "quickAccess.pin"
+  | "quickAccess.unpin"
+  | "recent.list";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -178,7 +220,8 @@ export type CallParams = {
   getTree: { depth: number };
   resolve: { refs: EntryRef[] };
   rename: { id: string; path: string; newName: string };
-  createFolder: Record<string, never>;
+  /** name は 2026-10-14 に追加。省略すると「新しいフォルダー」（重ならない番号付き） */
+  createFolder: { name?: string };
   showMenu: { x: number; y: number; items: EntryRef[]; extra?: MenuItem[] };
   "tags.list": Record<string, never>;
   "tags.create": { name: string; color: string };
@@ -188,8 +231,17 @@ export type CallParams = {
   "tags.entries": { tagId: string };
   "timetable.get": Record<string, never>;
   /** timetable の形の細かい検査は本体（src/core/timetable.ts の validateTimetable）が行う */
+  /** 時間割は、ビューが開いているフォルダのもの（ADR 0012）。get は無ければ null */
   "timetable.set": { timetable: unknown };
   "timetable.current": Record<string, never>;
+  "timetable.delete": Record<string, never>;
+  "views.list": Record<string, never>;
+  /** 新しいタブを開く。path を省略すると、フォルダと関係するビューでは今のフォルダ */
+  "tabs.open": { viewId: string; path?: string };
+  "quickAccess.list": Record<string, never>;
+  "quickAccess.pin": { items: EntryRef[] };
+  "quickAccess.unpin": { items: EntryRef[] };
+  "recent.list": Record<string, never>;
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -217,6 +269,13 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "timetable.get": "timetable",
   "timetable.set": "timetable",
   "timetable.current": "timetable",
+  "timetable.delete": "timetable",
+  "views.list": null,
+  "tabs.open": null,
+  "quickAccess.list": "quickAccess",
+  "quickAccess.pin": "quickAccess",
+  "quickAccess.unpin": "quickAccess",
+  "recent.list": "recent",
 };
 
 export type CallMessage = {
@@ -238,7 +297,11 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "action"; data: { action: "rename"; entry: Entry } }
   // タグの一覧・時間割が変わったとき（uses に tags・timetable があるビューだけに届く）
   | { ep: 1; kind: "event"; event: "tags"; data: Tag[] }
-  | { ep: 1; kind: "event"; event: "timetable"; data: Timetable };
+  // 時間割は、ビューが開いているフォルダのもの（無ければ null）。フォルダが変わったときにも届く（ADR 0012）
+  | { ep: 1; kind: "event"; event: "timetable"; data: Timetable | null }
+  // クイックアクセス・最近使った項目が変わった（中身は quickAccess.list・recent.list で取り直す）
+  | { ep: 1; kind: "event"; event: "quickAccess"; data: null }
+  | { ep: 1; kind: "event"; event: "recent"; data: null };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 
@@ -263,3 +326,5 @@ export const TAG_NAME_MAX = 40;
 export const TAGS_MAX = 200;
 /** tags.assign の items の上限 */
 export const TAG_ASSIGN_MAX_ITEMS = 1000;
+/** クイックアクセスの pin・unpin で一度に渡せる数 */
+export const QUICK_ACCESS_MAX_ITEMS = 100;
