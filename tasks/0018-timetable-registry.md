@@ -1,23 +1,26 @@
 ---
-id: "0018"
+id: 0018
 title: フォルダごとの時間割の登録簿（探す・入れる・消す・全部の今の授業）
-status: todo
+status: doing
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
-  - work/app/src/core/tags.ts
-  - work/app/src/core/timetable-now.ts
+- work/app/src/api/types.ts
+- work/app/src/core/tags.ts
+- work/app/src/core/timetable-now.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/timetables.ts
-  - work/app/tests/timetables.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetables.test.ts"
+- work/app/src/core/timetables.ts
+- work/app/tests/timetables.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetables.test.ts"
 qwen_self_report: n/a
 auto_check: n/a
 claude_review: n/a
 retry_count: 0
+branch: task/0018-a1
+attempt: 1
 ---
 ## Instructions
 
