@@ -78,12 +78,15 @@
     }
   });
 
-  // Ctrl・Alt を押しながらのキーは、本体のショートカット（タブを開く、など）のために本体へも伝える
+  // Ctrl・Alt を押しながらのキーと F5 は、本体のショートカット（タブを開く、読み直す、など）のために本体へも伝える。
+  // F5・Ctrl+R はブラウザの「ページの再読み込み」なので止める（止めないと、アプリ全体が読み込み直される）
   window.addEventListener(
     "keydown",
     (e) => {
-      if (!e.ctrlKey && !e.altKey) return;
-      parent.postMessage({ ep: 1, kind: "key", key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }, "*");
+      const reload = e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"));
+      if (reload) e.preventDefault();
+      if (!e.ctrlKey && !e.altKey && e.key !== "F5") return;
+      parent.postMessage({ ep: 1, kind: "key", key: reload ? "F5" : e.key, ctrl: reload ? false : e.ctrlKey, shift: e.shiftKey, alt: e.altKey }, "*");
     },
     true,
   );

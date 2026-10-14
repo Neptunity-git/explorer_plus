@@ -6,6 +6,17 @@ mod geo;
 mod icons;
 mod mods;
 
+/// 開発中だけ、環境変数 EXPLORER_PLUS_START_DIR のフォルダで起動する（試験の操作が、ふだんのフォルダに及ばないように）。
+/// リリース版では常に None
+#[tauri::command]
+fn dev_start_dir() -> Option<String> {
+    if cfg!(debug_assertions) {
+        std::env::var("EXPLORER_PLUS_START_DIR").ok().filter(|p| std::path::Path::new(p).is_dir())
+    } else {
+        None
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -44,6 +55,7 @@ pub fn run() {
             mods::view_storage_load,
             mods::view_storage_save,
             geo::get_location,
+            dev_start_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

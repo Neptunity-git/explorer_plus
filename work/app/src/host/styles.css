@@ -92,7 +92,8 @@ button { font: inherit; color: inherit; }
 /* ---- 右クリックのメニュー（ADR 0009） ---- */
 .menu-backdrop { position: fixed; inset: 0; z-index: 150; }
 .menu {
-  position: fixed; min-width: 240px; padding: 4px; border-radius: 8px; border: 1px solid var(--border);
+  /* 幅は中身で決める（画面の端に置いても縮まないように。はみ出すかどうかは menu.ts が測って左・上に回す） */
+  position: fixed; width: max-content; min-width: 240px; white-space: nowrap; padding: 4px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface); box-shadow: var(--shadow); outline: none;
 }
 .menu-item {

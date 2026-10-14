@@ -97,6 +97,8 @@ export class App {
     private readonly views: LoadedView[],
     private readonly problems: ModProblem[],
     private readonly places: Place[],
+    /** 最初に開くフォルダ（開発中に、試験用のフォルダで起動するため。ふだんは null） */
+    private readonly startDir: string | null = null,
   ) {}
 
   mount(root: HTMLElement) {
@@ -152,7 +154,8 @@ export class App {
     root.append(tabsRow, navRow, body, this.status);
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "F5") {
+      // F5・Ctrl+R はブラウザの再読み込みを止めて、フォルダの読み直しにする
+      if (e.key === "F5" || (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "r")) {
         e.preventDefault();
         this.refresh();
         return;
@@ -169,6 +172,7 @@ export class App {
 
   private homePath(): string {
     return (
+      this.startDir ??
       this.places.find((p) => p.kind === "documents")?.path ??
       this.places.find((p) => p.kind === "home")?.path ??
       "C:\\"
@@ -362,6 +366,10 @@ export class App {
   handleKey(k: KeyMessage): boolean {
     const t = this.active;
     const key = k.key.length === 1 ? k.key.toLowerCase() : k.key;
+    if (key === "F5") {
+      this.refresh();
+      return true;
+    }
     if (k.ctrl && k.shift && !k.alt && key === "n") {
       if (t) void this.createFolder(t).catch((e) => this.toast(`フォルダーを作れませんでした：${e instanceof Error ? e.message : String(e)}`));
       return true;

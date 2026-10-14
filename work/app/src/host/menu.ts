@@ -64,11 +64,13 @@ export function showMenu(x: number, y: number, lines: MenuLine[]): Promise<void>
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("blur", onBlur);
 
-    // 画面からはみ出さないよう、右・下に余裕が無ければ左・上に出す
+    // まず (x, y) に置いて測り、画面からはみ出していたら左・上に回す
+    Object.assign(menu.style, { left: `${x}px`, top: `${y}px` });
     const r = menu.getBoundingClientRect();
-    const left = x + r.width > innerWidth - 4 ? Math.max(4, x - r.width) : x;
-    const top = y + r.height > innerHeight - 4 ? Math.max(4, y - r.height) : y;
-    Object.assign(menu.style, { left: `${left}px`, top: `${top}px` });
+    const right = document.documentElement.clientWidth - 4;
+    const bottom = document.documentElement.clientHeight - 4;
+    if (r.right > right) menu.style.left = `${Math.max(4, Math.min(x - r.width, right - r.width))}px`;
+    if (r.bottom > bottom) menu.style.top = `${Math.max(4, Math.min(y - r.height, bottom - r.height))}px`;
     menu.focus();
   });
 }
