@@ -1,21 +1,33 @@
 ---
-id: "0016"
+id: '0016'
 title: parseModMessage に、ホーム・クイックアクセスなどの呼び出しを足し、createFolder に name を通す
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/protocol.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/protocol.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/protocol-home.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts tests/protocol-tags.test.ts tests/protocol-open-newtab.test.ts tests/protocol-home.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/tests/protocol-home.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts
+  tests/protocol-tags.test.ts tests/protocol-open-newtab.test.ts tests/protocol-home.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0016-a1
+attempt: 1
+implementer_report: protocol.ts を edits で修正し、新しいテストファイル work/app/tests/protocol-home.test.ts
+  を作成した。createFolder の name 検証、timetable.delete/views.list/quickAccess.list/recent.list
+  の空 params、tabs.open の viewId/path/replace 検証、quickAccess.pin/unpin の items 検証を実装した。
+last_changed_files:
+- work/app/tests/protocol-home.test.ts
+- work/app/src/core/protocol.ts
+review_reason: すべての受け入れ条件を満たしている。インポート追加、createFolder/timetable.delete/views.list/quickAccess.list/recent.list/tabs.open/quickAccess.pin/quickAccess.unpin
+  のロジック実装が仕様通り。新しいテストファイルは成功・失敗ケースをすべてカバーし、自動検証で95テスト合格。指示範囲内の変更のみ（protocol.ts と新しいテストファイル）。
 ---
 ## Instructions
 
