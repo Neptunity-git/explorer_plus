@@ -1,21 +1,32 @@
 ---
-id: "0004"
+id: '0004'
 title: 宣言の確認と、保存する値の検査（checkPermission / checkStorageValue）
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/permission.ts
-  - work/app/tests/permission.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/permission.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/permission.ts
+- work/app/tests/permission.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/permission.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0004-a1
+attempt: 1
+implementer_report: permission.ts と permission.test.ts を新規作成した。checkPermission は METHOD_REQUIRES
+  を参照し、必要な use が宣言されていれば null、なければ not-declared を返す。checkStorageValue は JSON.stringify
+  の例外・undefined を invalid、UTF-8 バイト数が上限を超えれば too-large、ちょうど上限なら null を返す。受け入れ条件の各ケースを
+  Vitest テストで検証している。
+last_changed_files:
+- work/app/src/core/permission.ts
+- work/app/tests/permission.test.ts
+review_reason: 受け入れ条件をすべて満たしており、12個のテストがすべて成功。実装が仕様に正確に対応し、テストが条件を実際に検証している。
 ---
 ## Instructions
 

@@ -1,20 +1,29 @@
 ---
-id: "0005"
+id: '0005'
 title: ファイルの大きさを読みやすい文字列にする formatSize
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files: []
 human_review: false
 expected_outputs:
-  - work/app/src/core/format.ts
-  - work/app/tests/format.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx vitest run tests/format.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/format.ts
+- work/app/tests/format.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx vitest run tests/format.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0005-a1
+attempt: 1
+implementer_report: format.ts と format.test.ts を新規作成しました。1024倍の単位変換、小数第1位/整数の四捨五入、末尾
+  .0 の除去、1024 到達でも単位を上げない挙動、TB 上限、不正入力で "" を返す挙動を実装し、受け入れ条件の全ケースを検証する Vitest テストを書きました。
+last_changed_files:
+- work/app/src/core/format.ts
+- work/app/tests/format.test.ts
+review_reason: 実装が仕様を完全に満たしており、全テストケース（19項目）が正しく検証されている。小数処理、単位上限、不正入力の処理いずれも正確。
 ---
 ## Instructions
 
