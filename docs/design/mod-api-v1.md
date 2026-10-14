@@ -249,7 +249,7 @@ ep.onTimetable((tt) => { /* 時間割が変わった */ });
 |---|---|---|---|
 | `timetable.delete` | `{}` | `timetable` | なし |
 | `views.list` | `{}` | なし | `ViewInfo[]`（`{ id, name, description?, location }`） |
-| `tabs.open` | `{ viewId, path? }` | なし | なし（新しいタブを開く） |
+| `tabs.open` | `{ viewId, path?, replace? }` | なし | なし（新しいタブを開く。replace: true ならこのタブで開く） |
 | `quickAccess.list` | `{}` | `quickAccess` | `Entry[]`（ピン留めしたフォルダ） |
 | `quickAccess.pin`・`quickAccess.unpin` | `{ items: [{ id, path }] }`（1〜100件） | `quickAccess` | なし |
 | `recent.list` | `{}` | `recent` | `Entry[]`（最近開いた項目、新しい順） |
