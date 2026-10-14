@@ -99,6 +99,8 @@ export type TimetableSlot = {
   title: string;
   /** 結びつけるフォルダ（0〜5 個。今の画面は1つ目だけを使う） */
   folders: EntryRef[];
+  /** 短いメモ（教室・持ち物など。0〜200 文字）。省略は「なし」（ADR 0015 判断4） */
+  memo?: string;
 };
 
 /** 「この場所にいるときだけ今の授業を出す」の場所。radius はメートル */
@@ -122,6 +124,8 @@ export type TimetableOndemand = {
   title: string;
   /** 結びつけるフォルダ（0〜5 個） */
   folders: EntryRef[];
+  /** 短いメモ（0〜200 文字）。省略は「なし」 */
+  memo?: string;
 };
 
 export type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | null;
@@ -157,6 +161,9 @@ export type ViewContext = {
 
 /** MOD が右クリックのメニューに足す項目。選ばれると、showMenu の返り値の chosen に id が入る */
 export type MenuItem = { id: string; label: string };
+
+/** ドラッグ＆ドロップで落とせる場所（ビューの中のフォルダ）。x・y・width・height は iframe の中の座標（ADR 0015 判断2） */
+export type DropTarget = { id: string; path: string; x: number; y: number; width: number; height: number };
 
 /** 画面上の位置（アニメーションの出どころ）。iframe の左上が原点 */
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -203,7 +210,13 @@ export type CallMethod =
   | "quickAccess.list"
   | "quickAccess.pin"
   | "quickAccess.unpin"
-  | "recent.list";
+  | "recent.list"
+  // ↓ 2026-10-14 に追加（ADR 0015）
+  | "clipboard.copy"
+  | "clipboard.cut"
+  | "clipboard.paste"
+  | "drag.start"
+  | "drag.targets";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -243,6 +256,14 @@ export type CallParams = {
   "quickAccess.pin": { items: EntryRef[] };
   "quickAccess.unpin": { items: EntryRef[] };
   "recent.list": Record<string, never>;
+  "clipboard.copy": { items: EntryRef[] };
+  "clipboard.cut": { items: EntryRef[] };
+  /** クリップボードのファイルを、ビューが開いているフォルダへ貼り付ける */
+  "clipboard.paste": Record<string, never>;
+  /** ドラッグを始めた。x・y は iframe の中のマウスの位置。targets はこのビューの中の落とせる場所 */
+  "drag.start": { items: EntryRef[]; x: number; y: number; targets: DropTarget[] };
+  /** 落とせる場所を知らせ直す（本体から dragTargets の知らせが来たとき） */
+  "drag.targets": { targets: DropTarget[] };
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -277,6 +298,11 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "quickAccess.pin": "quickAccess",
   "quickAccess.unpin": "quickAccess",
   "recent.list": "recent",
+  "clipboard.copy": null,
+  "clipboard.cut": null,
+  "clipboard.paste": null,
+  "drag.start": null,
+  "drag.targets": null,
 };
 
 export type CallMessage = {
@@ -302,7 +328,9 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "timetable"; data: Timetable | null }
   // クイックアクセス・最近使った項目が変わった（中身は quickAccess.list・recent.list で取り直す）
   | { ep: 1; kind: "event"; event: "quickAccess"; data: null }
-  | { ep: 1; kind: "event"; event: "recent"; data: null };
+  | { ep: 1; kind: "event"; event: "recent"; data: null }
+  // ドラッグ中に、このビューのタブに切り替わった。drag.targets で落とせる場所を知らせてほしい（ADR 0015 判断2）
+  | { ep: 1; kind: "event"; event: "dragTargets"; data: null };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 
@@ -329,3 +357,6 @@ export const TAGS_MAX = 200;
 export const TAG_ASSIGN_MAX_ITEMS = 1000;
 /** クイックアクセスの pin・unpin で一度に渡せる数 */
 export const QUICK_ACCESS_MAX_ITEMS = 100;
+/** クリップボード・ドラッグで一度に扱える項目の数と、ドラッグの落とせる場所の数の上限 */
+export const TRANSFER_MAX_ITEMS = 1000;
+export const DROP_TARGETS_MAX = 500;

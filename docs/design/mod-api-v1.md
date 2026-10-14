@@ -255,3 +255,18 @@ ep.onTimetable((tt) => { /* 時間割が変わった */ });
 | `recent.list` | `{}` | `recent` | `Entry[]`（最近開いた項目、新しい順） |
 
 - 足した知らせ：`quickAccess`・`recent`（data は null。中身は list で取り直す）
+
+## 2026-10-14（3回目）の追加（ADR 0015）
+
+- 時間割のコマ・オンデマンドに `memo`（省略可能、0〜200 文字）
+- 足した呼び出し（どれも `uses` の宣言は不要）：
+
+| method | params | 返すもの |
+|---|---|---|
+| `clipboard.copy`・`clipboard.cut` | `{ items: [{ id, path }] }`（1〜1000件） | なし（Windows のクリップボードに、エクスプローラと同じ形式で入る） |
+| `clipboard.paste` | `{}` | `{ count }`（ビューが開いているフォルダへ貼り付けた数。Windows の画面で進み具合・名前の重なりを扱う） |
+| `drag.start` | `{ items, x, y, targets: [{ id, path, x, y, width, height }] }` | なし。そこから先は本体がマウスを追い、落としたら移動・コピーする |
+| `drag.targets` | `{ targets }` | なし（本体から `dragTargets` の知らせが来たら、落とせる場所を知らせ直す） |
+
+- 足した知らせ：`dragTargets`（data は null）。ドラッグ中にこのビューのタブに切り替わったとき
+- ランタイムには `ep.clipboard.copy(entries)`・`cut(entries)`・`paste()`、`ep.drag.start({ items, x, y, targets })`・`ep.drag.targets(targets)`・`ep.onDragTargets(cb)` を足す
