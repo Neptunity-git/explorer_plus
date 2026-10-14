@@ -1,21 +1,30 @@
 ---
-id: "0007"
+id: '0007'
 title: ファイル名の検査と、重ならない名前づくり（validateFileName / uniqueName）
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/names.ts
-  - work/app/tests/names.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/names.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/src/core/names.ts
+- work/app/tests/names.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/names.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0007-a1
+attempt: 1
+implementer_report: work/app/src/core/names.ts と work/app/tests/names.test.ts を新規作成しました。validateFileName
+  は指示の6つのチェックを上から順に行い、uniqueName は大文字小文字を区別せずに既存名と衝突しない名前を返します。受け入れ条件のテストケースをすべて含めています。
+last_changed_files:
+- work/app/src/core/names.ts
+- work/app/tests/names.test.ts
+review_reason: 受け入れ条件をすべて満たしています。指示の6つのチェック項目が順序通り実装され、指定されたテストケースがすべて含まれ、テストが全て合格しています。型定義も正しく、指示の範囲外の変更はありません。
 ---
 ## Instructions
 
