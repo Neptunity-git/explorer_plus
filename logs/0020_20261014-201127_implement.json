@@ -1,0 +1,56 @@
+{
+  "task_id": "0020",
+  "phase": "implement",
+  "started_at": "2026-10-14T20:11:27",
+  "events": [
+    {
+      "at": "2026-10-14T20:13:29",
+      "kind": "implement",
+      "status": "success",
+      "changed_files": [
+        "work/app/tests/timetable-memo.test.ts",
+        "work/app/src/core/timetable.ts",
+        "work/app/tests/timetable-ondemand.test.ts"
+      ],
+      "verification_output": "done_reason=stop prompt_tokens=13173 generated_tokens=1753 total_sec=121\n本文 4934文字 / 思考 0文字\n本文の先頭: {\n  \"edits\": [\n    {\n      \"path\": \"work/app/src/core/timetable.ts\",\n      \"replace\": \"        const memo = o.memo;\\n        let memoOut: string | undefined;\\n        if (memo !== undefined) {\\n          if (typeof memo !== \\\"string\\\" || memo.length > 200) {\\n            errors.push(`ondemand[${i}].memo: must be a string of length 0-200`);\\n          } else {\\n            memoOut = memo;\\n          }\\n        }\",\n      \"search\": \"        const memo = o.memo;\\n        let memoOut: string | undefi\n本文の末尾:      \"path\": \"work/app/tests/timetable-memo.test.ts\"\n    }\n  ],\n  \"report\": \"失敗の原因は2つ。(1) 実装の誤り: ondemand の memo 判定が `memo !== undefined && memo !== null` になっており、null が誤りにならず新テストが落ちていた。仕様では undefined のときだけ省略可で null は誤りなので、`memo !== undefined` のみに修正。(2) テストの期待値の誤り: 既存の tests/timetable-ondemand.test.ts の 'valid ondemand entry' は memo: 'x' を入力に含み「出力で捨てられる」ことを期待していたが、ADR 0015 判断4で memo は正式なキーになったため出力に残るのが正しい。指示どおり入力の memo: \\\"x\\\", の1行のみ削除。slots 側の memo 判定は既に正しかったので変更なし。\",\n  \"self_report\": \"success\"\n}",
+      "report": "失敗の原因は2つ。(1) 実装の誤り: ondemand の memo 判定が `memo !== undefined && memo !== null` になっており、null が誤りにならず新テストが落ちていた。仕様では undefined のときだけ省略可で null は誤りなので、`memo !== undefined` のみに修正。(2) テストの期待値の誤り: 既存の tests/timetable-ondemand.test.ts の 'valid ondemand entry' は memo: 'x' を入力に含み「出力で捨てられる」ことを期待していたが、ADR 0015 判断4で memo は正式なキーになったため出力に残るのが正しい。指示どおり入力の memo: \"x\", の1行のみ削除。slots 側の memo 判定は既に正しかったので変更なし。",
+      "implementer": "qwen:qwen3.8-27b",
+      "metrics": {
+        "prompt_tokens": 13173,
+        "generated_tokens": 1753,
+        "seconds": 120.7,
+        "done_reason": "stop",
+        "prompt_estimate": 11725,
+        "num_ctx": 24576,
+        "num_predict": 12851
+      }
+    },
+    {
+      "at": "2026-10-14T20:13:50",
+      "kind": "auto_check",
+      "result": "pass",
+      "output": "\nup to date in 405ms\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\n ✓ tests/timetable-ondemand.test.ts (11 tests) 5ms\n ✓ tests/timetable-memo.test.ts (8 tests) 4ms\n ✓ tests/timetable.test.ts (21 tests) 6ms\n\n Test Files  3 passed (3)\n      Tests  40 passed (40)\n   Start at  20:13:48\n   Duration  2.65s (import 56%, worker 23%, transform 18%, tests 3%)\n\n    Isolate  3 workers spawned · ~704ms startup each (spawn + environment, per file)\n             at least ~1.41s faster with isolate: false — reuses workers across files instead of one per file\n\n"
+    },
+    {
+      "at": "2026-10-14T20:15:04",
+      "kind": "claude_review",
+      "verdict": "pass",
+      "reason": "受け入れ条件をすべて満たしている。memo の検証ロジックが正しく、null は誤りになり undefined は省略される。新しいテストが8つすべての条件をカバーし、既存テストも1行のみ削除で対応。全40テスト合格、指示の範囲内の変更のみ。",
+      "reviewer": "claude_cli:haiku",
+      "usage": {
+        "calls": 1,
+        "turns": 5,
+        "cost_usd": 0.0938,
+        "input_tokens": 148237,
+        "output_tokens": 7238
+      }
+    },
+    {
+      "at": "2026-10-14T20:15:05",
+      "kind": "merged",
+      "branch": "task/0020-a3"
+    }
+  ],
+  "resulting_status": "done",
+  "finished_at": "2026-10-14T20:15:05"
+}

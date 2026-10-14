@@ -1,7 +1,7 @@
 ---
 id: '0020'
 title: 時間割のコマとオンデマンドの授業の memo（短いメモ）を検査する
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
@@ -16,66 +16,20 @@ test_command: bash -c "cd work/app && npm install --no-audit --no-fund --logleve
   && npx tsc --noEmit && npx vitest run tests/timetable.test.ts tests/timetable-ondemand.test.ts
   tests/timetable-memo.test.ts"
 qwen_self_report: success
-auto_check: n/a
-claude_review: n/a
+auto_check: pass
+claude_review: pass
 retry_count: 0
-branch: task/0020-a2
-attempt: 2
-implementer_report: '前回の失敗の原因は実装の誤りです。ondemand の memo 検証で `memo !== undefined` のみ判定しており、`memo:
-  null` を渡すと `typeof null !== "string"` で誤りが発生するはずが、実際には `null` が `undefined` と同様に扱われ、`memoOut`
-  が `undefined` のまま `ondemandOutItem.memo` が設定されないため、既存テスト `timetable-ondemand.test.ts`
-  の "valid ondemand entry" が `memo: "x"` を含んだ出力を期待せず失敗していました。修正として、ondemand の memo
-  判定を `memo !== undefined && memo !== null` に変更し、`null` を渡した場合は誤りを出力するようにしました。slots
-  側は既に `null` を誤りとして扱っているため変更不要です。'
+branch: task/0020-a3
+attempt: 3
+implementer_report: '失敗の原因は2つ。(1) 実装の誤り: ondemand の memo 判定が `memo !== undefined &&
+  memo !== null` になっており、null が誤りにならず新テストが落ちていた。仕様では undefined のときだけ省略可で null は誤りなので、`memo
+  !== undefined` のみに修正。(2) テストの期待値の誤り: 既存の tests/timetable-ondemand.test.ts の ''valid
+  ondemand entry'' は memo: ''x'' を入力に含み「出力で捨てられる」ことを期待していたが、ADR 0015 判断4で memo は正式なキーになったため出力に残るのが正しい。指示どおり入力の
+  memo: "x", の1行のみ削除。slots 側の memo 判定は既に正しかったので変更なし。'
 last_changed_files:
 - work/app/tests/timetable-memo.test.ts
 - work/app/src/core/timetable.ts
-last_failure: "設計担当（Claude）が指示を書き直しました: 失敗は2つの原因で起きていた。(1) 既存の tests/timetable-ondemand.test.ts\
-  \ の 'valid ondemand entry' は、入力に memo: 'x' を入れて「出力で捨てられる」ことを期待している。ADR 0015 判断4で\
-  \ memo は正式なキーになったので、出力に残るのが正しい動作で、この期待値は古い。指示が『既存のテストは変えない』となっていたため、実装担当は矛盾を実装で解消しようとして迷走した。(2)\
-  \ 実装担当は ondemand の memo 判定を `memo !== undefined && memo !== null` にしており、memo: null\
-  \ が誤りにならず新テストが落ちている。仕様では undefined のときだけ省略可で、null は誤りにする。slots 側は正しい。指示を直し、既存テストの『memo:\
-  \ \"x\",』1行を消すことを明示し、null の判定を undefined のみに戻させる。どちらも既存の仕様判断は変えていない。\n\n書き直す前の失敗:\n\
-  \nup to date in 413ms\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\
-  \n ❯ tests/timetable-ondemand.test.ts (11 tests | 1 failed) 9ms\n   ❯ validateTimetable\
-  \ ondemand (11)\n     ✓ base without ondemand -> ok and no ondemand key 2ms\n  \
-  \   × valid ondemand entry -> ok, unknown keys dropped 5ms\n     ✓ empty ondemand\
-  \ array -> ok and ondemand is [] 0ms\n     ✓ ondemand not an array -> ondemand:\
-  \  0ms\n     ✓ ondemand element null -> ondemand[0]:  0ms\n     ✓ empty id -> ondemand[0].id:\
-  \  0ms\n     ✓ duplicate id -> ondemand[1].id:  0ms\n     ✓ empty title -> ondemand[0].title:\
-  \  0ms\n     ✓ title too long -> ondemand[0].title:  0ms\n     ✓ folder empty path\
-  \ -> ondemand[0].folders:  0ms\n     ✓ 51 elements -> ondemand:  0ms\n ✓ tests/timetable.test.ts\
-  \ (21 tests) 6ms\n ❯ tests/timetable-memo.test.ts (8 tests | 1 failed) 7ms\n   ❯\
-  \ validateTimetable memo (ADR 0015 判断4) (8)\n     ✓ 土台のままなら ok: true で、slots[0]\
-  \ と ondemand[0] に memo キーが無い 2ms\n     ✓ slots[0] に memo: '301教室' → ok: true で、出力の\
-  \ slots[0] が期待通り 1ms\n     ✓ ondemand[0] に memo: '毎週金曜まで' → ok: true で、出力の ondemand[0]\
-  \ が期待通り 0ms\n     ✓ slots[0] に memo: '' → ok: true で、出力の slots[0].memo が '' 0ms\n\
-  \     ✓ slots[0] に memo: 'x'.repeat(200) → ok: true 0ms\n     ✓ slots[0] に memo:\
-  \ 'x'.repeat(201) → ok: false で、'slots[0].memo: ' で始まる誤り 0ms\n     ✓ slots[0] に\
-  \ memo: 3 → ok: false で、'slots[0].memo: ' で始まる誤り 0ms\n     × ondemand[0] に memo:\
-  \ null → ok: false で、'ondemand[0].memo: ' で始まる誤り 3ms\n\n Test Files  2 failed |\
-  \ 1 passed (3)\n      Tests  2 failed | 38 passed (40)\n   Start at  20:10:30\n\
-  \   Duration  2.70s (import 54%, worker 24%, transform 18%, tests 4%)\n\n    Isolate\
-  \  3 workers spawned · ~691ms startup each (spawn + environment, per file)\n   \
-  \          at least ~1.38s faster with isolate: false — reuses workers across files\
-  \ instead of one per file\n\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/timetable-memo.test.ts\
-  \ > validateTimetable memo (ADR 0015 判断4) > ondemand[0] に memo: null → ok: false\
-  \ で、'ondemand[0].memo: ' で始まる誤り\nAssertionError: expected true to be false // Object.is\
-  \ equality\n\n- Expected\n+ Received\n\n- false\n+ true\n\n ❯ tests/timetable-memo.test.ts:90:20\n\
-  \     88|     (raw.ondemand![0] as Record<string, unknown>).memo = null;\n     89|\
-  \     const res = validateTimetable(raw);\n     90|     expect(res.ok).toBe(false);\n\
-  \       |                    ^\n     91|     if (res.ok) return;\n     92|     expect(res.errors.some((e)\
-  \ => e.startsWith(\"ondemand[0].memo: \")))…\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯\n\
-  \n FAIL  tests/timetable-ondemand.test.ts > validateTimetable ondemand > valid ondemand\
-  \ entry -> ok, unknown keys dropped\nAssertionError: expected [ { id: 'o1', title:\
-  \ '情報倫理', …(2) } ] to deeply equal [ { id: 'o1', title: '情報倫理', …(1) } ]\n\n- Expected\n\
-  + Received\n\n@@ -5,8 +5,9 @@\n          \"id\": \"a:b\",\n          \"path\": \"\
-  C:\\\\情報倫理\",\n        },\n      ],\n      \"id\": \"o1\",\n+     \"memo\": \"x\"\
-  ,\n      \"title\": \"情報倫理\",\n    },\n  ]\n\n ❯ tests/timetable-ondemand.test.ts:39:34\n\
-  \     37|     expect(r.ok).toBe(true);\n     38|     if (!r.ok) return;\n     39|\
-  \     expect(r.timetable.ondemand).toEqual([\n       |                         \
-  \         ^\n     40|       { id: \"o1\", title: \"情報倫理\", folders: [{ id: \"a:b\"\
-  , path: \"C:\\\\情報倫…\n     41|     ]);\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯\n\n"
+- work/app/tests/timetable-ondemand.test.ts
 triage_count: 1
 triage:
   category: spec
@@ -86,6 +40,7 @@ triage:
     "x",』1行を消すことを明示し、null の判定を undefined のみに戻させる。どちらも既存の仕様判断は変えていない。'
   at: '2026-10-14T20:11:14'
   by: claude_cli:sonnet
+review_reason: 受け入れ条件をすべて満たしている。memo の検証ロジックが正しく、null は誤りになり undefined は省略される。新しいテストが8つすべての条件をカバーし、既存テストも1行のみ削除で対応。全40テスト合格、指示の範囲内の変更のみ。
 ---
 ## Instructions
 
