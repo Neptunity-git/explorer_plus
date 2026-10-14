@@ -1,4 +1,4 @@
-import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, QUICK_ACCESS_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
+import { DROP_TARGETS_MAX, METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, QUICK_ACCESS_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TRANSFER_MAX_ITEMS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
 
 export type ParseResult =
   | { ok: true; message: ModToHostMessage }
@@ -47,6 +47,28 @@ function parseRefArray(value: unknown, min: number, max: number): { ok: true; re
     refs.push(parsed.ref);
   }
   return { ok: true, refs };
+}
+
+function parseDropTarget(value: unknown): { ok: true; target: { id: string; path: string; x: number; y: number; width: number; height: number } } | { ok: false } {
+  if (!isPlainObject(value)) return { ok: false };
+  const { id, path, x, y, width, height } = value;
+  if (!isString(id)) return { ok: false };
+  if (!isNonEmptyString(path)) return { ok: false };
+  if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(width) || !isFiniteNumber(height)) return { ok: false };
+  if (width < 0 || height < 0) return { ok: false };
+  return { ok: true, target: { id, path, x, y, width, height } };
+}
+
+function parseDropTargets(value: unknown): { ok: true; targets: { id: string; path: string; x: number; y: number; width: number; height: number }[] } | { ok: false } {
+  if (!Array.isArray(value)) return { ok: false };
+  if (value.length < 0 || value.length > DROP_TARGETS_MAX) return { ok: false };
+  const targets: { id: string; path: string; x: number; y: number; width: number; height: number }[] = [];
+  for (const item of value) {
+    const parsed = parseDropTarget(item);
+    if (!parsed.ok) return { ok: false };
+    targets.push(parsed.target);
+  }
+  return { ok: true, targets };
 }
 
 function parseKeyMessage(data: Record<string, unknown>): ParseResult {
@@ -238,6 +260,48 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       const parsedItems = parseRefArray(items, 1, QUICK_ACCESS_MAX_ITEMS);
       if (!parsedItems.ok) return { ok: false };
       return { ok: true, params: { items: parsedItems.refs } };
+    }
+
+    case "clipboard.copy":
+    case "clipboard.cut": {
+      const { items } = params;
+      const parsedItems = parseRefArray(items, 1, TRANSFER_MAX_ITEMS);
+      if (!parsedItems.ok) return { ok: false };
+      return { ok: true, params: { items: parsedItems.refs } };
+    }
+
+    case "clipboard.paste":
+      return { ok: true, params: {} };
+
+    case "drag.start": {
+      const { items, x, y, targets } = params;
+      const parsedItems = parseRefArray(items, 1, TRANSFER_MAX_ITEMS);
+      if (!parsedItems.ok) return { ok: false };
+      if (!isFiniteNumber(x) || !isFiniteNumber(y)) return { ok: false };
+      const parsedTargets = parseDropTargets(targets);
+      if (!parsedTargets.ok) return { ok: false };
+      return { ok: true, params: { items: parsedItems.refs, x, y, targets: parsedTargets.targets } };
+    }
+
+    case "drag.targets": {
+      const { targets } = params;
+      const parsedTargets = parseDropTargets(targets);
+      if (!parsedTargets.ok) return { ok: false };
+      return { ok: true, params: { targets: parsedTargets.targets } };
+    }
+
+    case "drag.move": {
+      const { x, y, ctrl, shift } = params;
+      if (!isFiniteNumber(x) || !isFiniteNumber(y)) return { ok: false };
+      if (typeof ctrl !== "boolean" || typeof shift !== "boolean") return { ok: false };
+      return { ok: true, params: { x, y, ctrl, shift } };
+    }
+
+    case "drag.end": {
+      const { x, y, ctrl, shift, cancel } = params;
+      if (!isFiniteNumber(x) || !isFiniteNumber(y)) return { ok: false };
+      if (typeof ctrl !== "boolean" || typeof shift !== "boolean" || typeof cancel !== "boolean") return { ok: false };
+      return { ok: true, params: { x, y, ctrl, shift, cancel } };
     }
 
     default:
