@@ -36,6 +36,8 @@ function currentTheme(): "light" | "dark" {
 const isFolderView = (v: LoadedView) => (v.manifest.location ?? "folder") === "folder";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** 展開できる書庫の名前（zip・7z・tar・tar.gz・tgz。ADR 0021） */
+const ARCHIVE_NAME = /\.(zip|7z|tar|tar\.gz|tgz)$/i;
 /** フォルダのパスを比べるための形（Windows のパスは大文字・小文字を区別しない。末尾の \ も無視する） */
 const folderKey = (path: string) => path.replace(/\\+$/, "").toLowerCase();
 
@@ -829,6 +831,20 @@ export class App {
     return raw;
   }
 
+  // ---- 圧縮・展開（ADR 0021）。終わるまで時間がかかることがあるので、始めと終わりを知らせる。できたものはフォルダの見張りで画面に出る ----
+
+  private async compress(items: EntryRef[], format: "zip" | "7z") {
+    this.toast(`${format} に圧縮しています…`);
+    const path = await backend.archiveCreate(items, format);
+    this.toast(`圧縮しました：${path.split("\\").pop()}`);
+  }
+
+  private async extract(item: EntryRef) {
+    this.toast("展開しています…");
+    const path = await backend.archiveExtract(item);
+    this.toast(`展開しました：${path.split("\\").pop()}`);
+  }
+
   /** 右クリックのメニュー（ADR 0009 判断2）。MOD が足した項目が選ばれたら、その id を返す */
   async showMenu(tab: Tab, x: number, y: number, items: EntryRef[], extra: MenuItem[]): Promise<string | null> {
     let chosen: string | null = null;
@@ -859,6 +875,11 @@ export class App {
           disabled: !single || !allFolders,
           run: () => single && (pinned ? quickAccess.unpin([single]) : quickAccess.pin([single])),
         },
+        "separator",
+        // 圧縮・展開（ADR 0021）。7-Zip などが無くても使える
+        ...(single && raws[0] && !raws[0].isDir && ARCHIVE_NAME.test(raws[0].name) ? [{ label: "ここに展開", run: run(() => this.extract(single)) }] : []),
+        { label: "zip に圧縮", run: run(() => this.compress(items, "zip")) },
+        { label: "7z に圧縮", run: run(() => this.compress(items, "7z")) },
         "separator",
         ...(onedrive
           ? [od("OneDrive で共有…", "share"), od("OneDrive のリンクをコピー", "copyLink"), od("OneDrive のアクセス許可の管理…", "manageAccess"), od("オンラインで表示", "viewOnline"), "separator" as const]

@@ -77,6 +77,10 @@ export const backend = {
   clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
   openWith: (item: EntryRef) => call<void>("open_with", { item }),
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
+  /** 圧縮（zip・7z）。作った書庫のパスを返す（ADR 0021） */
+  archiveCreate: (items: EntryRef[], format: "zip" | "7z") => call<string>("archive_create", { items, format }),
+  /** 書庫（zip・7z・tar・tar.gz）を同じフォルダの新しいフォルダへ展開し、そのパスを返す */
+  archiveExtract: (item: EntryRef) => call<string>("archive_extract", { item }),
   /** アプリの外からドロップされたファイル（Windows が渡したパス）を移動・コピーする */
   transferPaths: (paths: string[], dest: string, effect: "move" | "copy") => call<number>("transfer_paths", { paths, dest, effect }),
   /** 見張るフォルダを、まるごと置き換える。変わると "folder-changed" が届く */

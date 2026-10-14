@@ -6,5 +6,5 @@
 2. `manifest.json` の `name`・`description`・`uses`（使う情報）を、作るビューに合わせて直す
 3. できたら、アプリのホーム →「MOD」→ この MOD の「zip にする」で、配れる zip ができます
 
-詳しくは、同じフォルダの「MOD開発ガイド.html」をブラウザで開いてください。
+詳しくは、同じフォルダの「MOD開発ガイド.md」を読んでください（VS Code ならプレビューで見やすく読めます。アプリのホーム →「MOD 開発ガイド」でも同じものをブラウザで開けます）。
 エディタ（VS Code など）で開くと、`explorer-plus.d.ts` のおかげで `window.explorerPlus` の補完が効きます。

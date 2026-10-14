@@ -20,7 +20,7 @@ const MAX_BYTES: u64 = 50 * 1024 * 1024;
 /// zip にするとき入れないもの（見張りでも無視する）
 const PACK_SKIP: &[&str] = &["node_modules", ".git", ".vscode"];
 /// zip にするとき入れない、作る人だけが使うファイル（ひな形が入れるもの）
-const PACK_SKIP_FILES: &[&str] = &["MOD開発ガイド.html", "explorer-plus.d.ts", "jsconfig.json"];
+const PACK_SKIP_FILES: &[&str] = &["MOD開発ガイド.md", "explorer-plus.d.ts", "jsconfig.json"];
 
 fn io_err(e: impl std::fmt::Display) -> String {
     format!("io: {}", e)
@@ -279,7 +279,7 @@ pub async fn dev_mod_create(app: AppHandle, window: tauri::WebviewWindow, name: 
         copy_dir(&builtin_root(&app, "mod-template"), &dir)?;
         // 型の定義と説明書は、アプリに入っている今のものを入れる（ひな形とずれないように）
         let _ = std::fs::copy(builtin_root(&app, "runtime").join("explorer-plus.d.ts"), dir.join("explorer-plus.d.ts"));
-        let _ = std::fs::copy(builtin_root(&app, "mod-docs").join("index.html"), dir.join("MOD開発ガイド.html"));
+        let _ = std::fs::copy(builtin_root(&app, "mod-docs").join("guide.md"), dir.join("MOD開発ガイド.md"));
         // manifest の id と名前を、この MOD のものにする
         let mp = dir.join("manifest.json");
         let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&mp).map_err(io_err)?).map_err(io_err)?;

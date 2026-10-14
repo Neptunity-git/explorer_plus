@@ -1,7 +1,7 @@
 // @ts-check
 // explorer_plus の MOD のひな形：今のフォルダのファイルを大きい順に並べ、大きさを棒で見せる。
 // このファイルを書き換えて保存すると、アプリが自動で読み直す（開発中の MOD のとき）。
-// 説明書：同じフォルダの「MOD開発ガイド.html」。補完が効くのは explorer-plus.d.ts と jsconfig.json のおかげ。
+// 説明書：同じフォルダの「MOD開発ガイド.md」。補完が効くのは explorer-plus.d.ts と jsconfig.json のおかげ。
 
 const ep = window.explorerPlus;
 

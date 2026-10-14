@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "build:views": "esbuild view-src/notes-md-editor.js --bundle --format=esm --minify --legal-comments=eof \"--banner:js=// 自動で作るファイル。直すときは view-src/notes-md-editor.js を直して npm run build:views\" --outfile=views/builtin.notes/md-editor.js"
+    "build:views": "esbuild view-src/notes-md-editor.js --bundle --format=esm --minify --legal-comments=eof \"--banner:js=// 自動で作るファイル。直すときは view-src/notes-md-editor.js を直して npm run build:views\" --outfile=views/builtin.notes/md-editor.js",
+    "build:docs": "node scripts/build-mod-docs.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -24,6 +25,7 @@
     "@lezer/highlight": "^1.2.5",
     "@tauri-apps/cli": "^2",
     "esbuild": "^0.28.2",
+    "marked": "^18.1.1",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
     "vitest": "^5.0.4"

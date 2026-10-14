@@ -1,6 +1,7 @@
 // explorer_plus の Rust 側。Windows の機能を呼ぶ薄い層で、見せ方の判断は持たない（ADR 0006）。
 // エラーは "<code>: <説明>" の文字列で返す。code は MOD の API のエラーと同じ（not-found・denied・invalid・io など）。
 
+mod archive;
 mod fsops;
 mod geo;
 mod icons;
@@ -70,6 +71,8 @@ pub fn run() {
             transfer::clipboard_paste,
             transfer::transfer,
             transfer::transfer_paths,
+            archive::archive_create,
+            archive::archive_extract,
             transfer::drag_out,
             shellmenu::onedrive_contains,
             shellmenu::onedrive_action,
