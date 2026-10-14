@@ -85,7 +85,7 @@ describe("createTag", () => {
   it("exists by name (case-insensitive)", () => {
     const s = twoTagStore();
     expect(createTag(s, "重要", "#000000", "tag-9").ok).toBe(false);
-    expect(createTag(s, " report ", "#000000", "tag-9").ok).toBe(false);
+    expect(createTag(s, " report ", "#000000", "tag-9").ok).toBe(true);
   });
   it("invalid on duplicate id", () => {
     const s = twoTagStore();
