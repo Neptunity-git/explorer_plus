@@ -1,6 +1,7 @@
 // Windows の標準アイコンを PNG にして、独自の通信先 http://icon.localhost/ から配る（ADR 0003）。
 //   /ext/<拡張子>?size=16|32|48|256   … 拡張子ごとのアイコン（"folder" はフォルダのアイコン）
 //   /file?path=<パス>&size=...       … そのファイル自身のアイコン（exe・lnk・ico など、ファイルごとに絵が違うもの）
+//   /place/<種類>?size=...           … 左の欄の場所（desktop・downloads・drive-C など）の、Windows が使っているアイコン
 //   /kind/launch.svg・/kind/config.svg … 独自アイコン（押しボタン・歯車。ADR 0003）
 // 一度作った PNG は覚えておく。
 
@@ -201,6 +202,11 @@ fn plan(path: &str, query: &str) -> Option<(String, String, bool, bool, u32)> {
         let target = if is_dir { "folder".to_string() } else { format!("x.{}", ext) };
         return Some((format!("ext:{}:{}", ext, size), target, true, is_dir, size));
     }
+    if let Some(name) = path.strip_prefix("/place/") {
+        // 任意のパスは受け付けず、よく使う場所（list_places）の中から選ぶ。実物を見るので、ダウンロードなどの専用の絵になる
+        let target = crate::fsops::list_places().into_iter().find(|p| place_key(&p.kind, &p.name) == name)?.path;
+        return Some((format!("place:{}:{}", name, size), target, false, false, size));
+    }
     if path == "/file" {
         let p = query_param(query, "path")?;
         let ext = p.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
@@ -211,6 +217,11 @@ fn plan(path: &str, query: &str) -> Option<(String, String, bool, bool, u32)> {
         return Some((format!("file:{}:{}", p.to_lowercase(), size), p, false, false, size));
     }
     None
+}
+
+/// 左の欄の場所の呼び名。ドライブは "drive-C"、ほかは種類（"desktop" など）
+pub fn place_key(kind: &str, name: &str) -> String {
+    if kind == "drive" { format!("drive-{}", name.trim_end_matches(':')) } else { kind.to_string() }
 }
 
 /// 縮小画像は数が多くなるので、覚えておくのはこの数まで（超えたら覚え直す）
@@ -300,6 +311,9 @@ mod tests {
         assert_eq!((target.as_str(), by_ext, size), ("C:\\app\\tool.exe", false, 48));
         // exe などでなければ、パスでのアイコンは出さない
         assert!(plan("/file", "path=C%3A%5Csecret.docx").is_none());
+        assert!(plan("/place/nowhere", "").is_none());
+        assert_eq!(place_key("drive", "C:"), "drive-C");
+        assert_eq!(place_key("downloads", "ダウンロード"), "downloads");
         assert_eq!(parse_size("size=999"), 32);
     }
 

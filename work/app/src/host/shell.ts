@@ -72,7 +72,8 @@ class Tab implements TabActions {
       this.label.textContent = view.manifest.name;
       this.button.title = view.manifest.name;
     }
-    this.button.append(views, this.label, this.badge, close);
+    // ホーム・タグなど、場所と関係ないビューのタブには ▸ を出さない（切り替える先が無いため）
+    this.button.append(...(isFolderView(view) ? [views] : []), this.label, this.badge, close);
     this.button.onclick = () => app.activate(this);
     this.button.onauxclick = (e) => e.button === 1 && app.closeTab(this);
     this.host = new ViewHost(this.pane, view, this);
@@ -390,7 +391,12 @@ export class App {
     homeBtn.onclick = () => void this.openHome(true);
     this.sidebar.append(homeBtn, el("div", "side-head", "クイックアクセス"), this.quickList, el("div", "side-head", "場所"));
     for (const p of this.places) {
-      const b = el("button", `place place-${p.kind}`, p.kind === "drive" ? `ドライブ ${p.name}` : (labels[p.kind] ?? p.name));
+      const b = el("button", `place place-${p.kind}`);
+      // Win11 と同じく、Windows が使っている絵（デスクトップ・ダウンロード・ドライブなど）を添える
+      const icon = el("img", "place-icon");
+      icon.src = `${ICON_ORIGIN}/place/${p.kind === "drive" ? `drive-${p.name.replace(/:$/, "")}` : p.kind}?size=16`;
+      icon.alt = "";
+      b.append(icon, el("span", undefined, p.kind === "drive" ? `ドライブ ${p.name}` : (labels[p.kind] ?? p.name)));
       b.title = p.path;
       b.dataset.dropPath = p.path;
       b.onclick = () => void this.goTo(p.path);
@@ -487,7 +493,8 @@ export class App {
     await showMenu(
       r.left,
       r.bottom + 2,
-      this.views.map((v) => ({
+      // 選べるのは、フォルダを見るビューだけ（ホーム・タグは場所と関係ないので、ここでは選ばない）
+      this.views.filter(isFolderView).map((v) => ({
         label: `${v === tab.view ? "● " : "　 "}${v.manifest.name}`,
         run: () => void this.changeView(tab, v),
       })),
