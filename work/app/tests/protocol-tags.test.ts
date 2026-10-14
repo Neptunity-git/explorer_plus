@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { parseModMessage } from "../src/core/protocol";
 
 function call(id: number, method: string, params: Record<string, unknown>) {
