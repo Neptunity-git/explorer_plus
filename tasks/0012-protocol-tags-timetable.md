@@ -1,21 +1,36 @@
 ---
-id: "0012"
+id: '0012'
 title: parseModMessage にタグ・時間割の呼び出し（tags.* と timetable.*）を足す
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/protocol.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/protocol.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/protocol-tags.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts tests/protocol-tags.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
-retry_count: 0
+- work/app/tests/protocol-tags.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts
+  tests/protocol-tags.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
+retry_count: 1
+branch: task/0012-a2
+attempt: 2
+implementer_report: 失敗の原因はテスト側の型定義不足です。protocol.ts の実装は受け入れ条件を満たしており、types.ts も既に
+  TAG_ASSIGN_MAX_ITEMS・TAG_NAME_MAX を export 済みです。前回のテストファイルは vitest の describe/it/expect
+  を import していなかったため、tsc --noEmit で TS2304/TS2593 が発生していました。テストファイルの先頭に `import {
+  describe, expect, it } from "vitest";` を1行足すだけで型チェックが通ります。実装（protocol.ts）は既に正しく、変更は不要です。
+last_changed_files:
+- work/app/tests/protocol-tags.test.ts
+- work/app/src/core/protocol.ts
+review_reason: 受け入れ条件をすべて満たしています。protocol.ts は edits で 2 か所修正（import に TAG_ASSIGN_MAX_ITEMS
+  と TAG_NAME_MAX を追加、parseCallParams の switch に tags・timetable メソッド 7 種類の case を追加）。types.ts
+  は変更なし。テストファイル protocol-tags.test.ts は vitest imports を含み、成功・失敗ケース 23 個をカバー。自動検証で
+  67 test すべて pass、型チェックも通過。
 ---
 ## Instructions
 

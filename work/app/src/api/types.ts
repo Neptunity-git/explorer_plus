@@ -166,7 +166,8 @@ export type CallMethod =
 /** method ごとの params の形 */
 export type CallParams = {
   ready: Record<string, never>;
-  open: { id: string; path: string; from?: Rect };
+  /** newTab は 2026-10-14 に追加：フォルダを新しいタブ（標準のビュー）で開く */
+  open: { id: string; path: string; from?: Rect; newTab?: boolean };
   navigate: { path: string };
   navigateUp: Record<string, never>;
   trash: { items: EntryRef[]; from?: Rect };

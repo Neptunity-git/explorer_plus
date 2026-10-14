@@ -1,22 +1,47 @@
 ---
-id: "0010"
+id: '0010'
 title: 今の授業を決める currentClass と、2点の距離 distanceMeters
-status: todo
-depends_on: ["0009"]
+status: done
+depends_on:
+- 0009
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
-  - work/app/src/core/timetable.ts
+- work/app/src/api/types.ts
+- work/app/src/core/timetable.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/timetable-now.ts
-  - work/app/tests/timetable-now.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetable-now.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
+- work/app/src/core/timetable-now.ts
+- work/app/tests/timetable-now.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetable-now.test.ts"
+qwen_self_report: failure
+auto_check: fail
 claude_review: n/a
-retry_count: 0
+retry_count: 2
+branch: task/0010-a2
+attempt: 2
+implementer_report: 'edits の 1 番目（work/app/tests/timetable-now.test.ts）：同じファイルを files
+  と edits の両方に入れています。どちらか一方にすること。何も書き込んでいません（書き直させても直りませんでした。1回目の問題: edits の 1 番目（work/app/tests/timetable-now.test.ts）：同じファイルを
+  files と edits の両方に入れています。どちらか一方にすること）'
+last_changed_files:
+- work/app/src/core/timetable-now.ts
+- work/app/tests/timetable-now.test.ts
+triage_count: 1
+triage:
+  category: direct_fix
+  reason: 実装 work/app/src/core/timetable-now.ts は指示どおりで、直す必要はありません。問題はテスト work/app/tests/timetable-now.test.ts
+    です。(1) 1回目に書かれたテストは、共通の時間割の時刻が指示と違います（p1 が 09:00-09:50、p2 が 10:00-11:00 になっています。指示では
+    p1 が 09:00-10:30、p2 が 10:40-12:10 です）。そのため「火曜 10:40 → 線形代数」「火曜 12:10 → null」などの検証が指示の意味から外れ、10:40
+    のケースはそのままだと通りません。(2) 日付も 2026-01-06 などになっており、指示の 2026年10月13日（火）、12日（月）、14日（水）と違います。(3)
+    時刻が重なる period のテストが、指示では「火曜 9:45 → 特別講義」なのに、「火曜 10:45 → 線形代数」になっています。(4) 2回目の試行は、実装担当が同じファイルを
+    files と edits の両方に入れる形式ミスをして、何も書き込まれませんでした。指示を書き直しても同じ形式ミスが起きやすいため、テスト全体をこちらで書いた完全なファイルに置き換える
+    direct_fix にします。実装担当に写させず、プログラムが上書きしてください。
+  at: '2026-10-14T15:25:46'
+  by: claude_cli:sonnet
+proposed_fix: tasks/fixes/0010.md
+resolved_directly: timetable-now.ts は Qwen の2回目の実装をそのまま使った。テストは見直しの修正案（受け入れ条件どおり）に置き換えた。2回目の試行は同じファイルを
+  files と edits の両方に入れて何も書き込めていなかった
 ---
 ## Instructions
 
