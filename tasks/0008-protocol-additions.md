@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: parseModMessage に rename・createFolder・showMenu を足し、ref の id に空文字を許す
-status: todo
+status: blocked
 depends_on:
 - '0003'
 gpu_need: none
@@ -14,65 +14,30 @@ expected_outputs:
 - work/app/tests/protocol-additions.test.ts
 test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
   && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts"
-qwen_self_report: success
+qwen_self_report: failure
 auto_check: fail
 claude_review: n/a
-retry_count: 1
-branch: task/0008-a1
-attempt: 1
-implementer_report: 'protocol.ts を edits で修正: (1) import に MENU_MAX_ITEMS/MENU_MAX_EXTRA/MENU_LABEL_MAX
-  を追加、(2) isString ヘルパーを追加、(3) parseRef の id を空文字可に、(4) open の id を空文字可に、(5) switch
-  に rename/createFolder/showMenu の3つの case を追加。受け入れ条件の成功・失敗ケースを網羅する tests/protocol-additions.test.ts
-  を新規作成。既存の protocol.test.ts は変更していない。'
+retry_count: 2
+branch: task/0008-a2
+attempt: 2
+implementer_report: 'work/app/src/core/protocol.ts への edits を適用しても、ファイルが1文字も変わりません（replace
+  が search と同じ）。足す・直す内容を replace に書くこと。何も書き込んでいません（書き直させても直りませんでした。1回目の問題: edits の
+  1 番目（work/app/src/core/protocol.ts）：search に一致する箇所がありません（インデント・改行を含め、ファイルの文字列と一字一句同じにすること）。search
+  の先頭: ''function parseRef(value: unknown): { ok: true; ref: { id: string; path: string
+  }''）'
 last_changed_files:
 - work/app/tests/protocol-additions.test.ts
 - work/app/src/core/protocol.ts
-last_failure: "me 'describe'. Do you need to install type definitions for a test runner?\
-  \ Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha` and then\
-  \ add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(58,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(60,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(62,7):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(62,29):\
-  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
-  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-additions.test.ts(63,7):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(63,40):\
-  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
-  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-additions.test.ts(67,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(74,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(76,7):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(76,29):\
-  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
-  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-additions.test.ts(85,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(87,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(90,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(92,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(95,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(97,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(101,1):\
-  \ error TS2593: Cannot find name 'describe'. Do you need to install type definitions\
-  \ for a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(102,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(104,5):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(106,7):\
-  \ error TS2304: Cannot find name 'expect'.\ntests/protocol-additions.test.ts(106,29):\
-  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
-  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-additions.test.ts(110,3):\
-  \ error TS2593: Cannot find name 'it'. Do you need to install type definitions for\
-  \ a test runner? Try `npm i --save-dev @types/jest` or `npm i --save-dev @types/mocha`\
-  \ and then add 'jest' or 'mocha' to the types field in your tsconfig.\ntests/protocol-additions.test.ts(112,5):\
-  \ error TS2304: Cannot find name 'expect'.\n"
+last_failure: '実装担当の失敗: work/app/src/core/protocol.ts への edits を適用しても、ファイルが1文字も変わりません（replace
+  が search と同じ）。足す・直す内容を replace に書くこと。何も書き込んでいません（書き直させても直りませんでした。1回目の問題: edits の
+  1 番目（work/app/src/core/protocol.ts）：search に一致する箇所がありません（インデント・改行を含め、ファイルの文字列と一字一句同じにすること）。search
+  の先頭: ''function parseRef(value: unknown): { ok: true; ref: { id: string; path: string
+  }''）'
+blocked_reason: '機械的検証に2回失敗しました。最後の失敗: 実装担当の失敗: work/app/src/core/protocol.ts への edits
+  を適用しても、ファイルが1文字も変わりません（replace が search と同じ）。足す・直す内容を replace に書くこと。何も書き込んでいません（書き直させても直りませんでした。1回目の問題:
+  edits の 1 番目（work/app/src/core/protocol.ts）：search に一致する箇所がありません（インデント・改行を含め、ファイルの文字列と一字一句同じにすること）。search
+  の先頭: ''function parseRef(value: unknown): { ok: true; ref: { id: string; path: string
+  }''）'
 ---
 ## Instructions
 
