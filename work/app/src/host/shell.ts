@@ -51,6 +51,13 @@ class Tab implements TabActions {
     private readonly app: App,
     readonly view: LoadedView,
   ) {
+    // バツの逆側の ▸：押すと、このタブのビューを選び直すメニューが出る（ADR 0017）
+    const views = el("button", "tab-views", "▸");
+    views.title = "ビューを変える";
+    views.onclick = (e) => {
+      e.stopPropagation();
+      void app.chooseView(this, views);
+    };
     const close = el("button", "tab-close", "×");
     close.title = "タブを閉じる (Ctrl+W)";
     close.onclick = (e) => {
@@ -65,7 +72,7 @@ class Tab implements TabActions {
       this.label.textContent = view.manifest.name;
       this.button.title = view.manifest.name;
     }
-    this.button.append(this.label, this.badge, close);
+    this.button.append(views, this.label, this.badge, close);
     this.button.onclick = () => app.activate(this);
     this.button.onauxclick = (e) => e.button === 1 && app.closeTab(this);
     this.host = new ViewHost(this.pane, view, this);
@@ -122,7 +129,6 @@ export class App {
   private readonly addressBar = el("div", "address-bar");
   private readonly crumbs = el("div", "crumbs");
   private readonly address = el("input", "address");
-  private readonly viewSelect = el("select", "view-select");
   private readonly sidebar = el("nav", "sidebar");
   private readonly quickList = el("div", "quick-list");
   private readonly content = el("main", "content");
@@ -219,21 +225,7 @@ export class App {
     this.upBtn.onclick = () => this.active && void this.active.navigateUp();
     this.refreshBtn.onclick = () => this.refresh();
     this.mountAddressBar();
-    for (const v of this.views) {
-      const o = el("option", undefined, v.manifest.name);
-      o.value = v.manifest.id;
-      this.viewSelect.appendChild(o);
-    }
-    this.viewSelect.title = "ビュー";
-    // ビューを選ぶと、今のタブは残し、同じフォルダをそのビューで新しいタブに開く（ADR 0009 判断3）
-    this.viewSelect.onchange = () => {
-      const v = this.views.find((x) => x.manifest.id === this.viewSelect.value);
-      const t = this.active;
-      if (!v || !t) return;
-      this.viewSelect.value = t.view.manifest.id;
-      void this.openTab(v, t.folder?.path ?? this.homePath());
-    };
-    this.navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.addressBar, this.nowBtn, this.viewSelect);
+    this.navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.addressBar, this.nowBtn);
     this.startNowWatch();
 
     this.renderSidebar();
@@ -489,6 +481,32 @@ export class App {
     old.destroy();
   }
 
+  /** タブの ▸ から、そのタブのビューを選び直す（ADR 0017）。新しいタブは開かず、今のタブのまま見せ方を変える */
+  async chooseView(tab: Tab, anchor: HTMLElement) {
+    const r = anchor.getBoundingClientRect();
+    await showMenu(
+      r.left,
+      r.bottom + 2,
+      this.views.map((v) => ({
+        label: `${v === tab.view ? "● " : "　 "}${v.manifest.name}`,
+        run: () => void this.changeView(tab, v),
+      })),
+    );
+  }
+
+  /** タブのビューを変える。フォルダと履歴（戻る・進む）はそのまま引き継ぐ */
+  private async changeView(tab: Tab, view: LoadedView) {
+    if (view === tab.view) return;
+    const path = isFolderView(view) ? (tab.folder?.path ?? this.homePath()) : undefined;
+    const i = this.tabs.indexOf(tab);
+    const next = await this.openTab(view, path, i < 0 ? undefined : i);
+    next.back = tab.back;
+    next.forward = tab.forward;
+    this.tabs = this.tabs.filter((t) => t !== tab);
+    tab.destroy();
+    this.updateChrome();
+  }
+
   /** ビューから頼まれた tabs.open */
   async openTabById(from: Tab, viewId: string, path?: string, replace = false) {
     const view = this.views.find((v) => v.manifest.id === viewId);
@@ -517,7 +535,6 @@ export class App {
       t.button.classList.toggle("active", on);
       t.pane.classList.toggle("active", on);
     }
-    this.viewSelect.value = tab.view.manifest.id;
     this.endEditAddress();
     this.updateChrome();
     if (focus) tab.host.focus();
@@ -528,7 +545,7 @@ export class App {
   private enableTabReorder(tab: Tab) {
     const b = tab.button;
     b.addEventListener("pointerdown", (down) => {
-      if (down.button !== 0 || (down.target as HTMLElement).closest(".tab-close")) return;
+      if (down.button !== 0 || (down.target as HTMLElement).closest(".tab-close, .tab-views")) return;
       const startX = down.clientX;
       const from = this.tabs.indexOf(tab);
       const rects = this.tabs.map((t) => t.button.getBoundingClientRect());

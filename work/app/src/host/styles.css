@@ -35,7 +35,7 @@ button { font: inherit; color: inherit; }
 .tabs-row { display: flex; align-items: flex-end; gap: 2px; padding: 6px 8px 0; }
 .tab-strip { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .tab {
-  display: flex; align-items: center; gap: 6px; min-width: 120px; max-width: 220px; height: 34px; padding: 0 6px 0 12px;
+  display: flex; align-items: center; gap: 6px; min-width: 120px; max-width: 220px; height: 34px; padding: 0 6px;
   border-radius: 8px 8px 0 0; cursor: default; user-select: none; color: var(--muted);
 }
 .tab:hover { background: var(--hover); }
@@ -45,6 +45,8 @@ button { font: inherit; color: inherit; }
   border: 0; background: transparent; width: 26px; height: 26px; border-radius: 4px; line-height: 1; font-size: 16px; color: var(--muted);
 }
 .tab-close:hover, .tab-new:hover { background: var(--hover); color: var(--fg); }
+.tab-views { border: 0; background: transparent; width: 22px; height: 26px; border-radius: 4px; padding: 0; font-size: 12px; color: var(--muted); }
+.tab-views:hover { background: var(--hover); color: var(--accent); }
 .tab-new { margin-bottom: 4px; }
 
 /* ---- アドレスバー ---- */
@@ -56,7 +58,6 @@ button { font: inherit; color: inherit; }
   flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font: inherit;
 }
 .address:focus { outline: none; border-color: var(--accent); }
-.view-select { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font: inherit; }
 
 /* ---- 本体 ---- */
 .body { flex: 1; display: flex; min-height: 0; }
