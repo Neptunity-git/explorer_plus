@@ -7,6 +7,7 @@ mod icons;
 mod mods;
 mod shellmenu;
 mod transfer;
+mod watch;
 
 /// 開発中だけ、環境変数 EXPLORER_PLUS_START_DIR のフォルダで起動する（試験の操作が、ふだんのフォルダに及ばないように）。
 /// リリース版では常に None
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(icons::IconCache::default())
         .manage(mods::ModRegistry::default())
+        .manage(watch::FolderWatch::default())
         .register_asynchronous_uri_scheme_protocol("icon", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             // アイコンの取り出しは COM を使い時間もかかるので、画面のスレッドを止めないよう別のスレッドで行う
@@ -68,6 +70,7 @@ pub fn run() {
             transfer::drag_out,
             shellmenu::onedrive_contains,
             shellmenu::onedrive_action,
+            watch::watch_folders,
             transfer::open_with,
             geo::get_location,
             dev_start_dir,

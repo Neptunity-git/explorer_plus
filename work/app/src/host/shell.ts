@@ -4,6 +4,7 @@ import type { EntryRef, KeyMessage, MenuItem, Rect, ViewInfo } from "../api/type
 import { uniqueName } from "../core/names";
 import { parseCommandLine, splitPath } from "../core/paths";
 import { backend, BackendError, ICON_ORIGIN, type OneDriveAction, type Place, type RawEntry, type RawFolder } from "./backend";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { moveItem } from "../core/drop";
 import { DragController, type WindowTarget } from "./drag";
@@ -33,6 +34,8 @@ function currentTheme(): "light" | "dark" {
 const isFolderView = (v: LoadedView) => (v.manifest.location ?? "folder") === "folder";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** フォルダのパスを比べるための形（Windows のパスは大文字・小文字を区別しない。末尾の \ も無視する） */
+const folderKey = (path: string) => path.replace(/\\+$/, "").toLowerCase();
 
 let tabCounter = 0;
 
@@ -204,6 +207,34 @@ export class App {
     for (const t of this.tabs) if (t.folderView && t.folder) void this.navigate(t, t.folder.path, false).catch(() => {});
   }
 
+  // ---- フォルダの見張り（ADR 0018）：ほかのアプリでファイルが変わったら、そのフォルダを開いているタブを読み直す ----
+
+  /** 見張るフォルダ（タブで開いているフォルダ）を Rust に伝える。同じなら伝え直さない */
+  private watched = "";
+  private syncWatch() {
+    const paths = [...new Set(this.tabs.filter((t) => t.folderView && t.folder).map((t) => t.folder!.path))].sort();
+    const key = paths.join("\n");
+    if (key === this.watched) return;
+    this.watched = key;
+    void backend.watchFolders(paths).catch(() => {});
+  }
+
+  /** 知らせはまとめて来る（コピー中など）ので、少し待ってから1回だけ読み直す */
+  private changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private onFolderChanged(path: string) {
+    const key = folderKey(path);
+    clearTimeout(this.changeTimers.get(key));
+    this.changeTimers.set(
+      key,
+      setTimeout(() => {
+        this.changeTimers.delete(key);
+        for (const t of this.tabs) {
+          if (t.folderView && t.folder && folderKey(t.folder.path) === key) void this.navigate(t, t.folder.path, false).catch(() => {});
+        }
+      }, 300),
+    );
+  }
+
   mount(root: HTMLElement) {
     document.documentElement.dataset.theme = currentTheme();
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
@@ -249,6 +280,8 @@ export class App {
     // ふだんはビューのランタイムが送ってくるが、ビューの外でボタンを離したときなどに、こちらで受け取る
     document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
     document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
+    void listen<string>("folder-changed", (e) => this.onFolderChanged(e.payload));
+
     // 普通のエクスプローラなど、アプリの外からファイルをドラッグしてきたとき（ADR 0016）。
     // 位置は画面の実際の点の数で来るので、画面の倍率で割って、本体の画面の座標にする
     void getCurrentWebview().onDragDropEvent((e) => {
@@ -485,6 +518,7 @@ export class App {
     await this.openTab(view, path, i < 0 ? undefined : i);
     this.tabs = this.tabs.filter((t) => t !== old);
     old.destroy();
+    this.syncWatch();
   }
 
   /** タブの ▸ から、そのタブのビューを選び直す（ADR 0017）。新しいタブは開かず、今のタブのまま見せ方を変える */
@@ -512,6 +546,7 @@ export class App {
     this.tabs = this.tabs.filter((t) => t !== tab);
     tab.destroy();
     this.updateChrome();
+    this.syncWatch();
   }
 
   /** ビューから頼まれた tabs.open */
@@ -532,6 +567,7 @@ export class App {
     }
     this.tabs.splice(i, 1);
     tab.destroy();
+    this.syncWatch();
     if (this.active === tab) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)]);
   }
 
@@ -628,6 +664,7 @@ export class App {
     }
     tab.setFolder(folder);
     if (tab === this.active) this.updateChrome();
+    this.syncWatch();
   }
 
   private async goBack() {

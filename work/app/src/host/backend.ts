@@ -67,6 +67,8 @@ export const backend = {
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
   /** アプリの外からドロップされたファイル（Windows が渡したパス）を移動・コピーする */
   transferPaths: (paths: string[], dest: string, effect: "move" | "copy") => call<number>("transfer_paths", { paths, dest, effect }),
+  /** 見張るフォルダを、まるごと置き換える。変わると "folder-changed" が届く */
+  watchFolders: (paths: string[]) => call<void>("watch_folders", { paths }),
   /** OneDrive の中のファイル・フォルダか */
   onedriveContains: (item: EntryRef) => call<boolean>("onedrive_contains", { item }),
   /** OneDrive の操作。Windows のメニューの項目を呼び、画面は OneDrive が出す */
