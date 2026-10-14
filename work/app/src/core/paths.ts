@@ -15,7 +15,7 @@ export function splitPath(path: string): Crumb[] {
 
   let acc = drive + "\\";
   for (const part of parts) {
-    acc = acc + part;
+    acc = acc + "\\" + part;
     crumbs.push({ label: part, path: acc });
   }
 
