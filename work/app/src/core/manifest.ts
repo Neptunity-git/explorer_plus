@@ -82,17 +82,21 @@ function checkEntry(raw: unknown, errors: string[]): string | undefined {
     errors.push("entry: must end with \".js\"");
     return undefined;
   }
-  if (raw.startsWith("/") || raw.startsWith("\\")) {
-    errors.push("entry: must not start with \"/\" or \"\\\"");
+  if (raw.startsWith("/")) {
+    errors.push("entry: must not start with \"/\"");
+    return undefined;
+  }
+  if (raw.includes("\\")) {
+    errors.push("entry: must not contain \"\\\"");
     return undefined;
   }
   if (raw.includes(":")) {
     errors.push("entry: must not contain \":\"");
     return undefined;
   }
-  const parts = raw.split(/[\\/]/);
-  if (parts.some((p) => p === "..")) {
-    errors.push("entry: must not contain \"..\" path segments");
+  const parts = raw.split("/");
+  if (parts.some((p) => p === "" || p === "." || p === "..")) {
+    errors.push("entry: must not contain empty, \".\", or \"..\" path segments");
     return undefined;
   }
   return raw;
