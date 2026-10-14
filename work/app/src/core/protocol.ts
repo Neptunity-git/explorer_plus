@@ -1,4 +1,4 @@
-import { METHOD_REQUIRES, RESOLVE_MAX_REFS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
+import { METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, RESOLVE_MAX_REFS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
 
 export type ParseResult =
   | { ok: true; message: ModToHostMessage }
@@ -10,6 +10,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -29,7 +33,7 @@ function parseRect(value: unknown): { ok: true; rect: { x: number; y: number; wi
 function parseRef(value: unknown): { ok: true; ref: { id: string; path: string } } | { ok: false } {
   if (!isPlainObject(value)) return { ok: false };
   const { id, path } = value;
-  if (!isNonEmptyString(id) || !isNonEmptyString(path)) return { ok: false };
+  if (!isString(id) || !isNonEmptyString(path)) return { ok: false };
   return { ok: true, ref: { id, path } };
 }
 
@@ -62,7 +66,7 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
 
     case "open": {
       const { id, path, from } = params;
-      if (!isNonEmptyString(id) || !isNonEmptyString(path)) return { ok: false };
+      if (!isString(id) || !isNonEmptyString(path)) return { ok: false };
       const result: Record<string, unknown> = { id, path };
       if (from !== undefined) {
         const parsedRect = parseRect(from);
@@ -116,6 +120,37 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       const parsedRefs = parseRefArray(refs, 1, RESOLVE_MAX_REFS);
       if (!parsedRefs.ok) return { ok: false };
       return { ok: true, params: { refs: parsedRefs.refs } };
+    }
+
+    case "rename": {
+      const { id, path, newName } = params;
+      if (!isString(id) || !isNonEmptyString(path)) return { ok: false };
+      if (!isString(newName) || newName.length < 1 || newName.length > 255) return { ok: false };
+      return { ok: true, params: { id, path, newName } };
+    }
+
+    case "createFolder":
+      return { ok: true, params: {} };
+
+    case "showMenu": {
+      const { x, y, items, extra } = params;
+      if (!isFiniteNumber(x) || !isFiniteNumber(y)) return { ok: false };
+      const parsedItems = parseRefArray(items, 0, MENU_MAX_ITEMS);
+      if (!parsedItems.ok) return { ok: false };
+      const result: Record<string, unknown> = { x, y, items: parsedItems.refs };
+      if (extra !== undefined) {
+        if (!Array.isArray(extra) || extra.length < 0 || extra.length > MENU_MAX_EXTRA) return { ok: false };
+        const parsedExtra: { id: string; label: string }[] = [];
+        for (const item of extra) {
+          if (!isPlainObject(item)) return { ok: false };
+          const { id, label } = item;
+          if (!isString(id) || id.length < 1 || id.length > 64) return { ok: false };
+          if (!isString(label) || label.length < 1 || label.length > MENU_LABEL_MAX) return { ok: false };
+          parsedExtra.push({ id, label });
+        }
+        result.extra = parsedExtra;
+      }
+      return { ok: true, params: result };
     }
 
     default:
