@@ -170,12 +170,26 @@ export function validateTimetable(raw: unknown): TimetableResult {
         seenSlotKeys.add(key);
       }
 
-      slots.push({
+      const memo = s.memo;
+      let memoOut: string | undefined;
+      if (memo !== undefined) {
+        if (typeof memo !== "string" || memo.length > 200) {
+          errors.push(`slots[${i}].memo: must be a string of length 0-200`);
+        } else {
+          memoOut = memo;
+        }
+      }
+
+      const slotOut: TimetableSlot = {
         day: typeof day === "number" ? day : 0,
         periodId: typeof periodId === "string" ? periodId : "",
         title: typeof title === "string" ? title : "",
         folders,
-      });
+      };
+      if (memoOut !== undefined) {
+        slotOut.memo = memoOut;
+      }
+      slots.push(slotOut);
     }
   }
 
@@ -266,11 +280,25 @@ export function validateTimetable(raw: unknown): TimetableResult {
           }
         }
 
-        ondemandOut.push({
+        const memo = o.memo;
+        let memoOut: string | undefined;
+        if (memo !== undefined) {
+          if (typeof memo !== "string" || memo.length > 200) {
+            errors.push(`ondemand[${i}].memo: must be a string of length 0-200`);
+          } else {
+            memoOut = memo;
+          }
+        }
+
+        const ondemandOutItem: TimetableOndemand = {
           id: typeof id === "string" ? id : "",
           title: typeof title === "string" ? title : "",
           folders,
-        });
+        };
+        if (memoOut !== undefined) {
+          ondemandOutItem.memo = memoOut;
+        }
+        ondemandOut.push(ondemandOutItem);
       }
       ondemand = ondemandOut;
     }
