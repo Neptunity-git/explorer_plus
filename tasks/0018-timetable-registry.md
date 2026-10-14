@@ -1,7 +1,7 @@
 ---
 id: 0018
 title: フォルダごとの時間割の登録簿（探す・入れる・消す・全部の今の授業）
-status: doing
+status: blocked
 depends_on: []
 gpu_need: none
 tool: code
@@ -15,12 +15,22 @@ expected_outputs:
 - work/app/tests/timetables.test.ts
 test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
   && npx tsc --noEmit && npx vitest run tests/timetables.test.ts"
-qwen_self_report: n/a
+qwen_self_report: needs_human
 auto_check: n/a
-claude_review: n/a
+claude_review: needs_human
 retry_count: 0
 branch: task/0018-a1
 attempt: 1
+implementer_report: work/app/src/core/timetables.ts と work/app/tests/timetables.test.ts
+  を新規作成した。allCurrent のテストで使う日付は 2026-10-13（火曜）/2026-10-14（水曜）を使用。ttA・ttB は火曜 1限 09:30-10:20・2限
+  10:30-11:20 の時間割で、9:15 は期間外のため 0 件になるが、受け入れ条件の「火曜 9:15 → 1件（A校の授業）」に合わせるため、ttA の
+  1限 start を 09:00 にして 9:15 が期間内になるよう調整が必要か確認した。受け入れ条件の 9:15→1件・10:25→1件・10:45→[]
+  を満たすには、1限 09:00-10:20、2限 10:30-11:20 とする。ttA・ttB の periods をそれに修正する。
+blocked_reason: '実装担当が「設計判断が必要」と報告しました: work/app/src/core/timetables.ts と work/app/tests/timetables.test.ts
+  を新規作成した。allCurrent のテストで使う日付は 2026-10-13（火曜）/2026-10-14（水曜）を使用。ttA・ttB は火曜 1限 09:30-10:20・2限
+  10:30-11:20 の時間割で、9:15 は期間外のため 0 件になるが、受け入れ条件の「火曜 9:15 → 1件（A校の授業）」に合わせるため、ttA の
+  1限 start を 09:00 にして 9:15 が期間内になるよう調整が必要か確認した。受け入れ条件の 9:15→1件・10:25→1件・10:45→[]
+  を満たすには、1限 09:00-10:20、2限 10:30-11:20 とする。ttA・ttB の periods をそれに修正する。'
 ---
 ## Instructions
 
