@@ -10,7 +10,8 @@ export const PROTOCOL_VERSION = 1;
 // ---- manifest.json ----
 
 /** manifest の uses に書ける名前 */
-export const USES = ["entries", "size", "folderSize", "modified", "icons", "tree", "links"] as const;
+// "tags"・"timetable" は 2026-10-14 に追加（ADR 0010）
+export const USES = ["entries", "size", "folderSize", "modified", "icons", "tree", "links", "tags", "timetable"] as const;
 export type Use = (typeof USES)[number];
 
 export type Manifest = {
@@ -45,7 +46,56 @@ export type Entry = {
   iconUrl?: string;
   /** uses に icons があるときだけ */
   iconKind?: IconKind;
+  /** 付いているタグの id。uses に tags があるときだけ（付いていなければ []） */
+  tags?: string[];
 };
+
+// ---- タグ（ADR 0010。アプリ全体で1つ） ----
+
+export type Tag = {
+  /** 本体が付ける。"tag-" で始まる */
+  id: string;
+  /** 1〜40 文字。大文字小文字を区別せずに、ほかのタグと重ならない */
+  name: string;
+  /** "#rrggbb"（16進数、小文字） */
+  color: string;
+};
+
+// ---- 時間割（ADR 0010。アプリ全体で1つ。すべてユーザーが設定する） ----
+
+export type TimetablePeriod = {
+  /** 1〜32 文字。時間割の中で重ならない */
+  id: string;
+  /** 表示名（"1限" など）。1〜20 文字 */
+  label: string;
+  /** "HH:MM"（24時間、"00:00"〜"23:59"）。start < end */
+  start: string;
+  end: string;
+};
+
+export type TimetableSlot = {
+  /** 0=日曜 … 6=土曜（Date.getDay() と同じ） */
+  day: number;
+  periodId: string;
+  /** 授業名。0〜60 文字 */
+  title: string;
+  /** 結びつけるフォルダ（0〜5 個。今の画面は1つ目だけを使う） */
+  folders: EntryRef[];
+};
+
+/** 「この場所にいるときだけ今の授業を出す」の場所。radius はメートル */
+export type TimetablePlace = { latitude: number; longitude: number; radius: number };
+
+export type Timetable = {
+  /** 表に出す曜日（0〜6、小さい順・重なりなし） */
+  days: number[];
+  periods: TimetablePeriod[];
+  slots: TimetableSlot[];
+  /** null なら場所の条件を使わない（時刻だけで判定） */
+  place: TimetablePlace | null;
+};
+
+export type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | null;
 
 export type FolderSnapshot = {
   path: string;
@@ -101,7 +151,17 @@ export type CallMethod =
   // ↓ 2026-10-14 に追加（Win11 の操作を受け継ぐ。ADR 0009）
   | "rename"
   | "createFolder"
-  | "showMenu";
+  | "showMenu"
+  // ↓ 2026-10-14 に追加（タグと時間割。ADR 0010）
+  | "tags.list"
+  | "tags.create"
+  | "tags.update"
+  | "tags.delete"
+  | "tags.assign"
+  | "tags.entries"
+  | "timetable.get"
+  | "timetable.set"
+  | "timetable.current";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -119,6 +179,16 @@ export type CallParams = {
   rename: { id: string; path: string; newName: string };
   createFolder: Record<string, never>;
   showMenu: { x: number; y: number; items: EntryRef[]; extra?: MenuItem[] };
+  "tags.list": Record<string, never>;
+  "tags.create": { name: string; color: string };
+  "tags.update": { id: string; name?: string; color?: string };
+  "tags.delete": { id: string };
+  "tags.assign": { items: EntryRef[]; tagId: string; on: boolean };
+  "tags.entries": { tagId: string };
+  "timetable.get": Record<string, never>;
+  /** timetable の形の細かい検査は本体（src/core/timetable.ts の validateTimetable）が行う */
+  "timetable.set": { timetable: unknown };
+  "timetable.current": Record<string, never>;
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -137,6 +207,15 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   rename: null,
   createFolder: null,
   showMenu: null,
+  "tags.list": "tags",
+  "tags.create": "tags",
+  "tags.update": "tags",
+  "tags.delete": "tags",
+  "tags.assign": "tags",
+  "tags.entries": "tags",
+  "timetable.get": "timetable",
+  "timetable.set": "timetable",
+  "timetable.current": "timetable",
 };
 
 export type CallMessage = {
@@ -155,7 +234,10 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "folder"; data: FolderSnapshot }
   | { ep: 1; kind: "event"; event: "theme"; data: "light" | "dark" }
   // 本体がビューに「この項目の名前の変更を始めて」と頼む（メニューの「名前の変更」、新しいフォルダを作った直後）
-  | { ep: 1; kind: "event"; event: "action"; data: { action: "rename"; entry: Entry } };
+  | { ep: 1; kind: "event"; event: "action"; data: { action: "rename"; entry: Entry } }
+  // タグの一覧・時間割が変わったとき（uses に tags・timetable があるビューだけに届く）
+  | { ep: 1; kind: "event"; event: "tags"; data: Tag[] }
+  | { ep: 1; kind: "event"; event: "timetable"; data: Timetable };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 
@@ -175,3 +257,8 @@ export const MENU_MAX_ITEMS = 1000;
 export const MENU_MAX_EXTRA = 20;
 export const MENU_LABEL_MAX = 60;
 export const TREE_DEPTH = { min: 1, max: 5 } as const;
+/** タグの名前の長さの上限と、タグの数の上限 */
+export const TAG_NAME_MAX = 40;
+export const TAGS_MAX = 200;
+/** tags.assign の items の上限 */
+export const TAG_ASSIGN_MAX_ITEMS = 1000;

@@ -187,3 +187,48 @@ Windows と同じ。本体が確かめ、守っていなければ `invalid`：�
 - 本体は、対応している `apiVersion` の範囲を持つ。範囲外の MOD は読み込まず、理由を表示する
 - 第1版の約束事は、後から**変えない・消さない**。足すときは、足しても古い MOD が壊れないもの（新しい `uses` の名前、
   新しい method、Entry の新しい省略可能な項目）に限る。壊れる変更が要るときは `apiVersion: 2` を作り、1 も動かし続ける
+
+## タグと時間割（2026-10-14 に追加。ADR 0010）
+
+タグと時間割は、アプリ全体で1つ。使う MOD は manifest の `uses` に `tags`・`timetable` を宣言する（宣言していない MOD には、
+一覧も変更の知らせも届かず、呼ぶと `not-declared`）。
+
+```ts
+// タグ（uses に "tags"）
+const tags = await ep.tags.list();                         // Tag[]：{ id, name, color: "#rrggbb" }
+const tag = await ep.tags.create("重要", "#e5484d");          // 名前が重なれば exists
+await ep.tags.update(tag.id, { name: "最重要", color: "#ff0000" });
+await ep.tags.delete(tag.id);                              // そのタグは、付いていたすべての項目から外れる
+await ep.tags.assign([entry], tag.id, true);               // true で付ける、false で外す
+const tagged = await ep.tags.entries(tag.id);              // そのタグが付いた項目（Entry[]。見つからなくなったものは除く）
+ep.onTags((tags) => { /* タグの一覧が変わった */ });
+// uses に "tags" があると、Entry に tags（付いているタグの id の配列）が入る
+
+// 時間割（uses に "timetable"）
+const tt = await ep.timetable.get();                       // Timetable：{ days, periods, slots, place }
+await ep.timetable.set(newTimetable);                      // 本体が検査する。誤りがあれば invalid（message に誤りの一覧）
+const now = await ep.timetable.current();                  // { slot, period } か null（今の時刻と、設定していれば場所で決める）
+ep.onTimetable((tt) => { /* 時間割が変わった */ });
+```
+
+| method | params | 要る `uses` |
+|---|---|---|
+| `tags.list` | `{}` | `tags` |
+| `tags.create` | `{ name, color }`（name は 1〜40 文字、color は `#rrggbb`） | `tags` |
+| `tags.update` | `{ id, name?, color? }`（name か color の少なくとも一方） | `tags` |
+| `tags.delete` | `{ id }` | `tags` |
+| `tags.assign` | `{ items: [{ id, path }]（1〜1000件）, tagId, on: boolean }` | `tags` |
+| `tags.entries` | `{ tagId }` | `tags` |
+| `timetable.get` | `{}` | `timetable` |
+| `timetable.set` | `{ timetable }` | `timetable` |
+| `timetable.current` | `{}` | `timetable` |
+
+知らせの `event` に `tags`（data は Tag[]）と `timetable`（data は Timetable）を足す。
+
+### 時間割の決まり
+
+- `days`：表に出す曜日（0=日曜 … 6=土曜）。`periods`：時限（id・表示名・`"HH:MM"` の始まりと終わり。20 個まで）。
+  `slots`：コマ（曜日・時限の id・授業名・結びつけるフォルダ 0〜5 個）。同じ曜日・時限のコマは1つまで。
+  `place`：`null` か `{ latitude, longitude, radius }`（「この場所にいるときだけ今の授業を出す」）
+- 今の授業：今の曜日と時刻（始まりを含み、終わりを含まない）に合う時限を、`periods` の順に見て、その曜日のコマがある最初のもの。
+  `place` を設定していて、位置が取れたときだけ、`radius ＋ 位置の誤差` より遠ければ「今の授業なし」。位置が取れないときは時刻だけで決める
