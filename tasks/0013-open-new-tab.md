@@ -1,20 +1,41 @@
 ---
-id: "0013"
+id: '0013'
 title: parseModMessage の open に、省略可能な newTab を通す
 status: todo
-depends_on: ["0012"]
+depends_on:
+- '0012'
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/protocol.ts
+- work/app/src/core/protocol.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/protocol-open-newtab.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts tests/protocol-open-newtab.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
+- work/app/tests/protocol-open-newtab.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts
+  tests/protocol-open-newtab.test.ts"
+qwen_self_report: success
+auto_check: fail
 claude_review: n/a
-retry_count: 0
+retry_count: 1
+branch: task/0013-a1
+attempt: 1
+implementer_report: parseCallParams の case "open" に newTab の処理を追加し、受け入れ条件の5ケースを検証するテストファイル
+  work/app/tests/protocol-open-newtab.test.ts を作成した。
+last_changed_files:
+- work/app/tests/protocol-open-newtab.test.ts
+- work/app/src/core/protocol.ts
+last_failure: "\nup to date in 269ms\ntests/protocol-open-newtab.test.ts(15,29): error\
+  \ TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n  Property\
+  \ 'params' does not exist on type 'KeyMessage'.\ntests/protocol-open-newtab.test.ts(29,29):\
+  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
+  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-open-newtab.test.ts(43,29):\
+  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
+  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-open-newtab.test.ts(44,41):\
+  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
+  \ Property 'params' does not exist on type 'KeyMessage'.\ntests/protocol-open-newtab.test.ts(63,29):\
+  \ error TS2339: Property 'params' does not exist on type 'ModToHostMessage'.\n \
+  \ Property 'params' does not exist on type 'KeyMessage'.\n"
 ---
 ## Instructions
 
