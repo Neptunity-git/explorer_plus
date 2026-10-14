@@ -1,0 +1,66 @@
+/* ノートビュー（ADR 0019）：付箋・子フォルダ・描いた線を自由に置ける平面 */
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 10px; border-bottom: 1px solid var(--tui-line); }
+.bar .sep { width: 1px; align-self: stretch; background: var(--tui-line); margin: 0 4px; }
+.bar .title { color: var(--tui-dim); margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30ch; }
+.tool { font: inherit; color: var(--tui-fg); background: transparent; border: 1px solid transparent; padding: 1px 6px; cursor: default; white-space: nowrap; }
+.tool:hover { border-color: var(--tui-line); }
+.tool.on { border-color: var(--tui-accent); color: var(--tui-accent); }
+.tool .k { color: var(--tui-dim); margin-left: 0.5ch; font-size: 11px; }
+.swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; padding: 0; background: var(--c); cursor: default; }
+.swatch.on { border-color: var(--tui-fg); box-shadow: 0 0 0 2px var(--tui-bg) inset; }
+.zoom-label { min-width: 5ch; text-align: center; }
+
+.stage { position: relative; flex: 1; min-height: 0; overflow: hidden; outline: none; cursor: default;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--tui-line) 70%, transparent) 1px, transparent 1px);
+}
+.stage.panning { cursor: grabbing; }
+.stage.drawing { cursor: crosshair; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.shapes { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.shapes .hit { pointer-events: stroke; stroke: transparent; fill: none; cursor: pointer; }
+.shapes .sel { filter: drop-shadow(0 0 2px var(--tui-accent)); }
+
+.card { position: absolute; box-sizing: border-box; user-select: none; }
+.card.is-selected { outline: 2px solid var(--tui-accent); outline-offset: 2px; }
+.card.snap { outline: 2px dashed var(--tui-accent); outline-offset: 4px; }
+
+.card.text { border: 1px solid var(--cc, var(--tui-line)); background: var(--tui-bg); padding: 6px 10px; display: flex; flex-direction: column;
+  box-shadow: 0 2px 8px color-mix(in srgb, #000 18%, transparent); }
+.card.text .grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--tui-line) 50%); }
+.card.text .cm-host { flex: 1; min-height: 0; overflow: hidden; }
+.card.text.editing .cm-host { overflow: auto; }
+.card.text:not(.editing) .cm-content { pointer-events: none; }
+.card.text .placeholder { color: var(--tui-dim); position: absolute; left: 10px; top: 6px; pointer-events: none; }
+
+.card.folder { width: 112px; padding: 6px 4px; text-align: center; border: 1px solid transparent; }
+.card.folder:hover { border-color: var(--tui-line); background: color-mix(in srgb, var(--tui-fg) 5%, transparent); }
+.card.folder img { width: 48px; height: 48px; display: block; margin: 0 auto 4px; pointer-events: none; }
+.card.folder .name { display: block; word-break: break-all; line-height: 1.3; max-height: 3.9em; overflow: hidden; }
+.card.folder input { width: 100%; box-sizing: border-box; font: inherit; color: var(--tui-fg); background: var(--tui-bg); border: 1px solid var(--tui-accent); outline: none; text-align: center; }
+
+.hint { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); color: var(--tui-dim); text-align: center; pointer-events: none; line-height: 1.9; }
+
+/* ---- Markdown の見せ方（書いている行だけ記号が出る） ---- */
+.cm-editor { height: 100%; background: transparent; color: var(--tui-fg); font: inherit; }
+.cm-editor.cm-focused { outline: none; }
+.cm-scroller { font-family: inherit; line-height: 1.6; overflow: visible; }
+.cm-content { padding: 0; caret-color: var(--tui-accent); }
+.cm-line { padding: 0; }
+.cm-cursor { border-left-color: var(--tui-accent); }
+.cm-selectionBackground, .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--tui-accent) 30%, transparent) !important; }
+.md-h1 { font-size: 1.8em; font-weight: 700; line-height: 1.3; }
+.md-h2 { font-size: 1.5em; font-weight: 700; line-height: 1.3; }
+.md-h3 { font-size: 1.25em; font-weight: 700; }
+.md-h4, .md-h5, .md-h6 { font-weight: 700; }
+.md-strong { font-weight: 700; }
+.md-em { font-style: italic; }
+.md-strike { text-decoration: line-through; color: var(--tui-dim); }
+.md-code { background: color-mix(in srgb, var(--tui-fg) 10%, transparent); padding: 0 2px; }
+.md-pre { background: color-mix(in srgb, var(--tui-fg) 7%, transparent); }
+.md-quote { border-left: 3px solid var(--tui-line); padding-left: 8px !important; color: var(--tui-dim); }
+.md-link { color: var(--tui-accent); text-decoration: underline; }
+.md-bullet { color: var(--tui-accent); }
+.md-task { margin: 0 4px 0 0; vertical-align: middle; }

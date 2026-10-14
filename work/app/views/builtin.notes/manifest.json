@@ -1,10 +1,13 @@
 {
   "id": "builtin.notes",
   "name": "ノート",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "entry": "index.js",
-  "uses": [],
+  "uses": [
+    "entries",
+    "icons"
+  ],
   "location": "folder",
-  "description": "フォルダごとに1ページのノート。そのフォルダを開くと、そのフォルダのノートが出て、その場で書ける（ADR 0014 判断4）"
+  "description": "フォルダごとに1枚の平面。付箋（Markdown）・子フォルダ・矢印や線を自由に置ける（ADR 0019）"
 }

@@ -29,16 +29,22 @@ document.body.appendChild(list);
 let mode = "details"; // "details" | "large"
 const TILE_WIDTH = 124; // 大アイコンの1つ分の幅（style.css の .tile と合わせる）
 
-function setMode(m) {
+// 詳細か大アイコンかは、フォルダごとに覚える（Win11 と同じ。ADR 0019）。フォルダのファイルID ごとに保存する
+const modeKey = (f) => `mode:${f.id || f.path.toLowerCase()}`;
+/** 覚えていないフォルダは、Win11 と同じく中身で決める：画像・動画が半分以上なら大アイコン */
+const MEDIA_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "tif", "tiff", "svg", "mp4", "mov", "avi", "mkv", "wmv"]);
+function guessMode(f) {
+  const files = f.entries.filter((e) => e.kind === "file");
+  const media = files.filter((e) => MEDIA_EXTS.has(e.ext)).length;
+  return files.length > 0 && media * 2 >= files.length ? "large" : "details";
+}
+
+function setMode(m, remember = true) {
   mode = m;
   for (const [k, b] of Object.entries(modeButtons)) b.classList.toggle("on", k === mode);
-  ep.storage.set("mode", mode).catch(report);
+  if (remember && folder) ep.storage.set(modeKey(folder), mode).catch(report);
   if (folder) render();
 }
-ep.storage
-  .get("mode")
-  .then((saved) => setMode(saved === "large" ? "large" : "details"))
-  .catch(report);
 
 let folder = null; // 今のフォルダ（FolderSnapshot）
 let rows = []; // 表示している順の Entry
@@ -493,6 +499,14 @@ ep.onFolder((f) => {
     anchor = null;
     cursor = null;
     list.scrollTop = 0;
+    // まず中身から決めて描き、覚えていたものがあれば、届いたところで切り替える
+    setMode(guessMode(f), false);
+    ep.storage
+      .get(modeKey(f))
+      .then((saved) => {
+        if (folder === f && (saved === "large" || saved === "details") && saved !== mode) setMode(saved, false);
+      })
+      .catch(report);
   } else {
     const paths = new Set(f.entries.map((e) => e.path));
     selected = new Set([...selected].filter((p) => paths.has(p)));
