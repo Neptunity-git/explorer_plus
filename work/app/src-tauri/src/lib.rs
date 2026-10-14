@@ -36,6 +36,8 @@ pub fn run() {
             fsops::resolve,
             fsops::open_entry,
             fsops::trash_entries,
+            fsops::rename_entry,
+            fsops::create_folder,
             fsops::list_places,
             mods::list_mods,
             mods::user_mods_dir,

@@ -1,21 +1,34 @@
 /* 色は、ランタイムが用意する CSS 変数（--ep-*）を使う。ライト・ダークの切り替えに自動で追従する */
 body { margin: 0; font-size: 13px; user-select: none; overflow: hidden; }
+body.resizing, body.resizing * { cursor: col-resize !important; }
 .list { height: 100vh; overflow: auto; outline: none; }
-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table { border-collapse: collapse; table-layout: fixed; min-width: 100%; }
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--ep-bg); text-align: left; font-weight: normal; color: var(--ep-muted);
-  padding: 6px 8px; border-bottom: 1px solid var(--ep-border); white-space: nowrap; cursor: default;
+  padding: 6px 8px; border-bottom: 1px solid var(--ep-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default;
 }
 thead th:hover { background: var(--ep-hover); }
 thead th .arrow { margin-left: 4px; font-size: 10px; }
-th.name { width: 46%; } th.modified { width: 20%; } th.type { width: 18%; } th.size { width: 16%; text-align: right; }
+thead th.size { text-align: right; }
+/* 列の境目をドラッグして幅を変える */
+.resizer { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; }
+.resizer::after { content: ""; position: absolute; top: 25%; right: 3px; width: 1px; height: 50%; background: var(--ep-border); }
 td { padding: 0 8px; height: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 td.size { text-align: right; color: var(--ep-muted); }
 td.modified, td.type { color: var(--ep-muted); }
-tbody tr { border: 1px solid transparent; }
 tbody tr:hover { background: var(--ep-hover); }
 tbody tr.selected { background: var(--ep-selected); outline: 1px solid var(--ep-selected-border); outline-offset: -1px; }
-.name-cell { display: flex; align-items: center; gap: 8px; }
+.name-cell { position: relative; display: flex; align-items: center; gap: 8px; }
 .name-cell img { width: 20px; height: 20px; flex: none; object-fit: contain; }
-.name-cell span { overflow: hidden; text-overflow: ellipsis; }
+.name-text { overflow: hidden; text-overflow: ellipsis; }
+/* 名前の変更の入力欄 */
+td.name { overflow: visible; }
+input.rename {
+  flex: 1; min-width: 0; height: 24px; padding: 0 4px; font: inherit; color: var(--ep-fg); background: var(--ep-bg);
+  border: 1px solid var(--ep-accent); border-radius: 3px; outline: none; user-select: text;
+}
+.rename-error {
+  position: absolute; left: 28px; top: 28px; z-index: 2; max-width: 420px; padding: 6px 10px; white-space: normal;
+  background: var(--ep-bg); color: var(--ep-fg); border: 1px solid #c42b1c; border-radius: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
 .empty { padding: 40px; text-align: center; color: var(--ep-muted); }

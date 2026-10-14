@@ -355,6 +355,52 @@ pub async fn trash_entries(items: Vec<EntryRef>) -> Result<usize, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// 名前に区切りやドライブ指定が入っていないか（フォルダの外を指す名前を断る）。
+/// Windows の名前の決まりの細かい検査は TypeScript（src/core/names.ts）が行う
+fn plain_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name == "." || name == ".." || name.contains(['\\', '/', ':', '\0']) {
+        return Err(format!("invalid: bad name \"{}\"", name));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn rename_entry(item: EntryRef, new_name: String) -> Result<RawEntry, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        plain_name(&new_name)?;
+        let from = verify(&item)?;
+        let parent = from.parent().ok_or("invalid: cannot rename a drive")?;
+        let to = parent.join(&new_name);
+        // 同じものを指していれば（大文字・小文字だけの変更）許す。別のものなら「既にある」
+        if to.exists() && file_id(&to).unwrap_or_default() != item.id {
+            return Err(format!("exists: {}", to.display()));
+        }
+        std::fs::rename(&from, &to).map_err(|e| format!("io: {}", e))?;
+        entry_at(&to, file_id(&to).unwrap_or_default()).ok_or_else(|| "io: renamed but cannot read".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn create_folder(parent: String, name: String) -> Result<RawEntry, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        plain_name(&name)?;
+        let dir = PathBuf::from(&parent);
+        if !dir.is_dir() {
+            return Err(format!("not-found: {}", parent));
+        }
+        let target = dir.join(&name);
+        std::fs::create_dir(&target).map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => format!("exists: {}", target.display()),
+            _ => format!("io: {}", e),
+        })?;
+        entry_at(&target, file_id(&target).unwrap_or_default()).ok_or_else(|| "io: created but cannot read".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
@@ -501,5 +547,27 @@ mod tests {
         assert_eq!(display_name(Path::new("C:\\")), "C:");
         assert_eq!(display_name(Path::new("C:\\Users")), "Users");
         assert!(Path::new("C:\\").parent().is_none());
+    }
+
+    #[test]
+    fn rename_and_create() {
+        let d = temp_dir("rename");
+        let a = d.join("a.txt");
+        std::fs::write(&a, "x").unwrap();
+        std::fs::write(d.join("taken.txt"), "y").unwrap();
+        let r = EntryRef { id: file_id(&a).unwrap(), path: a.to_string_lossy().into_owned() };
+        use tauri::async_runtime::block_on as rt;
+        assert!(rt(rename_entry(r.clone(), "taken.txt".into())).unwrap_err().starts_with("exists"));
+        assert!(rt(rename_entry(r.clone(), r"..\evil.txt".into())).unwrap_err().starts_with("invalid"));
+        // 大文字・小文字だけの変更は通る
+        let e = rt(rename_entry(r.clone(), "A.txt".into())).unwrap();
+        assert_eq!(e.name, "A.txt");
+        assert_eq!(e.id, r.id);
+        let parent = d.to_string_lossy().into_owned();
+        let f = rt(create_folder(parent.clone(), "新しいフォルダー".into())).unwrap();
+        assert!(f.is_dir);
+        assert!(rt(create_folder(parent.clone(), "新しいフォルダー".into())).unwrap_err().starts_with("exists"));
+        assert!(rt(create_folder(parent, "a/b".into())).unwrap_err().starts_with("invalid"));
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

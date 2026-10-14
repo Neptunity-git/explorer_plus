@@ -88,3 +88,21 @@ button { font: inherit; color: inherit; }
 .fx-ghost { position: fixed; pointer-events: none; border-radius: 6px; z-index: 50; }
 .fx-open { background: radial-gradient(circle, var(--accent) 0%, transparent 70%); }
 .fx-trash { background: var(--hover); border: 1px solid var(--border); }
+
+/* ---- 右クリックのメニュー（ADR 0009） ---- */
+.menu-backdrop { position: fixed; inset: 0; z-index: 150; }
+.menu {
+  position: fixed; min-width: 240px; padding: 4px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); box-shadow: var(--shadow); outline: none;
+}
+.menu-item {
+  display: flex; align-items: center; width: 100%; height: 32px; padding: 0 12px; border: 0; border-radius: 4px;
+  background: transparent; text-align: left; gap: 24px;
+}
+.menu-item:focus, .menu-item:hover:not(:disabled) { background: var(--hover); outline: none; }
+.menu-item:disabled { opacity: 0.4; }
+.menu-label { flex: 1; }
+.menu-key { color: var(--muted); font-size: 12px; }
+.menu-sep { height: 1px; margin: 4px 8px; background: var(--border); }
+.tab-view { font-size: 11px; color: var(--accent); white-space: nowrap; }
+.tab-view:empty { display: none; }

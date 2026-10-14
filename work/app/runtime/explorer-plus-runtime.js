@@ -7,6 +7,7 @@
   const pending = new Map();
   const folderListeners = new Set();
   const themeListeners = new Set();
+  const actionListeners = new Set();
   let lastFolder = null;
   let theme = "light";
 
@@ -71,6 +72,8 @@
       } else if (m.event === "theme") {
         setTheme(m.data);
         for (const cb of themeListeners) safely(cb, theme);
+      } else if (m.event === "action") {
+        for (const cb of actionListeners) safely(cb, m.data);
       }
     }
   });
@@ -125,5 +128,16 @@
     }),
     getTree: (opts) => call("getTree", { depth: (opts && opts.depth) || 1 }),
     resolve: (refs) => call("resolve", { refs: refs.map(toRef) }),
+    // ↓ 2026-10-14 に追加（ADR 0009）
+    rename: (entry, newName) => call("rename", Object.assign(toRef(entry), { newName })),
+    createFolder: () => call("createFolder"),
+    /** opts: { x, y, items: Entry[], extra?: [{ id, label }] }。x・y はこのページの中の座標（MouseEvent の clientX・clientY） */
+    showMenu: (opts) =>
+      call("showMenu", Object.assign({ x: opts.x, y: opts.y, items: (opts.items || []).map(toRef) }, opts.extra ? { extra: opts.extra } : {})),
+    /** 本体からの頼みごと（{ action: "rename", entry }）を受け取る */
+    onAction(cb) {
+      actionListeners.add(cb);
+      return () => actionListeners.delete(cb);
+    },
   });
 })();

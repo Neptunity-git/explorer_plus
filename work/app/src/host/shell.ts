@@ -1,8 +1,10 @@
 // 本体の画面：タブ、アドレスバー、ビューの切り替え、よく使う場所、状態の表示。
 // ファイルの中身の見せ方はビュー（MOD）に任せ、ここは「どのフォルダを、どのビューで」を管理する。
-import type { EntryRef, KeyMessage, Rect } from "../api/types";
-import { backend, BackendError, type Place, type RawFolder } from "./backend";
+import type { EntryRef, KeyMessage, MenuItem, Rect } from "../api/types";
+import { uniqueName } from "../core/names";
+import { backend, BackendError, type Place, type RawEntry, type RawFolder } from "./backend";
 import { confirmDialog, playOpen, playTrash } from "./effects";
+import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
 import { ViewHost, type LoadedView, type TabActions } from "./view-host";
 
@@ -26,6 +28,7 @@ class Tab implements TabActions {
   readonly pane = el("div", "view-pane");
   readonly button = el("div", "tab");
   private readonly label = el("span", "tab-label", "…");
+  private readonly badge = el("span", "tab-view");
   folder: RawFolder | null = null;
   back: string[] = [];
   forward: string[] = [];
@@ -41,23 +44,18 @@ class Tab implements TabActions {
       e.stopPropagation();
       app.closeTab(this);
     };
-    this.button.append(this.label, close);
+    // 標準以外のビューのタブには、ビューの名前を小さく出す（同じフォルダを別のビューで並べたとき見分けるため）
+    this.badge.textContent = view.manifest.id === DEFAULT_VIEW_ID ? "" : view.manifest.name;
+    this.button.append(this.label, this.badge, close);
     this.button.onclick = () => app.activate(this);
     this.button.onauxclick = (e) => e.button === 1 && app.closeTab(this);
     this.host = new ViewHost(this.pane, view, this);
   }
 
-  setView(view: LoadedView) {
-    this.host.destroy();
-    this.view = view;
-    this.host = new ViewHost(this.pane, view, this);
-    if (this.folder) this.host.setFolder(this.folder);
-  }
-
   setFolder(folder: RawFolder) {
     this.folder = folder;
     this.label.textContent = folder.name;
-    this.button.title = folder.path;
+    this.button.title = `${folder.path}\n${this.view.manifest.name}`;
     this.host.setFolder(folder);
   }
 
@@ -75,6 +73,9 @@ class Tab implements TabActions {
   };
   open = (ref: EntryRef, from?: Rect) => this.app.open(this, ref, from);
   trash = (refs: EntryRef[], from?: Rect) => this.app.trash(this, refs, from);
+  rename = (ref: EntryRef, newName: string) => this.app.rename(this, ref, newName);
+  createFolder = () => this.app.createFolder(this);
+  showMenu = (x: number, y: number, items: EntryRef[], extra: MenuItem[]) => this.app.showMenu(this, x, y, items, extra);
   shortcut = (key: KeyMessage) => this.app.handleKey(key);
 }
 
@@ -134,9 +135,13 @@ export class App {
       this.viewSelect.appendChild(o);
     }
     this.viewSelect.title = "ビュー";
+    // ビューを選ぶと、今のタブは残し、同じフォルダをそのビューで新しいタブに開く（ADR 0009 判断3）
     this.viewSelect.onchange = () => {
       const v = this.views.find((x) => x.manifest.id === this.viewSelect.value);
-      if (v && this.active) this.active.setView(v);
+      const t = this.active;
+      if (!v || !t) return;
+      this.viewSelect.value = t.view.manifest.id;
+      void this.openTab(t.folder?.path ?? this.homePath(), v);
     };
     const navRow = el("div", "nav-row");
     navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.address, this.viewSelect);
@@ -302,10 +307,65 @@ export class App {
     return n;
   }
 
+  async rename(tab: Tab, ref: EntryRef, newName: string): Promise<RawEntry> {
+    const raw = await backend.renameEntry(ref, newName);
+    if (tab.folder) await this.navigate(tab, tab.folder.path, false);
+    return raw;
+  }
+
+  /** 今のフォルダに、重ならない名前で「新しいフォルダー」を作り、ビューに名前の変更を始めてもらう */
+  async createFolder(tab: Tab): Promise<RawEntry> {
+    if (!tab.folder) throw new BackendError({ code: "not-found", message: "no folder is open" });
+    const name = uniqueName("新しいフォルダー", tab.folder.entries.map((e) => e.name));
+    const raw = await backend.createFolder(tab.folder.path, name);
+    await this.navigate(tab, tab.folder.path, false);
+    tab.host.requestRename(raw);
+    return raw;
+  }
+
+  /** 右クリックのメニュー（ADR 0009 判断2）。MOD が足した項目が選ばれたら、その id を返す */
+  async showMenu(tab: Tab, x: number, y: number, items: EntryRef[], extra: MenuItem[]): Promise<string | null> {
+    let chosen: string | null = null;
+    const raws = items.map((r) => tab.folder?.entries.find((e) => e.path === r.path));
+    const run = (work: () => Promise<unknown>) => () =>
+      void work().catch((e) => {
+        if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`できませんでした：${e instanceof Error ? e.message : String(e)}`);
+      });
+    const copyPaths = (paths: string[]) => run(() => navigator.clipboard.writeText(paths.map((p) => `"${p}"`).join("\r\n")));
+    const lines: MenuLine[] = [];
+    if (items.length > 0) {
+      const allFolders = raws.every((r) => r?.isDir);
+      lines.push(
+        { label: "開く", shortcut: "Enter", run: run(() => (items.length === 1 ? this.open(tab, items[0]) : Promise.all(items.filter((_, i) => !raws[i]?.isDir).map((r) => backend.openEntry(r))))) },
+        { label: "新しいタブで開く", disabled: !allFolders, run: run(async () => { for (const r of items) await this.openTab(r.path, tab.view); }) },
+        "separator",
+        { label: "名前の変更", shortcut: "F2", disabled: items.length !== 1 || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
+        { label: "パスのコピー", run: copyPaths(items.map((r) => r.path)) },
+        "separator",
+        { label: "ごみ箱へ送る", shortcut: "Delete", run: run(() => this.trash(tab, items)) },
+      );
+    } else {
+      lines.push(
+        { label: "新しいフォルダー", shortcut: "Ctrl+Shift+N", disabled: !tab.folder, run: run(() => this.createFolder(tab)) },
+        { label: "最新の情報に更新", shortcut: "F5", run: () => this.refresh() },
+        { label: "パスのコピー", disabled: !tab.folder, run: copyPaths(tab.folder ? [tab.folder.path] : []) },
+      );
+    }
+    if (extra.length > 0) {
+      lines.push("separator", ...extra.map((m) => ({ label: m.label, run: () => (chosen = m.id) })));
+    }
+    await showMenu(x, y, lines);
+    return chosen;
+  }
+
   /** 本体のショートカット。扱ったら true */
   handleKey(k: KeyMessage): boolean {
     const t = this.active;
     const key = k.key.length === 1 ? k.key.toLowerCase() : k.key;
+    if (k.ctrl && k.shift && !k.alt && key === "n") {
+      if (t) void this.createFolder(t).catch((e) => this.toast(`フォルダーを作れませんでした：${e instanceof Error ? e.message : String(e)}`));
+      return true;
+    }
     if (k.ctrl && !k.alt) {
       if (key === "t") {
         void this.openTab(t?.folder?.path ?? this.homePath());

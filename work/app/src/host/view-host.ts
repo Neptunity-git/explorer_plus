@@ -8,12 +8,14 @@ import {
   type HostToModMessage,
   type KeyMessage,
   type Manifest,
+  type MenuItem,
   type Rect,
   type TreeNode,
   type Use,
 } from "../api/types";
 import { sortEntries } from "../core/entries";
 import { parseModMessage } from "../core/protocol";
+import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
@@ -29,6 +31,11 @@ export interface TabActions {
   navigateUp(): Promise<void>;
   open(ref: EntryRef, from?: Rect): Promise<void>;
   trash(refs: EntryRef[], from?: Rect): Promise<number>;
+  rename(ref: EntryRef, newName: string): Promise<RawEntry>;
+  /** 今のフォルダに「新しいフォルダー」を作る。作った後、本体がビューに action（rename）を送る */
+  createFolder(): Promise<RawEntry>;
+  /** 右クリックのメニュー。MOD が足した項目が選ばれたらその id、それ以外は null */
+  showMenu(x: number, y: number, items: EntryRef[], extra: MenuItem[]): Promise<string | null>;
   shortcut(key: KeyMessage): void;
 }
 
@@ -90,6 +97,11 @@ export class ViewHost {
 
   setTheme(theme: "light" | "dark") {
     if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "theme", data: theme });
+  }
+
+  /** ビューに「この項目の名前の変更を始めて」と頼む（対応していないビューは無視する） */
+  requestRename(raw: RawEntry) {
+    if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "action", data: { action: "rename", entry: toEntry(raw, this.uses) } });
   }
 
   private post(msg: HostToModMessage) {
@@ -202,6 +214,17 @@ export class ViewHost {
       case "resolve": {
         const found = await backend.resolve(p.refs);
         return found.map((r) => (r ? toEntry(r, this.uses) : null));
+      }
+      case "rename": {
+        const bad = validateFileName(p.newName);
+        if (bad) throw new HostError(bad);
+        return toEntry(await this.tab.rename({ id: p.id, path: p.path }, p.newName), this.uses);
+      }
+      case "createFolder":
+        return toEntry(await this.tab.createFolder(), this.uses);
+      case "showMenu": {
+        const box = this.iframe.getBoundingClientRect();
+        return { chosen: await this.tab.showMenu(box.x + p.x, box.y + p.y, p.items, p.extra ?? []) };
       }
     }
   }

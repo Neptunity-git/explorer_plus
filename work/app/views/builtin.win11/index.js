@@ -19,13 +19,27 @@ let selected = new Set(); // 選んでいる Entry の path
 let anchor = null; // Shift で範囲を選ぶときの起点（行の番号）
 let cursor = null; // キーボードで動かす今の行（行の番号）
 let sort = { key: "name", dir: 1 }; // 列の見出しで並べ替える。"name" の昇順は本体の並び順（フォルダが先・自然な順）のまま
+let editing = null; // 名前を変えている最中の { path, input }
+let pendingFolder = null; // 名前の変更中に届いたフォルダ（終わってから描く）
 
 const COLUMNS = [
-  { key: "name", label: "名前" },
-  { key: "modified", label: "更新日時" },
-  { key: "type", label: "種類" },
-  { key: "size", label: "サイズ" },
+  { key: "name", label: "名前", width: 360 },
+  { key: "modified", label: "更新日時", width: 160 },
+  { key: "type", label: "種類", width: 150 },
+  { key: "size", label: "サイズ", width: 100 },
 ];
+const MIN_COLUMN_WIDTH = 48;
+// 列の幅は、このビュー専用の保存場所（ep.storage）に覚えておく。どのタブで開いても同じ幅になる
+let widths = Object.fromEntries(COLUMNS.map((c) => [c.key, c.width]));
+ep.storage
+  .get("columns")
+  .then((saved) => {
+    if (saved && typeof saved === "object") {
+      for (const c of COLUMNS) if (Number.isFinite(saved[c.key])) widths[c.key] = Math.max(MIN_COLUMN_WIDTH, saved[c.key]);
+      if (folder) render();
+    }
+  })
+  .catch(report);
 
 function formatSize(bytes) {
   if (bytes === undefined) return "";
@@ -46,6 +60,11 @@ function typeLabel(e) {
   return e.ext ? `${e.ext.toUpperCase()} ファイル` : "ファイル";
 }
 
+function report(err) {
+  // ごみ箱の確認で「やめる」を選んだ（denied）ときは、何もしない
+  if (err && err.code !== "denied") console.warn(err);
+}
+
 function sortedRows() {
   // 隠しファイルは、Windows の既定と同じく表示しない
   const visible = folder.entries.filter((e) => !e.hidden);
@@ -63,6 +82,8 @@ function sortedRows() {
   });
 }
 
+// ---- 描画 ----
+
 function render() {
   rows = sortedRows();
   list.textContent = "";
@@ -71,16 +92,25 @@ function render() {
     return;
   }
   const table = document.createElement("table");
+  const colgroup = document.createElement("colgroup");
+  for (const c of COLUMNS) colgroup.appendChild(Object.assign(document.createElement("col"), { className: `col-${c.key}` })).style.width = `${widths[c.key]}px`;
+  table.appendChild(colgroup);
+  table.style.width = `${COLUMNS.reduce((s, c) => s + widths[c.key], 0)}px`;
+
   const head = table.createTHead().insertRow();
   for (const c of COLUMNS) {
     const th = document.createElement("th");
     th.className = c.key;
-    th.textContent = c.label;
+    th.append(Object.assign(document.createElement("span"), { textContent: c.label }));
     if (sort.key === c.key) th.append(Object.assign(document.createElement("span"), { className: "arrow", textContent: sort.dir === 1 ? "▲" : "▼" }));
     th.onclick = () => {
       sort = { key: c.key, dir: sort.key === c.key ? -sort.dir : 1 };
       render();
     };
+    const grip = Object.assign(document.createElement("span"), { className: "resizer", title: "ドラッグで幅を変える" });
+    grip.addEventListener("mousedown", (ev) => startResize(ev, c.key, table));
+    grip.addEventListener("click", (ev) => ev.stopPropagation());
+    th.appendChild(grip);
     head.appendChild(th);
   }
   const body = table.createTBody();
@@ -93,7 +123,7 @@ function render() {
     const cell = document.createElement("div");
     cell.className = "name-cell";
     if (e.iconUrl) cell.appendChild(Object.assign(document.createElement("img"), { src: e.iconUrl, alt: "", loading: "lazy" }));
-    cell.appendChild(Object.assign(document.createElement("span"), { textContent: e.name }));
+    cell.appendChild(Object.assign(document.createElement("span"), { className: "name-text", textContent: e.name }));
     name.appendChild(cell);
     Object.assign(tr.insertCell(), { className: "modified", textContent: formatDate(e.modified) });
     Object.assign(tr.insertCell(), { className: "type", textContent: typeLabel(e) });
@@ -102,8 +132,38 @@ function render() {
   list.appendChild(table);
 }
 
+// ---- 列の幅 ----
+
+function startResize(ev, key, table) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const startX = ev.clientX;
+  const startWidth = widths[key];
+  const col = table.querySelector(`col.col-${key}`);
+  document.body.classList.add("resizing");
+  const onMove = (e) => {
+    widths[key] = Math.max(MIN_COLUMN_WIDTH, Math.round(startWidth + e.clientX - startX));
+    col.style.width = `${widths[key]}px`;
+    table.style.width = `${COLUMNS.reduce((s, c) => s + widths[c.key], 0)}px`;
+  };
+  const onUp = () => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    document.body.classList.remove("resizing");
+    ep.storage.set("columns", widths).catch(report);
+  };
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+// ---- 選択 ----
+
 function rowElement(i) {
   return list.querySelector(`tr[data-index="${i}"]`);
+}
+
+function paintSelection() {
+  for (const tr of list.querySelectorAll("tbody tr")) tr.classList.toggle("selected", selected.has(rows[Number(tr.dataset.index)].path));
 }
 
 function select(i, { ctrl = false, shift = false } = {}) {
@@ -120,28 +180,111 @@ function select(i, { ctrl = false, shift = false } = {}) {
     selected = new Set([rows[i].path]);
     anchor = i;
   }
-  for (const tr of list.querySelectorAll("tbody tr")) tr.classList.toggle("selected", selected.has(rows[Number(tr.dataset.index)].path));
+  paintSelection();
   rowElement(i)?.scrollIntoView({ block: "nearest" });
 }
 
 const selectedEntries = () => rows.filter((e) => selected.has(e.path));
 const rectOf = (i) => rowElement(i)?.querySelector(".name-cell")?.getBoundingClientRect();
 
-function report(err) {
-  // ごみ箱の確認で「やめる」を選んだ（denied）ときは、何もしない
-  if (err && err.code !== "denied") console.warn(err);
-}
-
 function openAt(i) {
   ep.open(rows[i], { from: rectOf(i) }).catch(report);
 }
 
+// ---- 名前の変更（F2・メニュー・新しいフォルダーの直後） ----
+
+const RENAME_ERRORS = {
+  invalid: "この名前は使えません。次の文字は使えません：\\ / : * ? \" < > |（CON などの名前や、末尾の空白・ピリオドも使えません）",
+  exists: "同じ名前のファイルまたはフォルダーが既にあります。",
+};
+
+function beginRename(path) {
+  finishRename(false);
+  const i = rows.findIndex((e) => e.path === path);
+  if (i < 0) return;
+  select(i);
+  const entry = rows[i];
+  const span = rowElement(i).querySelector(".name-text");
+  const input = Object.assign(document.createElement("input"), { className: "rename", value: entry.name, spellcheck: false });
+  span.replaceWith(input);
+  input.focus();
+  // ファイルは拡張子の前までを選ぶ（Windows と同じ）
+  const dot = entry.kind === "file" ? entry.name.lastIndexOf(".") : -1;
+  input.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+  editing = { entry, input, busy: false };
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") finishRename(true);
+    else if (ev.key === "Escape") finishRename(false);
+  });
+  input.addEventListener("blur", () => finishRename(true));
+  input.addEventListener("mousedown", (ev) => ev.stopPropagation());
+}
+
+function showRenameError(input, message) {
+  input.parentElement.querySelector(".rename-error")?.remove();
+  input.insertAdjacentElement("afterend", Object.assign(document.createElement("div"), { className: "rename-error", textContent: message }));
+}
+
+function finishRename(commit) {
+  if (!editing || editing.busy) return;
+  const { entry, input } = editing;
+  const newName = input.value;
+  const done = (selectPath) => {
+    editing = null;
+    if (pendingFolder) {
+      folder = pendingFolder;
+      pendingFolder = null;
+    }
+    if (selectPath) selected = new Set([selectPath]);
+    render();
+    const i = rows.findIndex((e) => selected.has(e.path));
+    if (i >= 0) cursor = anchor = i;
+    list.focus();
+  };
+  if (!commit || newName === entry.name || newName.trim() === "") {
+    done(null);
+    return;
+  }
+  editing.busy = true;
+  ep.rename(entry, newName).then(
+    (renamed) => done(renamed.path),
+    (err) => {
+      editing.busy = false;
+      showRenameError(input, RENAME_ERRORS[err.code] || err.message);
+      input.focus();
+    },
+  );
+}
+
+// ---- 右クリックのメニュー（本体が描く） ----
+
+function openMenu(x, y) {
+  ep.showMenu({ x, y, items: selectedEntries() }).catch(report);
+}
+
+list.addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  const tr = ev.target.closest("tbody tr");
+  if (tr) {
+    const i = Number(tr.dataset.index);
+    if (!selected.has(rows[i].path)) select(i);
+  } else if (!ev.target.closest("thead")) {
+    selected.clear();
+    paintSelection();
+  }
+  openMenu(ev.clientX, ev.clientY);
+});
+
+// ---- マウスとキーボード ----
+
 list.addEventListener("mousedown", (ev) => {
+  if (ev.button !== 0) return;
   const tr = ev.target.closest("tbody tr");
   if (!tr) {
     if (!ev.target.closest("thead")) {
       selected.clear();
-      render();
+      paintSelection();
     }
     return;
   }
@@ -150,11 +293,11 @@ list.addEventListener("mousedown", (ev) => {
 
 list.addEventListener("dblclick", (ev) => {
   const tr = ev.target.closest("tbody tr");
-  if (tr) openAt(Number(tr.dataset.index));
+  if (tr && !editing) openAt(Number(tr.dataset.index));
 });
 
 list.addEventListener("keydown", (ev) => {
-  if (rows.length === 0) return;
+  if (editing || rows.length === 0) return;
   const current = cursor ?? -1;
   if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
     ev.preventDefault();
@@ -166,6 +309,9 @@ list.addEventListener("keydown", (ev) => {
   } else if (ev.key === "Enter" && current >= 0) {
     ev.preventDefault();
     openAt(current);
+  } else if (ev.key === "F2" && current >= 0) {
+    ev.preventDefault();
+    beginRename(rows[current].path);
   } else if (ev.key === "Delete") {
     const items = selectedEntries();
     if (items.length > 0) ep.trash(items, { from: rectOf(current) }).catch(report);
@@ -174,11 +320,25 @@ list.addEventListener("keydown", (ev) => {
   } else if (ev.key === "a" && ev.ctrlKey) {
     ev.preventDefault();
     selected = new Set(rows.map((e) => e.path));
-    render();
+    paintSelection();
+  } else if (ev.key === "ContextMenu" || (ev.key === "F10" && ev.shiftKey)) {
+    // メニューキー・Shift+F10：今の行の位置にメニューを出す
+    ev.preventDefault();
+    const r = current >= 0 ? rectOf(current) : null;
+    openMenu(r ? r.x + 24 : 40, r ? r.bottom : 40);
   }
 });
 
+ep.onAction(({ action, entry }) => {
+  if (action === "rename") beginRename(entry.path);
+});
+
 ep.onFolder((f) => {
+  if (editing) {
+    // 名前の入力中は描き直さない（入力欄が消えるため）。終わってから描く
+    pendingFolder = f;
+    return;
+  }
   // 別のフォルダに移ったら、選択と並べ替えを元に戻す。同じフォルダの更新（大きさが届いた、など）なら保つ
   const moved = !folder || folder.path !== f.path;
   folder = f;
@@ -192,5 +352,7 @@ ep.onFolder((f) => {
     selected = new Set([...selected].filter((p) => paths.has(p)));
   }
   render();
+  const i = rows.findIndex((e) => selected.has(e.path));
+  cursor = i >= 0 ? i : cursor !== null && cursor < rows.length ? cursor : null;
   list.focus();
 });
