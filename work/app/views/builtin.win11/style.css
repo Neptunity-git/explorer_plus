@@ -1,0 +1,21 @@
+/* 色は、ランタイムが用意する CSS 変数（--ep-*）を使う。ライト・ダークの切り替えに自動で追従する */
+body { margin: 0; font-size: 13px; user-select: none; overflow: hidden; }
+.list { height: 100vh; overflow: auto; outline: none; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--ep-bg); text-align: left; font-weight: normal; color: var(--ep-muted);
+  padding: 6px 8px; border-bottom: 1px solid var(--ep-border); white-space: nowrap; cursor: default;
+}
+thead th:hover { background: var(--ep-hover); }
+thead th .arrow { margin-left: 4px; font-size: 10px; }
+th.name { width: 46%; } th.modified { width: 20%; } th.type { width: 18%; } th.size { width: 16%; text-align: right; }
+td { padding: 0 8px; height: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.size { text-align: right; color: var(--ep-muted); }
+td.modified, td.type { color: var(--ep-muted); }
+tbody tr { border: 1px solid transparent; }
+tbody tr:hover { background: var(--ep-hover); }
+tbody tr.selected { background: var(--ep-selected); outline: 1px solid var(--ep-selected-border); outline-offset: -1px; }
+.name-cell { display: flex; align-items: center; gap: 8px; }
+.name-cell img { width: 20px; height: 20px; flex: none; object-fit: contain; }
+.name-cell span { overflow: hidden; text-overflow: ellipsis; }
+.empty { padding: 40px; text-align: center; color: var(--ep-muted); }

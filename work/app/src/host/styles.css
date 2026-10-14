@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light;
+  --font: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --fg: #1b1b1b;
+  --muted: #616161;
+  --border: #e5e5e5;
+  --hover: #eaeaea;
+  --active-tab: #ffffff;
+  --accent: #005fb8;
+  --input-bg: #ffffff;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1c1c;
+  --surface: #202020;
+  --fg: #ffffff;
+  --muted: #a0a0a0;
+  --border: #333333;
+  --hover: #2d2d2d;
+  --active-tab: #2b2b2b;
+  --accent: #60cdff;
+  --input-bg: #2b2b2b;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.4 var(--font); overflow: hidden; }
+button { font: inherit; color: inherit; }
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* ---- タブ ---- */
+.tabs-row { display: flex; align-items: flex-end; gap: 2px; padding: 6px 8px 0; }
+.tab-strip { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tab {
+  display: flex; align-items: center; gap: 6px; min-width: 120px; max-width: 220px; height: 34px; padding: 0 6px 0 12px;
+  border-radius: 8px 8px 0 0; cursor: default; user-select: none; color: var(--muted);
+}
+.tab:hover { background: var(--hover); }
+.tab.active { background: var(--active-tab); color: var(--fg); }
+.tab-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close, .tab-new {
+  border: 0; background: transparent; width: 26px; height: 26px; border-radius: 4px; line-height: 1; font-size: 16px; color: var(--muted);
+}
+.tab-close:hover, .tab-new:hover { background: var(--hover); color: var(--fg); }
+.tab-new { margin-bottom: 4px; }
+
+/* ---- アドレスバー ---- */
+.nav-row { display: flex; align-items: center; gap: 4px; padding: 6px 8px; background: var(--active-tab); border-bottom: 1px solid var(--border); }
+.nav-btn { border: 0; background: transparent; width: 32px; height: 30px; border-radius: 4px; font-size: 15px; }
+.nav-btn:hover:not(:disabled) { background: var(--hover); }
+.nav-btn:disabled { opacity: 0.35; }
+.address {
+  flex: 1; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font: inherit;
+}
+.address:focus { outline: none; border-color: var(--accent); }
+.view-select { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font: inherit; }
+
+/* ---- 本体 ---- */
+.body { flex: 1; display: flex; min-height: 0; }
+.sidebar { width: 200px; padding: 8px 6px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); }
+.place { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.place:hover { background: var(--hover); }
+.place-drive { color: var(--muted); }
+.place-drive:first-of-type, .place:not(.place-drive) + .place-drive { margin-top: 8px; }
+.content { flex: 1; position: relative; min-width: 0; background: var(--surface); }
+.view-pane { position: absolute; inset: 0; display: none; }
+.view-pane.active { display: block; }
+.view-frame { width: 100%; height: 100%; border: 0; display: block; }
+.status { height: 24px; padding: 0 12px; display: flex; align-items: center; color: var(--muted); font-size: 12px; background: var(--surface); border-top: 1px solid var(--border); }
+
+/* ---- 確認・お知らせ ---- */
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); display: grid; place-items: center; z-index: 100; }
+.dialog { min-width: 340px; max-width: 480px; padding: 20px 24px 16px; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+.dialog p { margin: 0 0 20px; font-size: 14px; word-break: break-all; }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog-buttons button { min-width: 96px; height: 32px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); }
+.dialog-buttons button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .dialog-buttons button.primary { color: #000; }
+.toast {
+  position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); padding: 10px 16px; border-radius: 6px;
+  background: var(--fg); color: var(--bg); box-shadow: var(--shadow); z-index: 200;
+}
+
+/* ---- 動き（第2段階で作り込む） ---- */
+.fx-ghost { position: fixed; pointer-events: none; border-radius: 6px; z-index: 50; }
+.fx-open { background: radial-gradient(circle, var(--accent) 0%, transparent 70%); }
+.fx-trash { background: var(--hover); border: 1px solid var(--border); }

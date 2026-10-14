@@ -1,0 +1,9 @@
+{
+  "id": "builtin.win11",
+  "name": "Win11 風",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["entries", "size", "modified", "icons"],
+  "description": "Windows 11 のエクスプローラの「詳細」表示と同じ見た目の一覧。MOD を作るときの手本にもなる"
+}

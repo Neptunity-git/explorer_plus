@@ -1,6 +1,7 @@
 // Windows の標準アイコンを PNG にして、独自の通信先 http://icon.localhost/ から配る（ADR 0003）。
 //   /ext/<拡張子>?size=16|32|48|256   … 拡張子ごとのアイコン（"folder" はフォルダのアイコン）
 //   /file?path=<パス>&size=...       … そのファイル自身のアイコン（exe・lnk・ico など、ファイルごとに絵が違うもの）
+//   /kind/launch.svg・/kind/config.svg … 独自アイコン（押しボタン・歯車。ADR 0003）
 // 一度作った PNG は覚えておく。
 
 use std::collections::HashMap;
@@ -160,8 +161,24 @@ fn plan(path: &str, query: &str) -> Option<(String, String, bool, bool, u32)> {
     None
 }
 
+const KIND_LAUNCH_SVG: &str = include_str!("../assets/kind-launch.svg");
+const KIND_CONFIG_SVG: &str = include_str!("../assets/kind-config.svg");
+
 pub fn handle(cache: &IconCache, request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
     let uri = request.uri();
+    let svg = match uri.path() {
+        "/kind/launch.svg" => Some(KIND_LAUNCH_SVG),
+        "/kind/config.svg" => Some(KIND_CONFIG_SVG),
+        _ => None,
+    };
+    if let Some(svg) = svg {
+        return Response::builder()
+            .header("Content-Type", "image/svg+xml")
+            .header("Cache-Control", "max-age=3600")
+            .header("Access-Control-Allow-Origin", "*")
+            .body(svg.as_bytes().to_vec())
+            .unwrap();
+    }
     let Some((key, target, by_ext, is_dir, size)) = plan(uri.path(), uri.query().unwrap_or("")) else {
         return Response::builder().status(StatusCode::BAD_REQUEST).body(Vec::new()).unwrap();
     };

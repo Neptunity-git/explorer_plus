@@ -38,6 +38,8 @@ pub struct RawEntry {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RawFolder {
+    /// フォルダ自身のファイルID（取れなければ ""）
+    pub id: String,
     pub path: String,
     pub name: String,
     pub parent_path: Option<String>,
@@ -199,6 +201,7 @@ pub async fn list_dir(path: String) -> Result<RawFolder, String> {
             return Err(format!("not-found: {}", path));
         }
         Ok(RawFolder {
+            id: file_id(&p).unwrap_or_default(),
             name: display_name(&p),
             parent_path: p.parent().map(|x| x.to_string_lossy().into_owned()),
             entries: read_dir(&p)?,
