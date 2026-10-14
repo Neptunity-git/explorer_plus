@@ -1,22 +1,53 @@
 ---
-id: "0010"
+id: '0010'
 title: 今の授業を決める currentClass と、2点の距離 distanceMeters
 status: todo
-depends_on: ["0009"]
+depends_on:
+- 0009
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/api/types.ts
-  - work/app/src/core/timetable.ts
+- work/app/src/api/types.ts
+- work/app/src/core/timetable.ts
 human_review: false
 expected_outputs:
-  - work/app/src/core/timetable-now.ts
-  - work/app/tests/timetable-now.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/timetable-now.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
+- work/app/src/core/timetable-now.ts
+- work/app/tests/timetable-now.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/timetable-now.test.ts"
+qwen_self_report: success
+auto_check: fail
 claude_review: n/a
-retry_count: 0
+retry_count: 1
+branch: task/0010-a1
+attempt: 1
+implementer_report: timetable-now.ts とテストを作成しました。
+last_changed_files:
+- work/app/src/core/timetable-now.ts
+- work/app/tests/timetable-now.test.ts
+last_failure: "\nup to date in 302ms\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\
+  \n ❯ tests/timetable-now.test.ts (13 tests | 1 failed) 9ms\n   ✓ distanceMeters\
+  \ (3)\n     ✓ same point is 0 1ms\n     ✓ 1 degree of longitude at equator 0ms\n\
+  \     ✓ 1 degree of latitude 0ms\n   ❯ currentClass (10)\n     ✓ Tuesday 10:45 with\
+  \ null here returns 線形代数 / p2 1ms\n     ✓ Tuesday 10:40 (start inclusive) returns\
+  \ 線形代数 0ms\n     ✓ Tuesday 12:10 (end exclusive) returns null 0ms\n     × Tuesday\
+  \ 10:35 (break) returns null 4ms\n     ✓ Monday 9:00 returns 英語 0ms\n     ✓ Wednesday\
+  \ 10:45 (no slot that day) returns null 0ms\n     ✓ overlapping period: Tuesday\
+  \ 10:45 returns first matching period (p2) 0ms\n     ✓ place condition (3)\n   \
+  \    ✓ within radius + accuracy returns 線形代数 0ms\n       ✓ outside radius + accuracy\
+  \ returns null 0ms\n       ✓ here is null returns 線形代数 (time only) 0ms\n\n Test\
+  \ Files  1 failed (1)\n      Tests  1 failed | 12 passed (13)\n   Start at  15:19:45\n\
+  \   Duration  1.08s (import 45%, transform 34%, worker 18%, tests 4%)\n\n\n⎯⎯⎯⎯⎯⎯⎯\
+  \ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/timetable-now.test.ts > currentClass >\
+  \ Tuesday 10:35 (break) returns null\nAssertionError: expected { slot: { day: 2,\
+  \ …(3) }, …(1) } to be null\n\n- Expected:\nnull\n\n+ Received:\n{\n  \"period\"\
+  : {\n    \"end\": \"11:00\",\n    \"id\": \"p2\",\n    \"label\": \"2限\",\n    \"\
+  start\": \"10:00\",\n  },\n  \"slot\": {\n    \"day\": 2,\n    \"folders\": [],\n\
+  \    \"periodId\": \"p2\",\n    \"title\": \"線形代数\",\n  },\n}\n\n ❯ tests/timetable-now.test.ts:61:17\n\
+  \     59|     const now = new Date(2026, 0, 6, 10, 35, 0);\n     60|     const res\
+  \ = currentClass(tt, now, null);\n     61|     expect(res).toBeNull();\n       |\
+  \                 ^\n     62|   });\n     63|\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\
+  \n"
 ---
 ## Instructions
 
