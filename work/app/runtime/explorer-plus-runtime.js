@@ -13,6 +13,7 @@
   const quickAccessListeners = new Set();
   const recentListeners = new Set();
   let lastFolder = null;
+  let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
   let theme = "light";
 
   // 見た目をそろえやすいよう、色などを CSS 変数で渡す（MOD は使っても使わなくてもよい）
@@ -81,6 +82,7 @@
       } else if (m.event === "tags") {
         for (const cb of tagListeners) safely(cb, m.data);
       } else if (m.event === "timetable") {
+        lastTimetable = { data: m.data };
         for (const cb of timetableListeners) safely(cb, m.data);
       } else if (m.event === "quickAccess") {
         for (const cb of quickAccessListeners) safely(cb);
@@ -88,6 +90,12 @@
         for (const cb of recentListeners) safely(cb);
       }
     }
+  });
+
+  // ブラウザ本来の右クリックのメニュー（戻る・印刷・開発者ツールなど）は出さない。文字の入力欄だけは、コピー・貼り付けのために残す。
+  // MOD が自分の右クリックの動きを付けたいときは、ep.showMenu を使う（ADR 0009 判断2）
+  window.addEventListener("contextmenu", (e) => {
+    if (!e.target.closest || !e.target.closest("input, textarea, [contenteditable='true']")) e.preventDefault();
   });
 
   // Ctrl・Alt を押しながらのキーと F5 は、本体のショートカット（タブを開く、読み直す、など）のために本体へも伝える。
@@ -180,6 +188,11 @@
     /** 時間割が変わったとき、フォルダが変わったときに呼ばれる（無ければ null） */
     onTimetable(cb) {
       timetableListeners.add(cb);
+      // 受け取り口を用意する前に届いていた分も渡す（MOD が import などで遅れて登録しても取りこぼさない。onFolder と同じ）
+      if (lastTimetable) {
+        const snapshot = lastTimetable.data;
+        queueMicrotask(() => timetableListeners.has(cb) && safely(cb, snapshot));
+      }
       return () => timetableListeners.delete(cb);
     },
     // ↓ 2026-10-14 に追加（ホーム・クイックアクセス。ADR 0014）

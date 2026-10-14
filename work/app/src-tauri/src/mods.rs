@@ -76,8 +76,19 @@ fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
     }
 }
 
+/// アプリのデータ（MOD・ビューの保存・タグなど）を置く場所。
+/// 開発中だけ、環境変数 EXPLORER_PLUS_DATA_DIR で別の場所にできる（試験で、ふだん使っているデータを書き換えないように）
+fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        if let Ok(dir) = std::env::var("EXPLORER_PLUS_DATA_DIR") {
+            return Ok(PathBuf::from(dir));
+        }
+    }
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
 fn user_mods_root(app: &AppHandle) -> PathBuf {
-    app.path().app_data_dir().unwrap_or_default().join("mods")
+    data_root(app).unwrap_or_default().join("mods")
 }
 
 fn read_manifest(dir: &Path) -> Result<(String, String, String), String> {
@@ -301,7 +312,7 @@ fn storage_file(app: &AppHandle, view_id: &str) -> Result<PathBuf, String> {
     if !valid_id(view_id) {
         return Err(format!("invalid: view id \"{}\"", view_id));
     }
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("view-storage");
+    let dir = data_root(app)?.join("view-storage");
     std::fs::create_dir_all(&dir).map_err(|e| format!("io: {}", e))?;
     Ok(dir.join(format!("{}.json", view_id)))
 }
@@ -345,7 +356,7 @@ fn app_data_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     if !APP_DATA_NAMES.contains(&name) {
         return Err(format!("invalid: app data \"{}\"", name));
     }
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("app-data");
+    let dir = data_root(app)?.join("app-data");
     std::fs::create_dir_all(&dir).map_err(|e| format!("io: {}", e))?;
     Ok(dir.join(format!("{}.json", name)))
 }

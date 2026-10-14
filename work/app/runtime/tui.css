@@ -121,3 +121,5 @@ body.tui {
 .tui-swatch.is-current, .tui-swatch:hover, .tui-swatch:focus-visible { border-color: var(--tui-fg); outline: none; }
 .tui-swatch-row { display: flex; align-items: center; gap: 1ch; padding: 6px 10px; }
 .tui-swatch-row input[type="color"] { width: 32px; height: 24px; border: 1px solid var(--tui-line); background: transparent; padding: 0; }
+/* 空のときの案内など、薄い文字の行は折り返す（横にはみ出さないように） */
+.tui-row.tui-dim { white-space: normal; }

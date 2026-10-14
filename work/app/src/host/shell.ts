@@ -172,6 +172,11 @@ export class App {
     body.append(this.sidebar, this.content);
     root.append(tabsRow, this.navRow, body, this.status);
 
+    // ブラウザ本来の右クリックのメニュー（戻る・印刷・開発者ツールなど）は出さない。アドレスバーなどの入力欄だけは残す
+    document.addEventListener("contextmenu", (e) => {
+      if (!(e.target instanceof Element && e.target.closest("input, textarea"))) e.preventDefault();
+    });
+
     document.addEventListener("keydown", (e) => {
       // F5・Ctrl+R はブラウザの再読み込みを止めて、フォルダの読み直しにする
       if (e.key === "F5" || (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "r")) {
@@ -286,8 +291,8 @@ export class App {
   // ---- 左の欄：クイックアクセス（ADR 0014 判断3）と、よく使う場所 ----
 
   private renderSidebar() {
+    // ユーザーのフォルダ（kind: home）は、上の「⌂ ホーム」（ホームの画面）と紛らわしくないよう、Win11 と同じくフォルダの名前で出す
     const labels: Record<string, string> = {
-      home: "ホーム",
       desktop: "デスクトップ",
       documents: "ドキュメント",
       downloads: "ダウンロード",
