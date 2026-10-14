@@ -1,7 +1,7 @@
 ---
 id: '0022'
 title: ドラッグで落としたときに移動かコピーかを決める dropEffect と、並べ替えの moveItem
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
@@ -13,37 +13,19 @@ expected_outputs:
 test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
   && npx tsc --noEmit && npx vitest run tests/drop.test.ts"
 qwen_self_report: success
-auto_check: fail
-claude_review: n/a
+auto_check: pass
+claude_review: pass
 retry_count: 1
-branch: task/0022-a1
-attempt: 1
-implementer_report: work/app/src/core/drop.ts と work/app/tests/drop.test.ts を新規作成しました。isSameOrInside
-  は末尾バックスラッシュ除去・ドライブ直下の正規化・大文字小文字無視で比較します。dropEffect は空配列・自分自身/自分の中へのドロップ・親フォルダが dest
-  と同じで Ctrl 無しのケースを null、Ctrl→copy、Shift→move、それ以外はドライブ比較で move/copy を返します。moveItem
-  は from/to が範囲外ならコピーをそのまま返し、範囲内なら取り出した後の配列の to 位置に挿入します。受け入れ条件の全ケースを Vitest テストで検証しています。
+branch: task/0022-a2
+attempt: 2
+implementer_report: 失敗の原因は実装の誤りです。テストの期待値 `isSameOrInside("C:\\x", "C:\\")` → true
+  は受け入れ条件に合致しており正しいです。実装の `normalizeDriveRoot` は `C:\` を `c:\` に正規化していましたが、`isSameOrInside`
+  内の `p.startsWith(f + "\\")` は `c:\x` が `c:\\` で始まるかを判定するため false になっていました。修正として、`f`
+  が `\` で終わる（ドライブ直下）場合は `p.startsWith(f)` で判定するようにしました。
 last_changed_files:
 - work/app/src/core/drop.ts
 - work/app/tests/drop.test.ts
-last_failure: "\nup to date in 323ms\n\n RUN  v5.0.4 /mnt/c/Users/neo_m/projects-NEO/.teamneo-worktrees/explorer_plus/work/app\n\
-  \n ❯ tests/drop.test.ts (24 tests | 1 failed) 17ms\n   ❯ isSameOrInside (8)\n  \
-  \   ✓ same path 1ms\n     ✓ inside 0ms\n     ✓ case insensitive 0ms\n     ✓ trailing\
-  \ slash 0ms\n     ✓ prefix not inside 0ms\n     ✓ parent not inside child 0ms\n\
-  \     ✓ different drive 0ms\n     × drive root contains 6ms\n   ✓ dropEffect (10)\n\
-  \     ✓ same drive move 1ms\n     ✓ different drive copy 0ms\n     ✓ ctrl copy 1ms\n\
-  \     ✓ shift move 0ms\n     ✓ already there null 0ms\n     ✓ already there ctrl\
-  \ copy 0ms\n     ✓ into self null 0ms\n     ✓ onto self null 0ms\n     ✓ empty sources\
-  \ null 0ms\n     ✓ drive root parent null 1ms\n   ✓ moveItem (6)\n     ✓ move 0\
-  \ to 2 1ms\n     ✓ move 3 to 0 0ms\n     ✓ same index 0ms\n     ✓ out of range from\
-  \ 0ms\n     ✓ negative to 0ms\n     ✓ does not mutate input 0ms\n\n Test Files \
-  \ 1 failed (1)\n      Tests  1 failed | 23 passed (24)\n   Start at  20:23:45\n\
-  \   Duration  1.03s (import 45%, transform 30%, worker 18%, tests 7%)\n\n\n⎯⎯⎯⎯⎯⎯⎯\
-  \ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/drop.test.ts > isSameOrInside > drive root\
-  \ contains\nAssertionError: expected false to be true // Object.is equality\n\n\
-  - Expected\n+ Received\n\n- true\n+ false\n\n ❯ tests/drop.test.ts:31:45\n     29|\
-  \   });\n     30|   it(\"drive root contains\", () => {\n     31|     expect(isSameOrInside(\"\
-  C:\\\\x\", \"C:\\\\\")).toBe(true);\n       |                                  \
-  \           ^\n     32|   });\n     33| });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n"
+review_reason: 仕様と受け入れ条件をすべて満たしている。パス正規化、親フォルダ判定、ドライブ同一判定が正確に実装。テストは24個すべて合格し、テストの期待値が明確で弱めていない。ファイル構成と指示範囲も正しい。
 ---
 ## Instructions
 
