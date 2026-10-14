@@ -1,21 +1,32 @@
 ---
-id: "0021"
+id: '0021'
 title: parseModMessage に clipboard.*・drag.* を足す
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files:
-  - work/app/src/core/protocol.ts
-  - work/app/src/api/types.ts
+- work/app/src/core/protocol.ts
+- work/app/src/api/types.ts
 human_review: false
 expected_outputs:
-  - work/app/tests/protocol-transfer.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts tests/protocol-home.test.ts tests/protocol-transfer.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
+- work/app/tests/protocol-transfer.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/protocol.test.ts tests/protocol-additions.test.ts
+  tests/protocol-home.test.ts tests/protocol-transfer.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
 retry_count: 0
+branch: task/0021-a1
+attempt: 1
+implementer_report: protocol.ts を edits で修正し、clipboard/drag 系の case を追加した。新しいテストファイル
+  protocol-transfer.test.ts も作成した。
+last_changed_files:
+- work/app/tests/protocol-transfer.test.ts
+- work/app/src/core/protocol.ts
+review_reason: 受け入れ条件をすべて満たしています。import に TRANSFER_MAX_ITEMS と DROP_TARGETS_MAX を追加、parseDropTarget/parseDropTargets
+  補助関数を実装、parseCallParams に 6 つの新しい case を追加（default:の直前）。20 個のテストケースで成功例と失敗例をすべてカバーし、既存テストも変更なく合格しています。
 ---
 ## Instructions
 

@@ -30,7 +30,6 @@ describe("validateTimetable ondemand", () => {
         id: "o1",
         title: "情報倫理",
         folders: [{ id: "a:b", path: "C:\\情報倫理", x: 1 }],
-        memo: "x",
       },
     ];
     const r = validateTimetable(raw);

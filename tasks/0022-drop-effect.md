@@ -1,20 +1,31 @@
 ---
-id: "0022"
+id: '0022'
 title: ドラッグで落としたときに移動かコピーかを決める dropEffect と、並べ替えの moveItem
-status: todo
+status: done
 depends_on: []
 gpu_need: none
 tool: code
 context_files: []
 human_review: false
 expected_outputs:
-  - work/app/src/core/drop.ts
-  - work/app/tests/drop.test.ts
-test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error && npx tsc --noEmit && npx vitest run tests/drop.test.ts"
-qwen_self_report: n/a
-auto_check: n/a
-claude_review: n/a
-retry_count: 0
+- work/app/src/core/drop.ts
+- work/app/tests/drop.test.ts
+test_command: bash -c "cd work/app && npm install --no-audit --no-fund --loglevel=error
+  && npx tsc --noEmit && npx vitest run tests/drop.test.ts"
+qwen_self_report: success
+auto_check: pass
+claude_review: pass
+retry_count: 1
+branch: task/0022-a2
+attempt: 2
+implementer_report: 失敗の原因は実装の誤りです。テストの期待値 `isSameOrInside("C:\\x", "C:\\")` → true
+  は受け入れ条件に合致しており正しいです。実装の `normalizeDriveRoot` は `C:\` を `c:\` に正規化していましたが、`isSameOrInside`
+  内の `p.startsWith(f + "\\")` は `c:\x` が `c:\\` で始まるかを判定するため false になっていました。修正として、`f`
+  が `\` で終わる（ドライブ直下）場合は `p.startsWith(f)` で判定するようにしました。
+last_changed_files:
+- work/app/src/core/drop.ts
+- work/app/tests/drop.test.ts
+review_reason: 仕様と受け入れ条件をすべて満たしている。パス正規化、親フォルダ判定、ドライブ同一判定が正確に実装。テストは24個すべて合格し、テストの期待値が明確で弱めていない。ファイル構成と指示範囲も正しい。
 ---
 ## Instructions
 
