@@ -26,10 +26,11 @@ fn wide(s: &str) -> Vec<u16> {
     std::ffi::OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
 }
 
-/// ほかのアプリがクリップボードを使っている間は開けないので、少し待って何度か試す
-fn open_clipboard() -> Result<(), String> {
+/// ほかのアプリがクリップボードを使っている間は開けないので、少し待って何度か試す。
+/// 書き込むときは owner（このアプリのウィンドウ）が要る（None で開くと、SetClipboardData が失敗する。Windows の決まり）
+fn open_clipboard(owner: Option<HWND>) -> Result<(), String> {
     for _ in 0..10 {
-        if unsafe { OpenClipboard(None) }.is_ok() {
+        if unsafe { OpenClipboard(owner) }.is_ok() {
             return Ok(());
         }
         std::thread::sleep(std::time::Duration::from_millis(30));
@@ -55,7 +56,7 @@ fn drop_effect_format() -> u32 {
 }
 
 /// ファイルの一覧を、エクスプローラと同じ形式でクリップボードに入れる
-fn set_clipboard_files(paths: &[String], cut: bool) -> Result<(), String> {
+fn set_clipboard_files(paths: &[String], cut: bool, owner: Option<HWND>) -> Result<(), String> {
     // DROPFILES の後ろに、0 で区切ったパスを並べ、最後にもう1つ 0 を置く
     let header = std::mem::size_of::<DROPFILES>();
     let mut names: Vec<u16> = Vec::new();
@@ -71,7 +72,7 @@ fn set_clipboard_files(paths: &[String], cut: bool) -> Result<(), String> {
         std::ptr::copy_nonoverlapping(names.as_ptr() as *const u8, bytes.as_mut_ptr().add(header), names.len() * 2);
     }
     let effect = (if cut { EFFECT_MOVE } else { EFFECT_COPY }).to_le_bytes();
-    open_clipboard()?;
+    open_clipboard(owner)?;
     let result = (|| unsafe {
         EmptyClipboard().map_err(|e| format!("io: {}", e))?;
         SetClipboardData(CF_HDROP.0 as u32, Some(HANDLE(global_with(&bytes)?.0))).map_err(|e| format!("io: {}", e))?;
@@ -86,7 +87,7 @@ fn set_clipboard_files(paths: &[String], cut: bool) -> Result<(), String> {
 
 /// クリップボードのファイルの一覧と、切り取りかどうか。ファイルが入っていなければ None
 fn get_clipboard_files() -> Result<Option<(Vec<String>, bool)>, String> {
-    open_clipboard()?;
+    open_clipboard(None)?;
     let result = unsafe {
         match GetClipboardData(CF_HDROP.0 as u32) {
             Err(_) => None,
@@ -172,8 +173,9 @@ fn verified_paths(items: &[EntryRef]) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub async fn clipboard_set(items: Vec<EntryRef>, cut: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || set_clipboard_files(&verified_paths(&items)?, cut))
+pub async fn clipboard_set(window: tauri::WebviewWindow, items: Vec<EntryRef>, cut: bool) -> Result<(), String> {
+    let owner = owner_hwnd(&window).map(|h| h.0 as isize);
+    tauri::async_runtime::spawn_blocking(move || set_clipboard_files(&verified_paths(&items)?, cut, owner.map(|h| HWND(h as _))))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -189,7 +191,7 @@ pub async fn clipboard_paste(window: tauri::WebviewWindow, dest: String) -> Resu
         }
         let n = shell_transfer(&paths, &dest, cut, owner.map(|h| HWND(h as _)))?;
         if cut {
-            open_clipboard()?;
+            open_clipboard(owner.map(|h| HWND(h as _)))?;
             unsafe {
                 let _ = EmptyClipboard();
                 let _ = CloseClipboard();
@@ -285,15 +287,21 @@ mod tests {
     fn clipboard_round_trip() {
         let paths = vec![r"C:\explorer-plus-test\a.txt".to_string(), r"C:\explorer-plus-test\b c.txt".to_string()];
         // 試験の前のクリップボードの中身は戻せないので、ファイルの一覧の形だけを確かめる
-        set_clipboard_files(&paths, true).unwrap();
+        // 書き込みには持ち主のウィンドウが要るので、試験ではコンソールのウィンドウを使う（無い環境では試さない）
+        let owner = unsafe { windows::Win32::System::Console::GetConsoleWindow() };
+        if owner.is_invalid() {
+            return;
+        }
+        let owner = Some(owner);
+        set_clipboard_files(&paths, true, owner).unwrap();
         let (got, cut) = get_clipboard_files().unwrap().unwrap();
         assert_eq!(got, paths);
         assert!(cut);
-        set_clipboard_files(&paths[..1], false).unwrap();
+        set_clipboard_files(&paths[..1], false, owner).unwrap();
         let (got, cut) = get_clipboard_files().unwrap().unwrap();
         assert_eq!(got, paths[..1]);
         assert!(!cut);
-        open_clipboard().unwrap();
+        open_clipboard(owner).unwrap();
         unsafe {
             let _ = EmptyClipboard();
             let _ = CloseClipboard();

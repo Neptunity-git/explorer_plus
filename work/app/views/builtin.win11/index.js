@@ -407,10 +407,13 @@ list.addEventListener("dblclick", (ev) => {
   if (tr && !editing) openAt(Number(tr.dataset.index));
 });
 
+/** キーの判定。キーの位置（code）と文字（key）のどちらでも見る（入力の方法によって code が空のことがあるため） */
+const keyIs = (ev, letter) => ev.code === `Key${letter.toUpperCase()}` || ev.key.toLowerCase() === letter;
+
 list.addEventListener("keydown", (ev) => {
   if (editing) return;
   // 貼り付けは、空のフォルダでもできるように先に見る
-  if (ev.ctrlKey && !ev.shiftKey && ev.code === "KeyV") {
+  if (ev.ctrlKey && !ev.shiftKey && keyIs(ev, "v")) {
     ev.preventDefault();
     ep.clipboard.paste().catch(report);
     return;
@@ -441,11 +444,11 @@ list.addEventListener("keydown", (ev) => {
     if (items.length > 0) ep.trash(items, { from: rectOf(current) }).catch(report);
   } else if (ev.key === "Backspace") {
     ep.navigateUp().catch(report);
-  } else if (ev.ctrlKey && !ev.shiftKey && (ev.code === "KeyC" || ev.code === "KeyX")) {
+  } else if (ev.ctrlKey && !ev.shiftKey && (keyIs(ev, "c") || keyIs(ev, "x"))) {
     // 切り取り・コピー（ADR 0015 判断1）。Windows のエクスプローラにも貼り付けられる
     ev.preventDefault();
     const items = selectedEntries();
-    if (items.length > 0) (ev.code === "KeyX" ? ep.clipboard.cut(items) : ep.clipboard.copy(items)).catch(report);
+    if (items.length > 0) (keyIs(ev, "x") ? ep.clipboard.cut(items) : ep.clipboard.copy(items)).catch(report);
   } else if (ev.key === "a" && ev.ctrlKey) {
     ev.preventDefault();
     selected = new Set(rows.map((e) => e.path));

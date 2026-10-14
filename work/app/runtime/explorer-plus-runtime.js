@@ -261,6 +261,11 @@
 
   let lastPointerId = null;
   window.addEventListener("pointerdown", (e) => (lastPointerId = e.pointerId), true);
+  // ブラウザ本来のドラッグ（画像や文字をつかんで動かす）は止める。始まると、ボタンを離したことが届かなくなり、
+  // 本体のドラッグ＆ドロップ（ep.drag）が終わらなくなる。文字の入力欄の中だけは残す
+  window.addEventListener("dragstart", (e) => {
+    if (!e.target.closest || !e.target.closest("input, textarea")) e.preventDefault();
+  });
 
   function followDrag() {
     let pending = null;
@@ -277,11 +282,14 @@
     const finish = (e, cancel) => {
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
       window.removeEventListener("keydown", onKey, true);
       if (frame) cancelAnimationFrame(frame);
       call("drag.end", { x: e.clientX || 0, y: e.clientY || 0, ctrl: !!e.ctrlKey, shift: !!e.shiftKey, cancel });
     };
     const onUp = (e) => finish(e, false);
+    // 何かの理由でポインタの追いかけが途切れたら、やめたことにする（ドラッグが終わらないままにしない）
+    const onCancel = (e) => finish(e, true);
     const onKey = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -296,6 +304,7 @@
     }
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onCancel, true);
     window.addEventListener("keydown", onKey, true);
   }
 })();

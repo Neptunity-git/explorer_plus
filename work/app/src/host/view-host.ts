@@ -90,7 +90,8 @@ export class ViewHost {
     // allow-same-origin を付けない：MOD は出どころ null になり、本体や Tauri の機能に触れられない（ADR 0007 判断6）
     this.iframe.setAttribute("sandbox", "allow-scripts");
     this.iframe.className = "view-frame";
-    this.iframe.title = view.manifest.name;
+    // title にすると WebView2 ではビューの上のどこでもツールチップが出てしまうので、読み上げ用の名前だけ付ける
+    this.iframe.setAttribute("aria-label", view.manifest.name);
     this.iframe.src = `${MOD_ORIGIN}/${view.manifest.id}/__frame.html`;
     window.addEventListener("message", this.onMessage);
     container.appendChild(this.iframe);

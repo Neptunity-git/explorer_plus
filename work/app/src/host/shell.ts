@@ -101,7 +101,11 @@ class Tab implements TabActions {
   shortcut = (key: KeyMessage) => this.app.handleKey(key);
   listViews = () => this.app.viewInfos();
   openTab = (viewId: string, path?: string, replace?: boolean) => this.app.openTabById(this, viewId, path, replace);
-  clipboardSet = (items: EntryRef[], cut: boolean) => backend.clipboardSet(items, cut);
+  clipboardSet = (items: EntryRef[], cut: boolean) =>
+    backend.clipboardSet(items, cut).catch((e) => {
+      this.app.notify(`${cut ? "切り取り" : "コピー"}できませんでした：${errorText(e)}`);
+      throw e;
+    });
   clipboardPaste = () => this.app.paste(this);
   dragStart = (items: EntryRef[], x: number, y: number, targets: WindowTarget[]) => this.app.drag.start(this.tabId, items, x, y, targets);
   dragTargets = (targets: WindowTarget[]) => this.app.drag.setTargets(this.tabId, targets);
@@ -163,9 +167,17 @@ export class App {
     if (!tab.folderView || !tab.folder) throw new BackendError({ code: "not-found", message: "no folder is open" });
     try {
       return await backend.clipboardPaste(tab.folder.path);
+    } catch (e) {
+      if (!(e instanceof BackendError && e.apiError.code === "denied")) this.notify(`貼り付けできませんでした：${errorText(e)}`);
+      throw e;
     } finally {
       this.refreshAll();
     }
+  }
+
+  /** 画面の下に短いお知らせを出す */
+  notify(message: string) {
+    this.toast(message);
   }
 
   /** ファイルの移動・コピーの後、フォルダを開いているタブをすべて読み直す（移動元と移動先のどちらも新しくなるように） */
@@ -220,6 +232,11 @@ export class App {
 
     // ブラウザ本来の右クリックのメニュー（戻る・印刷・開発者ツールなど）は出さない。アドレスバーなどの入力欄だけは残す
     document.addEventListener("contextmenu", (e) => {
+      if (!(e.target instanceof Element && e.target.closest("input, textarea"))) e.preventDefault();
+    });
+
+    // ブラウザ本来のドラッグ（画像・文字・リンクをつかんで動かす）は止める。アプリのドラッグ＆ドロップとぶつかるため
+    document.addEventListener("dragstart", (e) => {
       if (!(e.target instanceof Element && e.target.closest("input, textarea"))) e.preventDefault();
     });
 
