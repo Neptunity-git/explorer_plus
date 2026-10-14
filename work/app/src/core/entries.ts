@@ -5,7 +5,7 @@ const CONFIG_EXTS = new Set(["json", "yaml", "yml", "toml", "ini", "cfg", "conf"
 
 export function extOf(name: string): string {
   const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) return "";
+  if (dot < 0 || dot === name.length - 1) return "";
   return name.slice(dot + 1).toLowerCase();
 }
 
