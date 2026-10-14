@@ -1,0 +1,9 @@
+{
+  "id": "builtin.timetable",
+  "name": "時間割",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["timetable"],
+  "description": "曜日×時限の表。コマに授業名とフォルダを結びつけ、今の授業を光らせる。時限・曜日はすべて自分で決める。TUI 風（ADR 0010・0011）"
+}

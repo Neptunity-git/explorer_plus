@@ -124,6 +124,14 @@ function render() {
     cell.className = "name-cell";
     if (e.iconUrl) cell.appendChild(Object.assign(document.createElement("img"), { src: e.iconUrl, alt: "", loading: "lazy" }));
     cell.appendChild(Object.assign(document.createElement("span"), { className: "name-text", textContent: e.name }));
+    // 付いているタグを、色の点で出す（名前は点にマウスを乗せると出る）
+    for (const id of e.tags || []) {
+      const t = tagById.get(id);
+      if (!t) continue;
+      const dot = Object.assign(document.createElement("span"), { className: "tag-dot", title: t.name });
+      dot.style.background = t.color;
+      cell.appendChild(dot);
+    }
     name.appendChild(cell);
     Object.assign(tr.insertCell(), { className: "modified", textContent: formatDate(e.modified) });
     Object.assign(tr.insertCell(), { className: "type", textContent: typeLabel(e) });
@@ -328,6 +336,15 @@ list.addEventListener("keydown", (ev) => {
     openMenu(r ? r.x + 24 : 40, r ? r.bottom : 40);
   }
 });
+
+// タグの色と名前（Entry には id だけが入るので、ここで引けるようにしておく）
+let tagById = new Map();
+const setTags = (list) => (tagById = new Map(list.map((t) => [t.id, t])));
+ep.tags.list().then((list) => {
+  setTags(list);
+  if (folder && !editing) render();
+}, report);
+ep.onTags(setTags); // この直後に、本体が今のフォルダを送り直してくるので、そこで描き直される
 
 ep.onAction(({ action, entry }) => {
   if (action === "rename") beginRename(entry.path);

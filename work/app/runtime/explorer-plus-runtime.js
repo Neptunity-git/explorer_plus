@@ -8,6 +8,8 @@
   const folderListeners = new Set();
   const themeListeners = new Set();
   const actionListeners = new Set();
+  const tagListeners = new Set();
+  const timetableListeners = new Set();
   let lastFolder = null;
   let theme = "light";
 
@@ -74,6 +76,10 @@
         for (const cb of themeListeners) safely(cb, theme);
       } else if (m.event === "action") {
         for (const cb of actionListeners) safely(cb, m.data);
+      } else if (m.event === "tags") {
+        for (const cb of tagListeners) safely(cb, m.data);
+      } else if (m.event === "timetable") {
+        for (const cb of timetableListeners) safely(cb, m.data);
       }
     }
   });
@@ -119,7 +125,9 @@
     get theme() {
       return theme;
     },
-    open: (entry, opts) => call("open", withFrom(toRef(entry), opts)).then(() => undefined),
+    /** opts: { from?: 画面上の位置, newTab?: true（フォルダを新しいタブで開く。2026-10-14 に追加） } */
+    open: (entry, opts) =>
+      call("open", Object.assign(withFrom(toRef(entry), opts), opts && opts.newTab ? { newTab: true } : {})).then(() => undefined),
     navigate: (path) => call("navigate", { path }).then(() => undefined),
     navigateUp: () => call("navigateUp").then(() => undefined),
     trash: (entries, opts) => call("trash", withFrom({ items: entries.map(toRef) }, opts)),
@@ -141,6 +149,28 @@
     onAction(cb) {
       actionListeners.add(cb);
       return () => actionListeners.delete(cb);
+    },
+    // ↓ 2026-10-14 に追加（タグと時間割。ADR 0010。manifest の uses に "tags"・"timetable" が要る）
+    tags: Object.freeze({
+      list: () => call("tags.list"),
+      create: (name, color) => call("tags.create", { name, color }),
+      update: (id, patch) => call("tags.update", Object.assign({ id }, patch)),
+      delete: (id) => call("tags.delete", { id }).then(() => undefined),
+      assign: (entries, tagId, on) => call("tags.assign", { items: entries.map(toRef), tagId, on: on !== false }).then(() => undefined),
+      entries: (tagId) => call("tags.entries", { tagId }),
+    }),
+    onTags(cb) {
+      tagListeners.add(cb);
+      return () => tagListeners.delete(cb);
+    },
+    timetable: Object.freeze({
+      get: () => call("timetable.get"),
+      set: (timetable) => call("timetable.set", { timetable }),
+      current: () => call("timetable.current"),
+    }),
+    onTimetable(cb) {
+      timetableListeners.add(cb);
+      return () => timetableListeners.delete(cb);
     },
   });
 })();

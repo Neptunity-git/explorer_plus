@@ -20,6 +20,8 @@ import { checkPermission, checkStorageValue } from "../core/permission";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
 import { storageFor } from "./view-storage";
+import { tagService } from "./tag-service";
+import { timetableService } from "./timetable-service";
 
 export type LoadedView = { manifest: Manifest; source: "builtin" | "user" };
 
@@ -29,7 +31,8 @@ export interface TabActions {
   theme(): "light" | "dark";
   navigate(path: string): Promise<void>;
   navigateUp(): Promise<void>;
-  open(ref: EntryRef, from?: Rect): Promise<void>;
+  /** newTab：フォルダを新しいタブ（標準のビュー）で開く */
+  open(ref: EntryRef, from?: Rect, newTab?: boolean): Promise<void>;
   trash(refs: EntryRef[], from?: Rect): Promise<number>;
   rename(ref: EntryRef, newName: string): Promise<RawEntry>;
   /** 今のフォルダに「新しいフォルダー」を作る。作った後、本体がビューに action（rename）を送る */
@@ -76,11 +79,32 @@ export class ViewHost {
     this.iframe.src = `${MOD_ORIGIN}/${view.manifest.id}/__frame.html`;
     window.addEventListener("message", this.onMessage);
     container.appendChild(this.iframe);
+    // タグ・時間割が変わったら、宣言しているビューにだけ知らせる（ADR 0010）
+    if (this.uses.has("tags")) {
+      this.unsubscribe.push(
+        tagService.onChange(() => {
+          if (!this.isReady) return;
+          this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "tags", data: tagService.list() });
+          // Entry の tags も変わるので、今のフォルダを送り直す
+          this.pushFolder();
+        }),
+      );
+    }
+    if (this.uses.has("timetable")) {
+      this.unsubscribe.push(
+        timetableService.onChange(() => {
+          if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "timetable", data: timetableService.get() });
+        }),
+      );
+    }
   }
+
+  private readonly unsubscribe: (() => void)[] = [];
 
   destroy() {
     this.generation++;
     window.removeEventListener("message", this.onMessage);
+    for (const off of this.unsubscribe) off();
     this.iframe.remove();
   }
 
@@ -191,7 +215,7 @@ export class ViewHost {
         }
         return { apiVersion: this.view.manifest.apiVersion, viewId: this.view.manifest.id, tabId: this.tab.tabId, theme: this.tab.theme() };
       case "open":
-        return this.tab.open({ id: p.id, path: p.path }, this.toWindowRect(p.from));
+        return this.tab.open({ id: p.id, path: p.path }, this.toWindowRect(p.from), p.newTab === true);
       case "navigate":
         return this.tab.navigate(p.path);
       case "navigateUp":
@@ -226,6 +250,28 @@ export class ViewHost {
         const box = this.iframe.getBoundingClientRect();
         return { chosen: await this.tab.showMenu(box.x + p.x, box.y + p.y, p.items, p.extra ?? []) };
       }
+      case "tags.list":
+        return tagService.list();
+      case "tags.create":
+        return tagService.create(p.name, p.color);
+      case "tags.update":
+        // 渡されたものだけを patch に入れる（undefined のキーを作らない）
+        return tagService.update(p.id, {
+          ...(p.name !== undefined ? { name: p.name } : {}),
+          ...(p.color !== undefined ? { color: p.color } : {}),
+        });
+      case "tags.delete":
+        return tagService.delete(p.id);
+      case "tags.assign":
+        return tagService.assign(p.items, p.tagId, p.on);
+      case "tags.entries":
+        return (await tagService.entries(p.tagId)).map((r) => toEntry(r, this.uses));
+      case "timetable.get":
+        return timetableService.get();
+      case "timetable.set":
+        return timetableService.set(p.timetable);
+      case "timetable.current":
+        return timetableService.current();
     }
   }
 

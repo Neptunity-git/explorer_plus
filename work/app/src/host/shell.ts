@@ -5,6 +5,8 @@ import { uniqueName } from "../core/names";
 import { backend, BackendError, type Place, type RawEntry, type RawFolder } from "./backend";
 import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
+import { slotPicker, tagPicker } from "./pickers";
+import { timetableService } from "./timetable-service";
 import type { ModProblem } from "./mods";
 import { ViewHost, type LoadedView, type TabActions } from "./view-host";
 
@@ -71,7 +73,7 @@ class Tab implements TabActions {
   navigateUp = async () => {
     if (this.folder?.parentPath) await this.app.navigate(this, this.folder.parentPath);
   };
-  open = (ref: EntryRef, from?: Rect) => this.app.open(this, ref, from);
+  open = (ref: EntryRef, from?: Rect, newTab?: boolean) => this.app.open(this, ref, from, newTab);
   trash = (refs: EntryRef[], from?: Rect) => this.app.trash(this, refs, from);
   rename = (ref: EntryRef, newName: string) => this.app.rename(this, ref, newName);
   createFolder = () => this.app.createFolder(this);
@@ -146,7 +148,8 @@ export class App {
       void this.openTab(t.folder?.path ?? this.homePath(), v);
     };
     const navRow = el("div", "nav-row");
-    navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.address, this.viewSelect);
+    navRow.append(this.backBtn, this.forwardBtn, this.upBtn, this.refreshBtn, this.address, this.nowBtn, this.viewSelect);
+    this.startNowWatch();
 
     this.renderSidebar();
     const body = el("div", "body");
@@ -283,20 +286,63 @@ export class App {
     if (t?.folder) void this.navigate(t, t.folder.path, false);
   }
 
-  async open(tab: Tab, ref: EntryRef, from?: Rect) {
+  /** newTab：フォルダを、今のタブではなく新しいタブ（標準のビュー）で開く（タグビュー・時間割ビューから開くとき） */
+  async open(tab: Tab, ref: EntryRef, from?: Rect, newTab = false) {
+    let target = ref;
     let isDir = tab.folder?.entries.find((e) => e.path === ref.path)?.isDir;
     if (isDir === undefined) {
-      // 今のフォルダに無いもの（リンクで指しているものなど）は、ID から探す
+      // 今のフォルダに無いもの（リンクで指しているものなど）は、ID から探す。移動していれば今の場所を使う
       const [found] = await backend.resolve([ref]);
       if (!found) throw new BackendError({ code: "not-found", message: ref.path });
       isDir = found.isDir;
+      target = { id: found.id, path: found.path };
     }
     if (isDir) {
-      await this.navigate(tab, ref.path);
+      if (newTab) await this.openTab(target.path, this.defaultView());
+      else await this.navigate(tab, target.path);
       return;
     }
     playOpen(from);
-    await backend.openEntry(ref);
+    await backend.openEntry(target);
+  }
+
+  // ---- 今の授業（ADR 0010。どのビューを開いていても、アドレスバーの横に出す） ----
+
+  private readonly nowBtn = el("button", "now-class");
+  private nowFolder: EntryRef | null = null;
+
+  private async updateNow() {
+    let label = "";
+    this.nowFolder = null;
+    try {
+      const now = await timetableService.current();
+      if (now) {
+        label = `今：${now.slot.title || now.period.label}`;
+        this.nowFolder = now.slot.folders[0] ?? null;
+      }
+    } catch (e) {
+      console.warn("current class failed", e);
+    }
+    this.nowBtn.textContent = label;
+    this.nowBtn.hidden = !label;
+    this.nowBtn.title = this.nowFolder ? `${this.nowFolder.path} を新しいタブで開く` : "このコマにはフォルダが結びついていません（右クリックのメニューで結びつけられます）";
+    this.nowBtn.classList.toggle("no-folder", !this.nowFolder);
+  }
+
+  private startNowWatch() {
+    this.nowBtn.hidden = true;
+    this.nowBtn.onclick = () => {
+      if (!this.nowFolder) {
+        this.toast("このコマにはフォルダが結びついていません。フォルダを右クリックして「時間割のコマに結びつける…」を選んでください");
+        return;
+      }
+      // 今のタブは壊さず、新しいタブで開く（ADR 0009 判断3）
+      const t = this.active;
+      if (t) void this.open(t, this.nowFolder, undefined, true).catch(() => this.toast(`フォルダが見つかりません：${this.nowFolder?.path}`));
+    };
+    void this.updateNow();
+    timetableService.onChange(() => void this.updateNow());
+    setInterval(() => void this.updateNow(), 30_000);
   }
 
   async trash(tab: Tab, refs: EntryRef[], from?: Rect): Promise<number> {
@@ -345,6 +391,9 @@ export class App {
         "separator",
         { label: "名前の変更", shortcut: "F2", disabled: items.length !== 1 || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
         { label: "パスのコピー", run: copyPaths(items.map((r) => r.path)) },
+        "separator",
+        { label: "タグ…", run: run(() => tagPicker(items)) },
+        { label: "時間割のコマに結びつける…", disabled: items.length !== 1 || !raws[0]?.isDir, run: run(() => slotPicker(items[0], (m) => this.toast(m))) },
         "separator",
         { label: "ごみ箱へ送る", shortcut: "Delete", run: run(() => this.trash(tab, items)) },
       );

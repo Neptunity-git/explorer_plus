@@ -3,6 +3,7 @@
 import type { Entry, FolderSnapshot, Use } from "../api/types";
 import { extOf, iconKindFor, sortEntries } from "../core/entries";
 import { ICON_ORIGIN, type RawEntry, type RawFolder } from "./backend";
+import { tagService } from "./tag-service";
 
 /** ファイルごとにアイコンの絵が違う拡張子（Rust の icons.rs の PER_FILE_EXTS と同じ） */
 const PER_FILE_ICON_EXTS = new Set(["exe", "lnk", "ico", "url", "msi", "cur", "ani"]);
@@ -30,6 +31,7 @@ export function toEntry(raw: RawEntry, uses: ReadonlySet<Use>, folderSizes?: Rea
     e.iconKind = iconKindFor(kind, ext);
     e.iconUrl = iconUrlFor(raw, ext);
   }
+  if (uses.has("tags")) e.tags = tagService.tagsOf({ id: raw.id, path: raw.path });
   return e;
 }
 

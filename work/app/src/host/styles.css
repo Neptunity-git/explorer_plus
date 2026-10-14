@@ -107,3 +107,23 @@ button { font: inherit; color: inherit; }
 .menu-sep { height: 1px; margin: 4px 8px; background: var(--border); }
 .tab-view { font-size: 11px; color: var(--accent); white-space: nowrap; }
 .tab-view:empty { display: none; }
+
+/* ---- 今の授業・タグ・時間割の小さな画面（ADR 0010） ---- */
+.now-class {
+  height: 30px; padding: 0 12px; border: 1px solid var(--accent); border-radius: 15px; background: transparent;
+  color: var(--accent); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+}
+.now-class:hover { background: var(--hover); }
+.now-class.no-folder { border-style: dashed; opacity: 0.8; }
+.now-class[hidden] { display: none; }
+.picker { width: 420px; }
+.picker-title { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+.picker-body { display: flex; flex-direction: column; gap: 2px; max-height: 50vh; overflow: auto; margin-bottom: 12px; }
+.picker-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; text-align: left; border: 0; background: transparent; }
+.picker-row:hover { background: var(--hover); }
+.picker-list { display: flex; flex-direction: column; }
+.picker-input { margin-top: 8px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--fg); font: inherit; }
+.picker-input:focus { outline: none; border-color: var(--accent); }
+.picker-message { min-height: 1.4em; color: #c42b1c; font-size: 12px; }
+.picker-empty { color: var(--muted); padding: 8px; }
+.tag-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }

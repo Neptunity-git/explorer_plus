@@ -54,6 +54,9 @@ pub fn run() {
             mods::user_mods_dir,
             mods::view_storage_load,
             mods::view_storage_save,
+            mods::app_data_load,
+            mods::app_data_save,
+            fsops::file_ids,
             geo::get_location,
             dev_start_dir,
         ])

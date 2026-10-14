@@ -174,7 +174,7 @@ pub fn frame_csp(origin: &str, id: &str) -> String {
     format!(
         "default-src 'none'; \
          script-src {base} {runtime} 'wasm-unsafe-eval'; \
-         style-src {base} 'unsafe-inline'; \
+         style-src {base} {runtime} 'unsafe-inline'; \
          img-src {base} {icons} data: blob:; \
          font-src {base} data:; \
          connect-src {base}; \
@@ -306,28 +306,58 @@ fn storage_file(app: &AppHandle, view_id: &str) -> Result<PathBuf, String> {
     Ok(dir.join(format!("{}.json", view_id)))
 }
 
-/// そのビューの保存内容（JSON の文字列）。まだ無ければ None
-#[tauri::command]
-pub fn view_storage_load(app: AppHandle, view_id: String) -> Result<Option<String>, String> {
-    let p = storage_file(&app, &view_id)?;
-    match std::fs::read_to_string(&p) {
+fn load_json(p: &Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(p) {
         Ok(s) => Ok(Some(s)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("io: {}", e)),
     }
 }
 
-/// 保存内容をまるごと書き換える。途中で落ちても壊れないよう、別のファイルに書いてから置き換える
-#[tauri::command]
-pub fn view_storage_save(app: AppHandle, view_id: String, json: String) -> Result<(), String> {
+/// まるごと書き換える。途中で落ちても壊れないよう、別のファイルに書いてから置き換える
+fn save_json(p: &Path, json: &str) -> Result<(), String> {
     if json.len() > STORAGE_MAX_BYTES {
-        return Err("too-large: view storage exceeds 32MB".into());
+        return Err("too-large: storage exceeds 32MB".into());
     }
-    serde_json::from_str::<serde_json::Value>(&json).map_err(|e| format!("invalid: {}", e))?;
-    let p = storage_file(&app, &view_id)?;
+    serde_json::from_str::<serde_json::Value>(json).map_err(|e| format!("invalid: {}", e))?;
     let tmp = p.with_extension("json.tmp");
     std::fs::write(&tmp, json).map_err(|e| format!("io: {}", e))?;
-    std::fs::rename(&tmp, &p).map_err(|e| format!("io: {}", e))
+    std::fs::rename(&tmp, p).map_err(|e| format!("io: {}", e))
+}
+
+/// そのビューの保存内容（JSON の文字列）。まだ無ければ None
+#[tauri::command]
+pub fn view_storage_load(app: AppHandle, view_id: String) -> Result<Option<String>, String> {
+    load_json(&storage_file(&app, &view_id)?)
+}
+
+#[tauri::command]
+pub fn view_storage_save(app: AppHandle, view_id: String, json: String) -> Result<(), String> {
+    save_json(&storage_file(&app, &view_id)?, &json)
+}
+
+// ---- アプリ全体のデータ（ADR 0010：タグと時間割） ----
+
+/// 保存してよい名前。ここに無い名前は断る（ファイル名に使うので）
+const APP_DATA_NAMES: &[&str] = &["tags", "timetable"];
+
+fn app_data_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    if !APP_DATA_NAMES.contains(&name) {
+        return Err(format!("invalid: app data \"{}\"", name));
+    }
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("app-data");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("io: {}", e))?;
+    Ok(dir.join(format!("{}.json", name)))
+}
+
+#[tauri::command]
+pub fn app_data_load(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    load_json(&app_data_file(&app, &name)?)
+}
+
+#[tauri::command]
+pub fn app_data_save(app: AppHandle, name: String, json: String) -> Result<(), String> {
+    save_json(&app_data_file(&app, &name)?, &json)
 }
 
 #[cfg(test)]
@@ -378,6 +408,8 @@ mod tests {
         assert!(csp.starts_with("default-src 'none';"));
         assert!(csp.contains("script-src http://mod.localhost/neo.view/ http://mod.localhost/__runtime/ "));
         assert!(csp.contains("connect-src http://mod.localhost/neo.view/;"));
+        // TUI 風の部品（__runtime/tui.css）を読み込めるように
+        assert!(csp.contains("style-src http://mod.localhost/neo.view/ http://mod.localhost/__runtime/ 'unsafe-inline';"));
         assert!(csp.contains("img-src http://mod.localhost/neo.view/ http://icon.localhost data: blob:;"));
         assert!(!csp.contains("ipc.localhost"));
         assert!(!csp.contains("*"));

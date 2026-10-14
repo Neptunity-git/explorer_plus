@@ -54,6 +54,9 @@ export const backend = {
   viewStorageSave: (viewId: string, json: string) => call<void>("view_storage_save", { viewId, json }),
   getLocation: () => call<Location>("get_location"),
   devStartDir: () => call<string | null>("dev_start_dir"),
+  appDataLoad: (name: "tags" | "timetable") => call<string | null>("app_data_load", { name }),
+  appDataSave: (name: "tags" | "timetable", json: string) => call<void>("app_data_save", { name, json }),
+  fileIds: (paths: string[]) => call<string[]>("file_ids", { paths }),
 };
 
 /** Windows では、Tauri の独自の通信先は http://<名前>.localhost になる */

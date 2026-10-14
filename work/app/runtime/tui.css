@@ -1,0 +1,96 @@
+/*
+ * explorer_plus の TUI 風の見た目の部品（ADR 0011）。MOD のページで
+ *   <link rel="stylesheet" href="/__runtime/tui.css">
+ * と読み込むだけで、標準ビュー（タグ・時間割など）と同じ見た目になる。使うかどうかは MOD の自由。
+ *
+ * 部品：
+ *   body.tui             等幅の文字・色・余白をそろえる
+ *   .tui-box             罫線の箱。中の .tui-box-title は上の罫線に重ねて出る（┌─ 題名 ─┐ の形）
+ *   .tui-row             一覧の1行。.is-selected で色を反転、.is-cursor で行頭に ▶
+ *   .tui-dim / .tui-accent / .tui-warn   文字の色
+ *   .tui-key             キーの表示（[Enter] の形）
+ *   .tui-footer          画面の下に固定するキーの案内
+ *   .tui-input           入力欄
+ *   .tui-dot             色の付いた ● （style="--dot: #e5484d" で色を渡す）
+ *   .tui-grid            罫線の表（時間割など）
+ */
+:root {
+  --tui-font: "Cascadia Mono", "BIZ UDGothic", "MS Gothic", "Consolas", monospace;
+  --tui-bg: #f7f7f2;
+  --tui-fg: #1f2328;
+  --tui-dim: #6e7781;
+  --tui-line: #b8bcc2;
+  --tui-accent: #0b6bcb;
+  --tui-warn: #c42b1c;
+  --tui-sel-bg: #1f2328;
+  --tui-sel-fg: #f7f7f2;
+  --tui-now: #f0b400;
+}
+:root[data-theme="dark"] {
+  --tui-bg: #101114;
+  --tui-fg: #d6d7d9;
+  --tui-dim: #7d8590;
+  --tui-line: #3b3f46;
+  --tui-accent: #5cc8ff;
+  --tui-warn: #ff6b5b;
+  --tui-sel-bg: #d6d7d9;
+  --tui-sel-fg: #101114;
+  --tui-now: #ffd34d;
+}
+
+body.tui {
+  margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--tui-bg); color: var(--tui-fg); font: 13px/1.6 var(--tui-font);
+  user-select: none; -webkit-font-smoothing: antialiased;
+}
+.tui ::selection { background: var(--tui-accent); color: var(--tui-bg); }
+.tui ::-webkit-scrollbar { width: 8px; height: 8px; }
+.tui ::-webkit-scrollbar-thumb { background: var(--tui-line); }
+.tui ::-webkit-scrollbar-track { background: transparent; }
+
+.tui-main { flex: 1; min-height: 0; display: flex; gap: 8px; padding: 10px 10px 4px; }
+
+.tui-box { position: relative; min-width: 0; min-height: 0; border: 1px solid var(--tui-line); padding: 10px 0 4px; display: flex; flex-direction: column; }
+.tui-box:focus-within { border-color: var(--tui-accent); }
+.tui-box-title {
+  position: absolute; top: -0.8em; left: 10px; padding: 0 6px; background: var(--tui-bg); color: var(--tui-dim);
+  white-space: nowrap;
+}
+.tui-box:focus-within > .tui-box-title { color: var(--tui-accent); }
+.tui-scroll { flex: 1; min-height: 0; overflow: auto; outline: none; }
+
+.tui-row { display: flex; align-items: center; gap: 1ch; padding: 0 1ch 0 2.5ch; white-space: nowrap; position: relative; }
+.tui-row > .tui-grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tui-row.is-cursor::before { content: "▶"; position: absolute; left: 0.6ch; color: var(--tui-accent); }
+.tui-row.is-selected { background: var(--tui-sel-bg); color: var(--tui-sel-fg); }
+.tui-row.is-selected .tui-dim { color: inherit; opacity: 0.7; }
+
+.tui-dim { color: var(--tui-dim); }
+.tui-accent { color: var(--tui-accent); }
+.tui-warn { color: var(--tui-warn); }
+.tui-key { color: var(--tui-accent); }
+.tui-key::before { content: "["; color: var(--tui-dim); }
+.tui-key::after { content: "]"; color: var(--tui-dim); }
+
+.tui-footer {
+  flex: none; display: flex; flex-wrap: wrap; gap: 0 2ch; padding: 2px 10px 6px; color: var(--tui-dim);
+  border-top: 1px dashed var(--tui-line);
+}
+.tui-footer .tui-key { margin-right: 0.5ch; }
+
+.tui-input {
+  font: inherit; color: var(--tui-fg); background: transparent; border: 0; border-bottom: 1px solid var(--tui-accent);
+  outline: none; padding: 0 0.5ch; min-width: 0; user-select: text;
+}
+
+.tui-dot { color: var(--dot, var(--tui-fg)); }
+.tui-dot::before { content: "●"; }
+
+.tui-grid { border-collapse: collapse; table-layout: fixed; }
+.tui-grid th, .tui-grid td { border: 1px solid var(--tui-line); padding: 2px 1ch; text-align: left; vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tui-grid th { color: var(--tui-dim); font-weight: normal; }
+.tui-grid td.is-cursor { outline: 2px solid var(--tui-accent); outline-offset: -2px; }
+.tui-grid td.is-now { background: color-mix(in srgb, var(--tui-now) 22%, transparent); }
+
+.tui-message { padding: 2px 10px; min-height: 1.6em; color: var(--tui-dim); }
+.tui-message.is-error { color: var(--tui-warn); }

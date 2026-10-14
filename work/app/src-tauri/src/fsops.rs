@@ -314,6 +314,14 @@ pub fn resolve_one(r: &EntryRef) -> Option<RawEntry> {
     entry_at(Path::new(&now), r.id.clone())
 }
 
+/// パスの一覧から、それぞれのファイルID を引く（取れなければ ""）。時間割にフォルダを結びつけるときに使う
+#[tauri::command]
+pub async fn file_ids(paths: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || paths.iter().map(|p| file_id(Path::new(p)).unwrap_or_default()).collect())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn resolve(refs: Vec<EntryRef>) -> Result<Vec<Option<RawEntry>>, String> {
     tauri::async_runtime::spawn_blocking(move || refs.iter().map(resolve_one).collect())

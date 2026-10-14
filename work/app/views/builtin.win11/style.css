@@ -32,3 +32,5 @@ input.rename {
   background: var(--ep-bg); color: var(--ep-fg); border: 1px solid #c42b1c; border-radius: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 .empty { padding: 40px; text-align: center; color: var(--ep-muted); }
+/* タグの色の点 */
+.tag-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
