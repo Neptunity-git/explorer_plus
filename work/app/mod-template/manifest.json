@@ -1,0 +1,10 @@
+{
+  "id": "my.view",
+  "name": "わたしのビュー",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["entries", "size", "icons"],
+  "location": "folder",
+  "description": "ファイルを大きい順に並べて、大きさを棒で見せるビュー（ひな形）"
+}

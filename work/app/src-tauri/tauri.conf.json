@@ -40,7 +40,9 @@
     ],
     "resources": {
       "../views/": "views/",
-      "../runtime/": "runtime/"
+      "../runtime/": "runtime/",
+      "../mod-template/": "mod-template/",
+      "../mod-docs/": "mod-docs/"
     }
   }
 }

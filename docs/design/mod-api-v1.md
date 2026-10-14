@@ -271,3 +271,27 @@ ep.onTimetable((tt) => { /* 時間割が変わった */ });
 
 - 足した知らせ：`dragTargets`（data は null）。ドラッグ中にこのビューのタブに切り替わったとき
 - ランタイムには `ep.clipboard.copy(entries)`・`cut(entries)`・`paste()`、`ep.drag.start({ items, x, y, targets })`・`ep.drag.targets(targets)`・`ep.onDragTargets(cb)` を足す
+
+## 2026-10-15 の追加（ADR 0020）
+
+### MOD の管理（標準のビューだけ）
+
+id が `builtin.` で始まる標準のビュー（ホーム）だけが使える。ほかの MOD が呼ぶと `denied`。MOD 作者向けの説明書には載せない。
+
+| メソッド | 引数 | 返り値 |
+|---|---|---|
+| `mods.list` | なし | `{ mods: [{ id, name, version, description?, source: "builtin" \| "user" \| "dev", uses, location, dir }], problems: [{ dir, errors }] }` |
+| `mods.install` | なし | `{ id: string \| null }`（本体が zip を選ぶ画面と確かめの画面を出す。やめたら null） |
+| `mods.remove` | `{ id }` | なし（本体が確かめる。やめたら `denied`） |
+| `mods.addDev` | なし | `{ dir: string \| null }` |
+| `mods.createDev` | `{ name }`（1〜40文字） | `{ dir: string \| null }` |
+| `mods.pack` | `{ id }`（開発中の MOD） | `{ path }` |
+| `mods.openFolder` | `{ id }` | なし |
+| `mods.openDocs`・`mods.openDevtools` | なし | なし |
+
+知らせ `mods`（data は null）：入っている MOD が変わった（入れた・外した・開発中の MOD が保存された）。標準のビューだけに届く。
+
+### ほかの変更
+
+- 開発中の MOD（`source: "dev"`）：本体に登録した任意の場所のフォルダ。保存すると、その MOD を使っているタブのビューを作り直す
+- 作者向けの説明書：`work/app/mod-docs/index.html`（アプリに同梱）

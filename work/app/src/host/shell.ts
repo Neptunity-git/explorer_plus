@@ -12,6 +12,8 @@ import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
 import { slotPicker, tagPicker } from "./pickers";
+import { ModManager } from "./mod-manager";
+import { loadViews } from "./mods";
 import { quickAccess, recentItems } from "./ref-list-service";
 import { timetableService } from "./timetable-service";
 import { ViewHost, type LoadedView, type TabActions } from "./view-host";
@@ -112,6 +114,9 @@ class Tab implements TabActions {
   showMenu = (x: number, y: number, items: EntryRef[], extra: MenuItem[]) => this.app.showMenu(this, x, y, items, extra);
   shortcut = (key: KeyMessage) => this.app.handleKey(key);
   listViews = () => this.app.viewInfos();
+  get mods() {
+    return this.app.mods;
+  }
   openTab = (viewId: string, path?: string, replace?: boolean) => this.app.openTabById(this, viewId, path, replace);
   clipboardSet = (items: EntryRef[], cut: boolean) =>
     backend.clipboardSet(items, cut).catch((e) => {
@@ -143,12 +148,45 @@ export class App {
   private readonly refreshBtn = el("button", "nav-btn", "⟳");
 
   constructor(
-    private readonly views: LoadedView[],
-    private readonly problems: ModProblem[],
+    private views: LoadedView[],
+    private problems: ModProblem[],
     private readonly places: Place[],
     /** 最初に開くフォルダ（開発中に、試験用のフォルダで起動するため。ふだんは null） */
     private readonly startDir: string | null = null,
   ) {}
+
+  // ---- MOD の管理（ADR 0020） ----
+
+  readonly mods = new ModManager({
+    views: () => this.views,
+    problems: () => this.problems,
+    reloadViews: (dirs) => this.reloadViews(dirs ?? []),
+    openFolder: (path) => void this.openTab(this.defaultView(), path),
+    toast: (m) => this.toast(m),
+  });
+
+  /**
+   * MOD の一覧を読み直す。なくなった MOD のタブは標準のビューにし、reloadDirs のフォルダの MOD（保存された開発中の MOD）や、
+   * 版の変わった MOD を使っているタブは、ビューを作り直す（フォルダと履歴はそのまま）
+   */
+  private async reloadViews(reloadDirs: string[]) {
+    const { views, problems } = await loadViews();
+    if (views.length === 0) return;
+    this.views = views;
+    this.problems = problems;
+    const reload = new Set(reloadDirs.map(folderKey));
+    for (const tab of [...this.tabs]) {
+      const next = views.find((v) => v.manifest.id === tab.view.manifest.id);
+      if (!next) {
+        // 外した MOD のタブは、フォルダを見るビューなら標準のビュー、そうでなければホームにする
+        const home = views.find((v) => v.manifest.id === HOME_VIEW_ID);
+        await this.changeView(tab, isFolderView(tab.view) || !home ? this.defaultView() : home, true);
+      }
+      else if (reload.has(folderKey(next.dir)) || next.dir !== tab.view.dir || next.manifest.version !== tab.view.manifest.version) {
+        await this.changeView(tab, next, true);
+      }
+    }
+  }
 
   // ---- ドラッグ＆ドロップ（ADR 0015 判断2） ----
 
@@ -281,6 +319,8 @@ export class App {
     document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
     document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
     void listen<string>("folder-changed", (e) => this.onFolderChanged(e.payload));
+    // 開発中の MOD のフォルダが保存されたら、その MOD を読み直す（ホットリロード。ADR 0020）
+    void listen<string>("mod-changed", (e) => this.mods.devChanged(e.payload));
 
     // 普通のエクスプローラなど、アプリの外からファイルをドラッグしてきたとき（ADR 0016）。
     // 位置は画面の実際の点の数で来るので、画面の倍率で割って、本体の画面の座標にする
@@ -289,9 +329,20 @@ export class App {
       if (p.type === "leave") return this.drag.cancel();
       const x = p.position.x / window.devicePixelRatio;
       const y = p.position.y / window.devicePixelRatio;
-      if (p.type === "enter") this.active && this.drag.startExternal(this.active.tabId, p.paths, x, y);
-      else if (p.type === "over") this.drag.move(x, y, false, false);
-      else if (p.type === "drop") void this.drag.end(x, y, false, false, false);
+      // ホームなど、フォルダと関係ないタブに MOD の zip を落としたら、MOD を入れる（ADR 0020）
+      const zips = p.type === "enter" || p.type === "drop" ? p.paths.every((x) => /\.zip$/i.test(x)) : false;
+      const modDrop = zips && this.active !== null && !this.active.folderView;
+      if (p.type === "enter") {
+        if (!modDrop) this.active && this.drag.startExternal(this.active.tabId, p.paths, x, y);
+      } else if (p.type === "over") this.drag.move(x, y, false, false);
+      else if (p.type === "drop") {
+        if (modDrop) {
+          this.drag.cancel();
+          void (async () => {
+            for (const z of p.paths) await this.mods.installZip(z);
+          })();
+        } else void this.drag.end(x, y, false, false, false);
+      }
     });
 
     document.addEventListener("keydown", (e) => this.drag.active && e.key === "Escape" && void this.drag.end(0, 0, false, false, true));
@@ -536,11 +587,14 @@ export class App {
   }
 
   /** タブのビューを変える。フォルダと履歴（戻る・進む）はそのまま引き継ぐ */
-  private async changeView(tab: Tab, view: LoadedView) {
-    if (view === tab.view) return;
+  /** force：同じビューでも作り直す（MOD を読み直すとき）。表示していないタブのビューを変えても、表示中のタブはそのまま */
+  private async changeView(tab: Tab, view: LoadedView, force = false) {
+    if (!force && view.manifest.id === tab.view.manifest.id) return;
     const path = isFolderView(view) ? (tab.folder?.path ?? this.homePath()) : undefined;
     const i = this.tabs.indexOf(tab);
+    const shown = this.active;
     const next = await this.openTab(view, path, i < 0 ? undefined : i);
+    if (shown && shown !== tab) this.activate(shown, false);
     next.back = tab.back;
     next.forward = tab.forward;
     this.tabs = this.tabs.filter((t) => t !== tab);

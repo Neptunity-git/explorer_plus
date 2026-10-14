@@ -1,0 +1,5 @@
+/* このビューの見た目。/__runtime/tui.css の色（--tui-fg・--tui-accent など）を使うと、明るい・暗い画面に自動で合う */
+.bar-cell { flex: 0 0 30%; height: 0.8em; background: color-mix(in srgb, var(--tui-line) 40%, transparent); }
+.bar { height: 100%; background: var(--tui-accent); }
+.icon { width: 16px; height: 16px; flex: none; }
+.size { width: 9ch; text-align: right; color: var(--tui-dim); }

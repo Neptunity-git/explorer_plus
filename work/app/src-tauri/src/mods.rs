@@ -32,7 +32,7 @@ struct ModDir {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModSource {
-    /// "builtin"（標準のビュー）か "user"（ユーザーが入れた MOD）
+    /// "builtin"（標準のビュー）・"user"（ユーザーが入れた MOD）・"dev"（開発中の MOD のフォルダ。ADR 0020）
     pub source: String,
     pub dir: String,
     /// manifest.json の中身（文字列のまま。検査は TypeScript で行う）
@@ -67,7 +67,7 @@ fn valid_entry(entry: &str) -> bool {
     entry.ends_with(".js") && safe_segments(entry).is_some()
 }
 
-fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
+pub(crate) fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
     if cfg!(debug_assertions) {
         // 開発中は、ソースのフォルダを直接見る（保存すればすぐ反映される）
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join(name)
@@ -78,7 +78,7 @@ fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
 
 /// アプリのデータ（MOD・ビューの保存・タグなど）を置く場所。
 /// 開発中だけ、環境変数 EXPLORER_PLUS_DATA_DIR で別の場所にできる（試験で、ふだん使っているデータを書き換えないように）
-fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
         if let Ok(dir) = std::env::var("EXPLORER_PLUS_DATA_DIR") {
             return Ok(PathBuf::from(dir));
@@ -87,11 +87,11 @@ fn data_root(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| e.to_string())
 }
 
-fn user_mods_root(app: &AppHandle) -> PathBuf {
+pub(crate) fn user_mods_root(app: &AppHandle) -> PathBuf {
     data_root(app).unwrap_or_default().join("mods")
 }
 
-fn read_manifest(dir: &Path) -> Result<(String, String, String), String> {
+pub(crate) fn read_manifest(dir: &Path) -> Result<(String, String, String), String> {
     let text = std::fs::read_to_string(dir.join("manifest.json")).map_err(|e| format!("manifest.json: {}", e))?;
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("manifest.json: {}", e))?;
     let id = v.get("id").and_then(|x| x.as_str()).unwrap_or_default().to_string();
@@ -103,6 +103,11 @@ fn scan(root: &Path, source: &str, registry: &mut HashMap<String, ModDir>, out: 
     let Ok(items) = std::fs::read_dir(root) else { return };
     let mut dirs: Vec<PathBuf> = items.filter_map(|i| i.ok()).map(|i| i.path()).filter(|p| p.is_dir()).collect();
     dirs.sort();
+    scan_dirs(dirs, source, registry, out);
+}
+
+/// MOD のフォルダを1つずつ調べて、配信の一覧に入れる
+fn scan_dirs(dirs: Vec<PathBuf>, source: &str, registry: &mut HashMap<String, ModDir>, out: &mut Vec<ModSource>) {
     for dir in dirs {
         let mut src = ModSource {
             source: source.into(),
@@ -118,7 +123,7 @@ fn scan(root: &Path, source: &str, registry: &mut HashMap<String, ModDir>, out: 
                     src.error = Some(format!("id: invalid \"{}\"", id));
                 } else if !valid_entry(&entry) {
                     src.error = Some(format!("entry: invalid \"{}\"", entry));
-                } else if (source == "user") == id.starts_with("builtin.") {
+                } else if (source != "builtin") == id.starts_with("builtin.") {
                     src.error = Some(format!("id: \"builtin.\" is only for built-in views ({})", id));
                 } else if registry.contains_key(&id) {
                     src.error = Some(format!("id: \"{}\" is already used by another MOD", id));
@@ -139,6 +144,10 @@ pub fn list_mods(app: AppHandle, registry: tauri::State<'_, ModRegistry>) -> Vec
     let mut map = HashMap::new();
     let mut out = Vec::new();
     scan(&builtin_root(&app, "views"), "builtin", &mut map, &mut out);
+    // 開発中の MOD（ADR 0020）は、入れた MOD より先に調べる（同じ id なら、開発中のものを使う）
+    let dev = crate::modinstall::dev_dirs(&app);
+    crate::modinstall::watch_dev(&app, &dev);
+    scan_dirs(dev, "dev", &mut map, &mut out);
     scan(&user_root, "user", &mut map, &mut out);
     *registry.0.write().unwrap() = map;
     out

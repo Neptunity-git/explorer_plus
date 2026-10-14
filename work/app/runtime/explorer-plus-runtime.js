@@ -12,6 +12,7 @@
   const timetableListeners = new Set();
   const quickAccessListeners = new Set();
   const recentListeners = new Set();
+  const modsListeners = new Set();
   const dragTargetListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
@@ -91,6 +92,8 @@
         for (const cb of recentListeners) safely(cb);
       } else if (m.event === "dragTargets") {
         for (const cb of dragTargetListeners) safely(cb);
+      } else if (m.event === "mods") {
+        for (const cb of modsListeners) safely(cb);
       }
     }
   });
@@ -219,6 +222,22 @@
     recent: Object.freeze({
       list: () => call("recent.list"),
     }),
+    // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（ホーム）だけが使える。ほかの MOD が呼ぶと code "denied" で失敗する
+    mods: Object.freeze({
+      list: () => call("mods.list"),
+      install: () => call("mods.install").then((r) => r.id),
+      remove: (id) => call("mods.remove", { id }).then(() => undefined),
+      addDev: () => call("mods.addDev").then((r) => r.dir),
+      createDev: (name) => call("mods.createDev", { name }).then((r) => r.dir),
+      pack: (id) => call("mods.pack", { id }).then((r) => r.path),
+      openFolder: (id) => call("mods.openFolder", { id }).then(() => undefined),
+      openDocs: () => call("mods.openDocs").then(() => undefined),
+      openDevtools: () => call("mods.openDevtools").then(() => undefined),
+    }),
+    onMods(cb) {
+      modsListeners.add(cb);
+      return () => modsListeners.delete(cb);
+    },
     onRecent(cb) {
       recentListeners.add(cb);
       return () => recentListeners.delete(cb);

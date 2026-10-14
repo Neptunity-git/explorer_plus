@@ -218,7 +218,17 @@ export type CallMethod =
   | "drag.start"
   | "drag.targets"
   | "drag.move"
-  | "drag.end";
+  | "drag.end"
+  // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（id が builtin. で始まる）だけが使える
+  | "mods.list"
+  | "mods.install"
+  | "mods.remove"
+  | "mods.addDev"
+  | "mods.createDev"
+  | "mods.pack"
+  | "mods.openFolder"
+  | "mods.openDocs"
+  | "mods.openDevtools";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -270,6 +280,16 @@ export type CallParams = {
   "drag.move": { x: number; y: number; ctrl: boolean; shift: boolean };
   /** ボタンを離した（cancel は Esc でやめたとき）。ランタイムが自動で送る */
   "drag.end": { x: number; y: number; ctrl: boolean; shift: boolean; cancel: boolean };
+  "mods.list": Record<string, never>;
+  /** 本体が zip を選ぶ画面と、確かめの画面を出す */
+  "mods.install": Record<string, never>;
+  "mods.remove": { id: string };
+  "mods.addDev": Record<string, never>;
+  "mods.createDev": { name: string };
+  "mods.pack": { id: string };
+  "mods.openFolder": { id: string };
+  "mods.openDocs": Record<string, never>;
+  "mods.openDevtools": Record<string, never>;
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -311,6 +331,15 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "drag.targets": null,
   "drag.move": null,
   "drag.end": null,
+  "mods.list": null,
+  "mods.install": null,
+  "mods.remove": null,
+  "mods.addDev": null,
+  "mods.createDev": null,
+  "mods.pack": null,
+  "mods.openFolder": null,
+  "mods.openDocs": null,
+  "mods.openDevtools": null,
 };
 
 export type CallMessage = {
@@ -338,7 +367,9 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "quickAccess"; data: null }
   | { ep: 1; kind: "event"; event: "recent"; data: null }
   // ドラッグ中に、このビューのタブに切り替わった。drag.targets で落とせる場所を知らせてほしい（ADR 0015 判断2）
-  | { ep: 1; kind: "event"; event: "dragTargets"; data: null };
+  | { ep: 1; kind: "event"; event: "dragTargets"; data: null }
+  // 入っている MOD が変わった（入れた・外した・開発中の MOD を保存した）。標準のビューだけに届く（ADR 0020）
+  | { ep: 1; kind: "event"; event: "mods"; data: null };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 

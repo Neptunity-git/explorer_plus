@@ -304,6 +304,27 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { x, y, ctrl, shift, cancel } };
     }
 
+    case "mods.list":
+    case "mods.install":
+    case "mods.addDev":
+    case "mods.openDocs":
+    case "mods.openDevtools":
+      return { ok: true, params: {} };
+
+    case "mods.remove":
+    case "mods.pack":
+    case "mods.openFolder": {
+      const { id } = params;
+      if (!isNonEmptyString(id) || id.length > 64) return { ok: false };
+      return { ok: true, params: { id } };
+    }
+
+    case "mods.createDev": {
+      const { name } = params;
+      if (!isNonEmptyString(name) || name.length > 40) return { ok: false };
+      return { ok: true, params: { name } };
+    }
+
     default:
       return { ok: false };
   }

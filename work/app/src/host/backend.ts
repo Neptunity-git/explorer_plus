@@ -14,7 +14,7 @@ export type RawEntry = {
 
 export type RawFolder = { id: string; path: string; name: string; parentPath: string | null; entries: RawEntry[] };
 export type Place = { kind: string; name: string; path: string };
-export type ModSource = { source: "builtin" | "user"; dir: string; manifestText: string | null; error: string | null };
+export type ModSource = { source: "builtin" | "user" | "dev"; dir: string; manifestText: string | null; error: string | null };
 export type Location = { latitude: number; longitude: number; accuracy: number };
 /** アプリ全体のデータの名前（Rust の mods.rs の APP_DATA_NAMES と同じ） */
 export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent";
@@ -53,6 +53,18 @@ export const backend = {
   createFolder: (parent: string, name: string) => call<RawEntry>("create_folder", { parent, name }),
   listPlaces: () => call<Place[]>("list_places"),
   listMods: () => call<ModSource[]>("list_mods"),
+  // ↓ MOD を入れる・外す・作る（ADR 0020）
+  pickModZip: () => call<string | null>("pick_mod_zip"),
+  modInspect: (zipPath: string) =>
+    call<{ staging: string; manifestText: string; files: number; bytes: number; installedVersion: string | null }>("mod_inspect", { zipPath }),
+  modInstall: (staging: string) => call<string>("mod_install", { staging }),
+  modDiscard: (staging: string) => call<void>("mod_discard", { staging }),
+  modRemove: (id: string) => call<void>("mod_remove", { id }),
+  devModAdd: () => call<string | null>("dev_mod_add"),
+  devModCreate: (name: string) => call<string | null>("dev_mod_create", { name }),
+  modPack: (id: string) => call<string>("mod_pack", { id }),
+  openModDocs: () => call<void>("open_mod_docs"),
+  openDevtools: () => call<void>("open_devtools"),
   userModsDir: () => call<string>("user_mods_dir"),
   viewStorageLoad: (viewId: string) => call<string | null>("view_storage_load", { viewId }),
   viewStorageSave: (viewId: string, json: string) => call<void>("view_storage_save", { viewId, json }),

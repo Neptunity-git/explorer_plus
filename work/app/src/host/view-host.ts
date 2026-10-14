@@ -18,6 +18,7 @@ import { sortEntries } from "../core/entries";
 import { parseModMessage } from "../core/protocol";
 import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
+import { onModsChange, type ModManager } from "./mod-manager";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
 import { storageFor } from "./view-storage";
@@ -26,7 +27,8 @@ import { timetableService } from "./timetable-service";
 import { quickAccess, recentItems } from "./ref-list-service";
 import type { WindowTarget } from "./drag";
 
-export type LoadedView = { manifest: Manifest; source: "builtin" | "user" };
+/** source：標準のビュー・入れた MOD・開発中の MOD（ADR 0020）。dir は MOD のフォルダ */
+export type LoadedView = { manifest: Manifest; source: "builtin" | "user" | "dev"; dir: string };
 
 /** ビューが本体（タブ）に頼めること。画面上の位置は、本体の画面の座標に直してから渡す */
 export interface TabActions {
@@ -55,6 +57,8 @@ export interface TabActions {
   dragTargets(targets: WindowTarget[]): void;
   dragMove(x: number, y: number, ctrl: boolean, shift: boolean): void;
   dragEnd(x: number, y: number, ctrl: boolean, shift: boolean, cancel: boolean): Promise<void>;
+  /** MOD の管理（ADR 0020）。標準のビューだけが使える */
+  readonly mods: ModManager;
 }
 
 /** 並べ替えのためだけに Entry を作るときの uses（余計な情報を付けない） */
@@ -109,6 +113,9 @@ export class ViewHost {
     if (this.uses.has("timetable")) this.unsubscribe.push(timetableService.onChange(() => this.pushTimetable()));
     if (this.uses.has("quickAccess")) {
       this.unsubscribe.push(quickAccess.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "quickAccess", data: null })));
+    }
+    if (view.source === "builtin") {
+      this.unsubscribe.push(onModsChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "mods", data: null })));
     }
     if (this.uses.has("recent")) {
       this.unsubscribe.push(recentItems.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "recent", data: null })));
@@ -214,6 +221,11 @@ export class ViewHost {
     const msg = parsed.message;
     if (msg.kind === "key") {
       this.tab.shortcut(msg);
+      return;
+    }
+    // MOD の管理は、標準のビュー（ホーム）だけ。ほかの MOD が勝手に MOD を入れ替えられないように（ADR 0020）
+    if (msg.method.startsWith("mods.") && this.view.source !== "builtin") {
+      this.reply(msg.id, Promise.reject(new HostError({ code: "denied", message: "mods.* is only for built-in views" })));
       return;
     }
     const denied = checkPermission(this.view.manifest.uses, msg.method);
@@ -356,6 +368,24 @@ export class ViewHost {
         const box = this.iframe.getBoundingClientRect();
         return this.tab.dragEnd(box.x + p.x, box.y + p.y, p.ctrl, p.shift, p.cancel);
       }
+      case "mods.list":
+        return this.tab.mods.list();
+      case "mods.install":
+        return { id: await this.tab.mods.install() };
+      case "mods.remove":
+        return this.tab.mods.remove(p.id);
+      case "mods.addDev":
+        return { dir: await this.tab.mods.addDev() };
+      case "mods.createDev":
+        return { dir: await this.tab.mods.createDev(p.name) };
+      case "mods.pack":
+        return { path: await this.tab.mods.pack(p.id) };
+      case "mods.openFolder":
+        return this.tab.mods.openFolder(p.id);
+      case "mods.openDocs":
+        return this.tab.mods.openDocs();
+      case "mods.openDevtools":
+        return this.tab.mods.openDevtools();
     }
   }
 

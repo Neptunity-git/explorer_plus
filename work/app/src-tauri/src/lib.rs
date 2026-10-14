@@ -4,6 +4,7 @@
 mod fsops;
 mod geo;
 mod icons;
+mod modinstall;
 mod mods;
 mod shellmenu;
 mod transfer;
@@ -24,9 +25,11 @@ fn dev_start_dir() -> Option<String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(icons::IconCache::default())
         .manage(mods::ModRegistry::default())
         .manage(watch::FolderWatch::default())
+        .manage(modinstall::DevWatch::default())
         .register_asynchronous_uri_scheme_protocol("icon", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             // アイコンの取り出しは COM を使い時間もかかるので、画面のスレッドを止めないよう別のスレッドで行う
@@ -71,6 +74,16 @@ pub fn run() {
             shellmenu::onedrive_contains,
             shellmenu::onedrive_action,
             watch::watch_folders,
+            modinstall::mod_inspect,
+            modinstall::mod_install,
+            modinstall::mod_discard,
+            modinstall::mod_remove,
+            modinstall::dev_mod_add,
+            modinstall::dev_mod_create,
+            modinstall::mod_pack,
+            modinstall::pick_mod_zip,
+            modinstall::open_mod_docs,
+            modinstall::open_devtools,
             transfer::open_with,
             geo::get_location,
             dev_start_dir,

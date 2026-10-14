@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOD 開発ガイド — explorer_plus</title>
+<style>
+  :root {
+    --bg: #fbfbf8; --fg: #1f2328; --dim: #636c76; --line: #d0d7de; --accent: #0b6bcb; --code-bg: #f0f1ee; --warn: #b42318;
+    --font: "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif; --mono: "Cascadia Mono", "BIZ UDGothic", "Consolas", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111317; --fg: #d6d7d9; --dim: #8b949e; --line: #30363d; --accent: #5cc8ff; --code-bg: #1b1f24; --warn: #ff7b72; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.8 var(--font); }
+  .layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+  nav { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 28px 16px; border-right: 1px solid var(--line); font-size: 14px; }
+  nav .brand { font-family: var(--mono); font-weight: 700; margin-bottom: 16px; }
+  nav a { display: block; color: var(--dim); text-decoration: none; padding: 3px 8px; border-radius: 4px; }
+  nav a:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
+  nav .sub { padding-left: 20px; font-size: 13px; }
+  main { padding: 28px 40px 80px; min-width: 0; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 48px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 28px 0 8px; }
+  p, li { max-width: 72ch; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow: auto; font: 13px/1.6 var(--mono); }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; margin: 8px 0 16px; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; vertical-align: top; }
+  th { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+  .lead { color: var(--dim); margin-top: 0; }
+  .note { border-left: 3px solid var(--accent); padding: 4px 14px; margin: 12px 0; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 7%, transparent); }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps > li { counter-increment: step; position: relative; padding-left: 40px; margin: 12px 0; }
+  .steps > li::before { content: counter(step); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: var(--bg); font: 700 14px/26px var(--font); text-align: center; }
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { padding: 20px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <div class="brand">explorer_plus MOD</div>
+  <a href="#intro">MOD とは</a>
+  <a href="#quickstart">5分で作る</a>
+  <a href="#folder">MOD のフォルダ</a>
+  <a class="sub" href="#manifest">manifest.json</a>
+  <a class="sub" href="#uses">使う情報（uses）</a>
+  <a href="#api">API</a>
+  <a class="sub" href="#api-basic">基本</a>
+  <a class="sub" href="#api-files">ファイルの操作</a>
+  <a class="sub" href="#api-storage">保存</a>
+  <a class="sub" href="#api-menu">メニュー</a>
+  <a class="sub" href="#api-dnd">クリップボード・ドラッグ</a>
+  <a class="sub" href="#api-more">タグ・時間割・ほか</a>
+  <a class="sub" href="#types">データの形</a>
+  <a class="sub" href="#errors">エラー</a>
+  <a href="#look">見た目（TUI キット）</a>
+  <a href="#rules">安全の決まり</a>
+  <a href="#ship">配る</a>
+  <a href="#tips">ヒント</a>
+</nav>
+<main>
+<h1>MOD 開発ガイド</h1>
+<p class="lead">explorer_plus に、自分の「ビュー」（フォルダの見せ方）を足すための説明書です。API 第1版（<code>apiVersion: 1</code>）。</p>
+
+<h2 id="intro">MOD とは</h2>
+<p>explorer_plus は「同じデータを、いろいろなビューで見る」エクスプローラです。Win11 風・ノート・時間割などの標準のビューも、MOD と同じ仕組みで動いています。</p>
+<ul>
+  <li>MOD は、<b>HTML・CSS・JavaScript</b> で書く小さな Web ページです。ビルドの道具は要りません（使いたければ使えます）</li>
+  <li>本体が、フォルダの中身などのデータを MOD に渡します。MOD は、それを好きなように描きます</li>
+  <li>ファイルを開く・名前を変える・ごみ箱へ送るなどの操作は、MOD から<b>本体に頼みます</b>。本体が確かめてから行います</li>
+  <li>MOD は隔離された箱（sandbox の iframe）の中で動きます。インターネットへの通信や、勝手なファイルの読み書きはできません</li>
+</ul>
+
+<h2 id="quickstart">5分で作る</h2>
+<ol class="steps">
+  <li>アプリのホームを開き、下の「MOD」の欄で <b>「ひな形から作る…」</b> を押す。名前を入れ、作る場所を選ぶ</li>
+  <li>できたフォルダが新しいタブで開き、MOD は<b>開発中の MOD</b> として読み込まれる。タブの <code>▸</code> から、そのビューに切り替えられる</li>
+  <li>好きなエディタで <code>index.js</code> を書き換えて保存する。<b>アプリが自動で読み直す</b>（ホットリロード）。フォルダと戻る・進むの履歴はそのまま</li>
+  <li>できたら、ホームの「MOD」の欄で、その MOD の <b>「zip にする」</b> を押す。MOD のフォルダの隣に <code>id-版.zip</code> ができる</li>
+  <li>zip を配る。受け取った人は、ホームの <b>「MOD を入れる」</b> で選ぶか、ホームのタブに zip を落とすだけで入れられる</li>
+</ol>
+<div class="note">ひな形には <code>explorer-plus.d.ts</code>（型の定義）と <code>jsconfig.json</code> が入っています。VS Code で開くと <code>window.explorerPlus</code> の補完とエラーチェックが効きます。</div>
+<p>もう作ってあるフォルダは、「開発中のフォルダを読み込む…」で読み込めます。読み込めない MOD があると、ホームの「MOD」の欄に理由（manifest のどこが違うか）が赤で出ます。</p>
+
+<h2 id="folder">MOD のフォルダ</h2>
+<pre><code>my-view/
+  manifest.json   … MOD の名札
+  index.js        … 入口（ES モジュール）。同じフォルダのファイルは相対パスで import できる
+  style.css など  … 画像・フォント・ライブラリなど、好きなファイル</code></pre>
+<p>MOD のファイルは <code>http://mod.localhost/&lt;MOD の id&gt;/</code> から配られます。<code>index.js</code> から見て <code>./style.css</code> のような相対パスで読み込めます。</p>
+
+<h3 id="manifest">manifest.json</h3>
+<pre><code>{
+  "id": "neo.photo-map",
+  "name": "写真マップ",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["entries", "icons", "thumbnails"],
+  "location": "folder",
+  "description": "写真を地図の上に並べる"
+}</code></pre>
+<table>
+  <tr><th>項目</th><th>必須</th><th>決まり</th></tr>
+  <tr><td><code>id</code></td><td>○</td><td>英小文字・数字・<code>.</code>・<code>-</code> だけ。3〜64文字。先頭と末尾は英小文字か数字。<code>builtin.</code> で始まるものは標準のビュー専用。<br>ほかの人と重ならないよう、<code>自分の名前.ビューの名前</code> の形をおすすめします</td></tr>
+  <tr><td><code>name</code></td><td>○</td><td>1〜40文字。タブやビューの一覧に出る名前</td></tr>
+  <tr><td><code>version</code></td><td>○</td><td><code>数字.数字.数字</code>（例 <code>1.2.0</code>）。上げて配ると、入れている人には「更新」として見える</td></tr>
+  <tr><td><code>apiVersion</code></td><td>○</td><td><code>1</code></td></tr>
+  <tr><td><code>entry</code></td><td>○</td><td>入口の <code>.js</code> への相対パス。区切りは <code>/</code>（例 <code>index.js</code>・<code>dist/main.js</code>）</td></tr>
+  <tr><td><code>uses</code></td><td>○</td><td>使う情報の名前の配列（空でもよい）。下の表</td></tr>
+  <tr><td><code>location</code></td><td></td><td><code>"folder"</code>（フォルダを見るビュー。省略時）か <code>"none"</code>（フォルダと関係ないビュー。例：タグの一覧）</td></tr>
+  <tr><td><code>description</code></td><td></td><td>200文字まで。入れるときの確かめの画面に出る</td></tr>
+</table>
+
+<h3 id="uses">使う情報（uses）</h3>
+<p>宣言した情報だけが渡され、宣言した機能だけが呼べます。宣言していない機能を呼ぶと、エラー <code>not-declared</code> になります。入れる人には、入れる前に「このビューが使う情報」として見せます。<b>必要なものだけ</b>を宣言してください。</p>
+<table>
+  <tr><th>名前</th><th>渡されるもの・呼べるもの</th><th>重さ</th></tr>
+  <tr><td><code>entries</code></td><td>今のフォルダの中身（名前・種類・拡張子・ファイルID・パス）</td><td>軽い</td></tr>
+  <tr><td><code>size</code></td><td>ファイルの大きさ</td><td>軽い</td></tr>
+  <tr><td><code>folderSize</code></td><td>フォルダの中身の合計の大きさ（後から少しずつ届く）</td><td><b>重い</b></td></tr>
+  <tr><td><code>modified</code></td><td>更新日時</td><td>軽い</td></tr>
+  <tr><td><code>icons</code></td><td>Windows のアイコンの URL（<code>iconUrl</code>）と種類（<code>iconKind</code>）</td><td>軽い</td></tr>
+  <tr><td><code>thumbnails</code></td><td>画像・動画などの縮小画像の URL（<code>thumbnailUrl</code>。<code>size=</code> を 32〜256 で変えられる）</td><td>中</td></tr>
+  <tr><td><code>tree</code></td><td><code>getTree()</code>：今のフォルダから下の階層</td><td>中</td></tr>
+  <tr><td><code>links</code></td><td><code>resolve()</code>：保存しておいたファイルID から、今の場所を引く（名前変更・移動に強いリンク）</td><td>軽い</td></tr>
+  <tr><td><code>tags</code></td><td>タグ（見る・付ける・作る）と <code>onTags</code>。<code>Entry.tags</code> も付く</td><td>軽い</td></tr>
+  <tr><td><code>timetable</code></td><td>開いている学校のフォルダの時間割（見る・書き換える）</td><td>軽い</td></tr>
+  <tr><td><code>quickAccess</code></td><td>クイックアクセス（見る・ピン留めする）</td><td>軽い</td></tr>
+  <tr><td><code>recent</code></td><td>このアプリで最近開いたファイル</td><td>軽い</td></tr>
+</table>
+<p>保存（<code>storage</code>）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。</p>
+
+<h2 id="api">API</h2>
+<p>ランタイムが <code>window.explorerPlus</code> を用意します。関数はどれも Promise を返します（<code>on…</code> は除く）。<code>on…</code> は登録をやめる関数を返します。</p>
+
+<h3 id="api-basic">基本</h3>
+<pre><code>const ep = window.explorerPlus;
+
+const ctx = await ep.ready();      // { apiVersion, viewId, tabId, theme: "light" | "dark" }
+
+ep.onFolder((folder) =&gt; {           // 最初に1回、以後は中身が変わるたびに（ほかのアプリで変わっても）呼ばれる
+  // folder: { id, path, name, parentPath, entries: Entry[] }
+});
+
+ep.theme;                           // 今の "light" | "dark"
+ep.onTheme((theme) =&gt; { /* 明るい・暗いが変わった */ });</code></pre>
+<div class="note">同じフォルダの中身が変わったときも <code>onFolder</code> が呼ばれます。<code>folder.path</code>（または <code>folder.id</code>）が前と同じなら、選択やスクロールの位置は保つと使いやすくなります。</div>
+
+<h3 id="api-files">ファイルの操作</h3>
+<pre><code>await ep.open(entry, { from: el.getBoundingClientRect() });
+// ファイルは既定のアプリで開く。フォルダならこのタブで移動。{ newTab: true } で新しいタブに
+// from（画面上の位置）を渡すと、本体がそこから開くアニメーションを出す
+
+await ep.navigate("C:\\Users\\me\\Documents");
+await ep.navigateUp();
+
+const { trashed } = await ep.trash([entry], { from: rect });  // 本体が確かめてから、ごみ箱へ。やめたら code "denied"
+const renamed = await ep.rename(entry, "新しい名前.txt");       // 使えない名前は "invalid"、同じ名前があれば "exists"
+const created = await ep.createFolder("資料");                  // 名前を省くと「新しいフォルダー」を作り、
+ep.onAction(({ action, entry }) =&gt; {                           // 続けて action "rename" が届く（名前の入力を始める合図）
+  if (action === "rename") startRename(entry);
+});
+
+await ep.tabs.open("builtin.win11", { path: entry.path });     // 別のビューで新しいタブを開く
+const views = await ep.views.list();                            // 入っているビューの一覧</code></pre>
+
+<h3 id="api-storage">保存</h3>
+<pre><code>await ep.storage.set("layout", { x: 10, y: 20 });   // このビュー専用。JSON にできる値。1つの値は 1MB まで
+const v = await ep.storage.get("layout");           // 無ければ undefined
+await ep.storage.delete("layout");
+const keys = await ep.storage.keys();</code></pre>
+<div class="note">フォルダごとに何かを覚えるときは、キーに <code>folder.id</code>（ファイルID）を使うと、フォルダの名前を変えたり動かしたりしても同じものが出ます。ID の無いドライブ（FAT の USB メモリなど）では <code>id</code> が空なので、パスで代わりにします：<br><code>const key = `note:${folder.id || folder.path.toLowerCase()}`;</code></div>
+
+<h3 id="api-menu">メニュー</h3>
+<pre><code>el.oncontextmenu = async (e) =&gt; {
+  e.preventDefault();
+  const { chosen } = await ep.showMenu({
+    x: e.clientX, y: e.clientY,
+    items: [entry],                                   // 選んでいる項目。本体のいつもの項目（名前の変更・タグなど）が並ぶ
+    extra: [{ id: "star", label: "お気に入りにする" }], // このビューの項目を足せる
+  });
+  if (chosen === "star") { /* … */ }
+};</code></pre>
+<p><code>items</code> を空にして <code>extra</code> だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。</p>
+
+<h3 id="api-dnd">クリップボード・ドラッグ</h3>
+<pre><code>await ep.clipboard.copy([entry]);   // Windows のエクスプローラと同じ形式。エクスプローラにも貼り付けられる
+await ep.clipboard.cut([entry]);
+const { count } = await ep.clipboard.paste();   // 開いているフォルダへ
+
+// ドラッグ：押したまま少し動いたら start を呼ぶ。そこから先は本体がマウスを追い、
+// 落とせる場所（targets・アドレスバー・左の欄・タブ・普通のエクスプローラ）を光らせ、離したら移動・コピーする
+el.onpointermove = (e) =&gt; {
+  if (pressed &amp;&amp; moved &gt; 6) ep.drag.start({ items: [entry], x: e.clientX, y: e.clientY, targets: folderTargets() });
+};
+ep.onDragTargets(() =&gt; ep.drag.targets(folderTargets()));   // ドラッグ中にこのタブへ切り替わったとき
+// folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）</code></pre>
+
+<h3 id="api-more">タグ・時間割・ほか</h3>
+<pre><code>// uses: ["tags"]
+const tags = await ep.tags.list();                    // [{ id, name, color: "#rrggbb" }]
+const tag = await ep.tags.create("提出物", "#e5484d");
+await ep.tags.assign([entry], tag.id);                // 第3引数 false で外す
+const tagged = await ep.tags.entries(tag.id);
+ep.onTags((tags) =&gt; { /* … */ });
+
+// uses: ["timetable"]（開いている学校のフォルダの時間割）
+const tt = await ep.timetable.get();                  // 無ければ null
+const now = await ep.timetable.current();             // 今の授業 { slot, period } か null
+ep.onTimetable((tt) =&gt; { /* … */ });
+
+// uses: ["tree"] / ["links"] / ["quickAccess"] / ["recent"]
+const tree = await ep.getTree({ depth: 2 });          // { entry, children? }
+const found = await ep.resolve([{ id, path }]);       // 見つからなければ null
+const pinned = await ep.quickAccess.list();
+const recent = await ep.recent.list();</code></pre>
+<p>すべての関数と型は、ひな形に入っている <code>explorer-plus.d.ts</code> にあります。迷ったらそちらが正しいです。</p>
+
+<h3 id="types">データの形</h3>
+<pre><code>type Entry = {
+  id: string;          // ファイルID。名前変更・移動で変わらない（ID の無いドライブでは ""）
+  name: string;        // "report.docx"
+  path: string;        // "C:\\Users\\me\\report.docx"
+  kind: "file" | "folder";
+  ext: string;         // 小文字・点なし。フォルダ・拡張子なしは ""
+  hidden: boolean;
+  size?: number;       // uses に size（フォルダは folderSize）
+  modified?: number;   // uses に modified（1970年からのミリ秒）
+  iconUrl?: string;    // uses に icons
+  iconKind?: "launch" | "config" | "system";
+  tags?: string[];     // uses に tags（付いているタグの id）
+  thumbnailUrl?: string; // uses に thumbnails
+};
+type EntryRef = { id: string; path: string };   // 保存しておくときは、この2つだけ覚える</code></pre>
+<p><code>entries</code> の並びは、フォルダが先、次にファイル。それぞれ名前の自然な順（<code>file2</code> が <code>file10</code> より前）です。</p>
+
+<h3 id="errors">エラー</h3>
+<p>失敗した Promise は <code>Error</code> になり、<code>code</code> に次のどれかが入ります。</p>
+<table>
+  <tr><th>code</th><th>意味</th></tr>
+  <tr><td><code>not-declared</code></td><td><code>uses</code> に宣言していない機能を呼んだ</td></tr>
+  <tr><td><code>denied</code></td><td>ユーザーがやめた（ごみ箱の確認など）。または、MOD には使えない機能</td></tr>
+  <tr><td><code>not-found</code></td><td>ファイル・フォルダが無い</td></tr>
+  <tr><td><code>too-large</code></td><td>保存の値が 1MB を超えた</td></tr>
+  <tr><td><code>invalid</code></td><td>引数の形が違う・使えない名前</td></tr>
+  <tr><td><code>exists</code></td><td>同じ名前がもうある</td></tr>
+  <tr><td><code>io</code></td><td>読み書きに失敗した</td></tr>
+</table>
+<pre><code>try {
+  await ep.trash([entry]);
+} catch (err) {
+  if (err.code !== "denied") showMessage(`ごみ箱へ送れませんでした：${err.message}`);
+}</code></pre>
+
+<h2 id="look">見た目（TUI キット）</h2>
+<p>標準のビューと同じ見た目の部品を使えます（使わなくてもかまいません）。明るい・暗い画面にも自動で合います。</p>
+<pre><code>// CSS：色の変数（--tui-fg・--tui-dim・--tui-line・--tui-accent・--tui-warn・--tui-bg）と部品のクラス
+document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/__runtime/tui.css" }));
+document.body.className = "tui";
+
+// 部品：tui-box（枠と見出し）・tui-row（行）・tui-button・tui-input・tui-grid（表）・tui-footer（キーの説明）など
+document.body.innerHTML = `
+  &lt;section class="tui-box"&gt;&lt;span class="tui-box-title"&gt;一覧&lt;/span&gt;&lt;div class="tui-scroll" id="list"&gt;&lt;/div&gt;&lt;/section&gt;`;
+
+// JS の部品：入力・選択・色選び・確認の小さな画面
+import { ask, pick, pickColor, confirm, button, PALETTE } from "/__runtime/tui.js";
+const name = await ask({ label: "名前", okLabel: "作る" });          // やめたら null</code></pre>
+<p>操作は<b>マウス（左右のクリック）が主、キーボードは補助</b>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
+
+<h2 id="rules">安全の決まり</h2>
+<ul>
+  <li><b>通信できるのは自分の MOD のフォルダだけ</b>です（CSP。本体が付けるので MOD からは変えられません）。インターネット上のライブラリ・フォント・画像は読めません。使うものは MOD のフォルダに入れてください（ライブラリは1つのファイルにまとめると楽です）</li>
+  <li>画像は、自分のフォルダ・アイコンと縮小画像の URL・<code>data:</code>・<code>blob:</code> が使えます。WebAssembly と Web Worker（<code>blob:</code>）も使えます</li>
+  <li>ファイルの変更・削除は、必ず本体の API に頼みます。本体は、渡された項目のファイルID が今の場所と合うかを確かめてから行います</li>
+  <li>F5・Ctrl+R はページの読み直しではなく、本体の「読み直す」になります。Ctrl・Alt を押したキーは、本体のショートカット（Ctrl+T など）にも届きます</li>
+  <li>MOD の管理（<code>ep.mods</code>）など、標準のビューだけが使える機能があります。MOD から呼ぶと <code>denied</code> になります</li>
+</ul>
+<div class="note warn">入れる人は、あなたの MOD を信頼して入れます。<code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</div>
+
+<h2 id="ship">配る</h2>
+<ol class="steps">
+  <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
+  <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.html</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
+  <li>できた <code>id-版.zip</code> を配る。受け取った人は、ホームの「MOD を入れる」か、ホームのタブに zip を落として入れる</li>
+</ol>
+<p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
+<p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
+
+<h2 id="tips">ヒント</h2>
+<ul>
+  <li><b>開発者ツール</b>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールに出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
+  <li><b>大きなフォルダ</b>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>
+  <li><b>ライブラリ</b>：Three.js などは、npm で入れて esbuild などで1つのファイルにまとめ、MOD のフォルダに置きます。<code>entry</code> を <code>dist/main.js</code> にしても大丈夫です</li>
+  <li><b>アニメーション</b>：<code>ep.open(entry, { from })</code> の <code>from</code> を渡すと、本体の「開く」演出がその位置から出ます</li>
+  <li><b>アイデア</b>：写真を撮った日で並べる年表、容量の大きいものを大きく描くマップ、フォルダを部屋にした 3D、課題の締め切りボード…</li>
+</ul>
+</main>
+</div>
+</body>
+</html>

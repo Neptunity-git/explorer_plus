@@ -75,7 +75,7 @@ button { font: inherit; color: inherit; }
 /* ---- 確認・お知らせ ---- */
 .dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.3); display: grid; place-items: center; z-index: 100; }
 .dialog { min-width: 340px; max-width: 480px; padding: 20px 24px 16px; border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
-.dialog p { margin: 0 0 20px; font-size: 14px; word-break: break-all; }
+.dialog p { margin: 0 0 20px; font-size: 14px; word-break: break-all; white-space: pre-line; }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-buttons button { min-width: 96px; height: 32px; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); }
 .dialog-buttons button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
