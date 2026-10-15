@@ -304,8 +304,9 @@ pub async fn search_stats(folder: EntryRef, depth: Option<u32>) -> Result<Stats,
 mod tests {
     use super::*;
 
-    fn tree() -> PathBuf {
-        let d = std::env::temp_dir().join(format!("ep-scan-{}", std::process::id()));
+    /// 試験ごとに別のフォルダ（試験は同時に走るので、同じフォルダを使うと消し合う）
+    fn tree(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("ep-scan-{}-{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("写真/2024")).unwrap();
         std::fs::create_dir_all(d.join("課題")).unwrap();
@@ -336,7 +337,7 @@ mod tests {
 
     #[test]
     fn finds_by_name_ext_size_content() {
-        let d = tree();
+        let d = tree("find");
         let q = |q: Query| names(&find(&d, q, 64, 100));
         assert_eq!(q(Query { ext: Some(vec!["jpg".into()]), ..Default::default() }), vec!["山.jpg", "海.JPG"]);
         assert_eq!(q(Query { name: Some("*.jpg".into()), min_size: Some(2000), ..Default::default() }), vec!["海.JPG"]);
@@ -354,7 +355,7 @@ mod tests {
 
     #[test]
     fn counts() {
-        let d = tree();
+        let d = tree("stats");
         let s = stats(&d, 64);
         assert_eq!((s.files, s.folders), (4, 3));
         assert_eq!(s.bytes, 3000 + 1000 + "締め切りは金曜".len() as u64 + "提出は月曜".len() as u64 / 3 * 2);

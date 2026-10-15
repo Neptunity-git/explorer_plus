@@ -429,10 +429,14 @@ mod tests {
         let csp = frame_csp("http://mod.localhost", "neo.view");
         assert!(csp.starts_with("default-src 'none';"));
         assert!(csp.contains("script-src http://mod.localhost/neo.view/ http://mod.localhost/__runtime/ "));
-        assert!(csp.contains("connect-src http://mod.localhost/neo.view/;"));
+        // 通信は自分のフォルダと、本体が発行したファイルの URL（files.url。ADR 0023）だけ
+        assert!(csp.contains("connect-src http://mod.localhost/neo.view/ http://epfile.localhost;"));
         // TUI 風の部品（__runtime/tui.css）を読み込めるように
         assert!(csp.contains("style-src http://mod.localhost/neo.view/ http://mod.localhost/__runtime/ 'unsafe-inline';"));
-        assert!(csp.contains("img-src http://mod.localhost/neo.view/ http://icon.localhost data: blob:;"));
+        assert!(csp.contains("img-src http://mod.localhost/neo.view/ http://icon.localhost http://epfile.localhost data: blob:;"));
+        assert!(csp.contains("media-src http://mod.localhost/neo.view/ http://epfile.localhost data: blob:;"));
+        // スクリプトは、ファイルの URL からは読み込めない
+        assert!(!csp.split(';').find(|d| d.trim_start().starts_with("script-src")).unwrap().contains("epfile"));
         assert!(!csp.contains("ipc.localhost"));
         assert!(!csp.contains("*"));
     }
