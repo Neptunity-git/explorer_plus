@@ -697,6 +697,8 @@ export class App {
       ...(tab.view.manifest.settings ? [{ label: "このビューの設定…", run: () => void this.openSettings(tab) }] : []),
       { label: "コマンドの一覧…", shortcut: "Ctrl+Shift+P", run: () => void (this.activate(tab), this.commandPalette()) },
       "separator",
+      // 同じビュー・同じフォルダのタブを、すぐ右に開く（戻る・進むの履歴は引き継がない）
+      { label: "タブを複製", run: () => void this.openTab(tab.view, tab.folderView ? tab.folder?.path : undefined, this.tabs.indexOf(tab) + 1) },
       { label: "このタブを新しいウィンドウへ移す", disabled: this.tabs.length < 2, run: () => void this.moveToNewWindow(tab) },
       { label: "新しいウィンドウ", shortcut: "Ctrl+N", run: () => void this.openWindow() },
       "separator",
