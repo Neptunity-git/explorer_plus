@@ -389,3 +389,13 @@ uses の宣言は要らない。
   - 入れるときの確かめの画面に「○○は本体が預かり、<origin> だけに送る」。MOD を外すと消す
 - 検査は TypeScript（`settings.ts`）と Rust（`mods.rs` の `secrets_of`）の両方で行う
 
+## 2026-10-15（8回目）の追加：ログ（ADR 0029）
+
+- ランタイムは `console.log`・`info`・`debug`（情報）・`warn`（警告）・`error`（エラー）と、受け止めなかったエラー（`error`・`unhandledrejection`）を、
+  `{ ep: 1, kind: "log", level, text }` で本体へ送る（開発者ツールのコンソールにも、これまでどおり出る）。本体は 1 件 2000 文字まで、MOD ごとに 10 秒に 100 件まで
+- 本体は、標準でない MOD が頼んだこと（通信・開く・ごみ箱・名前の変更・作る・コピー・ドラッグ・コレクション・タグ）と、断ったこと（エラーの code と説明）を、その MOD のログに残す。
+  通信の URL は `?` より後を書かない。秘密の値は書かない
+- 本体のログ（source "app"）：起動・ファイルを変える操作・開く・MOD の出し入れ・その失敗・本体の画面のエラー
+- ファイル：アプリのデータの `logs/app.log`・`logs/mod.<id>.log`（1行1件の JSON。1MB で `.old.log` へ入れ替え）
+- 標準のビューだけが使える：`logs.list({ source })`・`logs.sources()`・`logs.clear({ source })`・知らせ `logs`（1件ずつ。フォルダと関係ない標準のビューだけに届く）・`mods.openSettings({ id })`。`mods.list` の各 MOD に `hasSettings`
+

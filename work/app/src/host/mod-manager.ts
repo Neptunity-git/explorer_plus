@@ -43,6 +43,8 @@ export type ModInfo = {
   dir: string;
   /** 通信する先（ADR 0026） */
   network: string[];
+  /** 設定の項目があるか（ホームの「設定」ボタン） */
+  hasSettings: boolean;
 };
 
 /** 本体（App）から借りるもの */
@@ -53,6 +55,8 @@ export interface ModHost {
   reloadViews(dirs?: string[]): Promise<void>;
   openFolder(path: string): void;
   toast(message: string): void;
+  /** そのビューの設定の画面を出す */
+  openSettings(view: LoadedView): Promise<void>;
 }
 
 const listeners = new Set<() => void>();
@@ -82,6 +86,7 @@ export class ModManager {
       location: v.manifest.location ?? "folder",
       dir: v.dir,
       network: [...(v.manifest.network ?? [])],
+      hasSettings: (v.manifest.settings ?? []).length > 0,
     }));
     return { mods, problems: this.host.problems() };
   }
@@ -217,6 +222,13 @@ export class ModManager {
     const info = this.list().mods.find((m) => m.id === id);
     if (!info) throw new BackendError({ code: "not-found", message: `MOD ${id}` });
     this.host.openFolder(info.dir);
+  }
+
+  async openSettings(id: string): Promise<void> {
+    const view = this.host.views().find((v) => v.manifest.id === id);
+    if (!view) throw new BackendError({ code: "not-found", message: `MOD ${id}` });
+    if (!view.manifest.settings?.length) throw new BackendError({ code: "invalid", message: `${id} has no settings` });
+    await this.host.openSettings(view);
   }
 
   /** MOD 開発ガイドのフォルダを、アプリの新しいタブで開く（guide.md・index.html が入っている） */

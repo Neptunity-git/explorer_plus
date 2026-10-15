@@ -192,6 +192,7 @@ export class App {
     views: () => this.views,
     problems: () => this.problems,
     reloadViews: (dirs) => this.reloadViews(dirs ?? []),
+    openSettings: (view) => this.openViewSettings(view),
     openFolder: (path) => void this.openTab(this.defaultView(), path),
     toast: (m) => this.toast(m),
   });
@@ -668,10 +669,14 @@ export class App {
 
   /** MOD の設定の画面（manifest の settings から作る） */
   async openSettings(tab: Tab) {
-    const defs = tab.view.manifest.settings;
+    await this.openViewSettings(tab.view);
+  }
+
+  async openViewSettings(view: LoadedView) {
+    const defs = view.manifest.settings;
     if (!defs) return;
-    const next = await settingsDialog(`${tab.view.manifest.name} の設定`, defs, await settingsService.get(tab.view.manifest.id, defs));
-    if (next) await settingsService.set(tab.view.manifest.id, next);
+    const next = await settingsDialog(`${view.manifest.name} の設定`, defs, await settingsService.get(view.manifest.id, defs));
+    if (next) await settingsService.set(view.manifest.id, next);
   }
 
   /** コマンドの一覧（Ctrl+Shift+P）：表示中のビューのコマンドと、本体のコマンド */

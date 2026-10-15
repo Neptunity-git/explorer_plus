@@ -412,7 +412,12 @@ export type CallMethod =
   | "mods.openDevtools"
   // ↓ 2026-10-15 に追加（本体が代わりに通信する。ADR 0027）。manifest の network が要る
   | "net.fetch"
-  | "net.url";
+  | "net.url"
+  // ↓ 2026-10-15 に追加（ログ・MOD の設定。ADR 0029）。標準のビューだけが使える
+  | "logs.list"
+  | "logs.sources"
+  | "logs.clear"
+  | "mods.openSettings";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -522,6 +527,13 @@ export type CallParams = {
   "net.fetch": { url: string; method: NetMethod; headers: [string, string][]; body?: string | Uint8Array; secret?: string };
   /** 本体が代わりに取ってくる URL（<img> などにそのまま使える） */
   "net.url": { url: string; secret?: string };
+  /** source は "app" か MOD の id。古い順に 1000 件まで */
+  "logs.list": { source: string };
+  /** ログがある出どころ（本体と、ログが残っている MOD） */
+  "logs.sources": Record<string, never>;
+  "logs.clear": { source: string };
+  /** その MOD の設定の画面を出す */
+  "mods.openSettings": { id: string };
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -604,6 +616,10 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   // 宛先が manifest の network にあるかは、本体（Rust）が確かめる
   "net.fetch": null,
   "net.url": null,
+  "logs.list": null,
+  "logs.sources": null,
+  "logs.clear": null,
+  "mods.openSettings": null,
 };
 
 export type NetMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -646,12 +662,22 @@ export type EventMessage =
   // コマンドの一覧でこのビューのコマンドが選ばれた
   | { ep: 1; kind: "event"; event: "command"; data: { id: string } }
   // コレクションの一覧・中身が変わった（uses に collections があるビューだけ。ADR 0025）
-  | { ep: 1; kind: "event"; event: "collections"; data: Collection[] };
+  | { ep: 1; kind: "event"; event: "collections"; data: Collection[] }
+  // ログが1件増えた（標準のビューだけに届く。ADR 0029）
+  | { ep: 1; kind: "event"; event: "logs"; data: LogEntry };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
+/** MOD の console.log・エラー（ランタイムが自動で送る。ADR 0029） */
+export type LogMessage = { ep: 1; kind: "log"; level: LogLevel; text: string };
+
+// ---- ログ（ADR 0029） ----
+
+export type LogLevel = "info" | "warn" | "error";
+/** source は "app"（explorer_plus 本体）か、MOD の id */
+export type LogEntry = { t: number; level: LogLevel; source: string; text: string };
 
 /** MOD から本体へ届くメッセージ */
-export type ModToHostMessage = CallMessage | KeyMessage;
+export type ModToHostMessage = CallMessage | KeyMessage | LogMessage;
 /** 本体から MOD へ送るメッセージ */
 export type HostToModMessage = ResultMessage | EventMessage;
 

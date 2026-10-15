@@ -500,6 +500,16 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { url, ...(secret !== undefined ? { secret } : {}) } };
     }
 
+    // ↓ ログ（ADR 0029）
+    case "logs.list":
+    case "logs.clear": {
+      const { source } = params;
+      if (!isNonEmptyString(source) || source.length > 64) return { ok: false };
+      return { ok: true, params: { source } };
+    }
+    case "logs.sources":
+      return { ok: true, params: {} };
+
     case "mods.list":
     case "mods.install":
     case "mods.addDev":
@@ -509,6 +519,7 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
 
     case "mods.remove":
     case "mods.pack":
+    case "mods.openSettings":
     case "mods.openFolder": {
       const { id } = params;
       if (!isNonEmptyString(id) || id.length > 64) return { ok: false };
@@ -586,6 +597,15 @@ export function parseModMessage(data: unknown): ParseResult {
 
   if (kind === "key") {
     return parseKeyMessage(data);
+  }
+
+  // MOD の console.log・エラー（ADR 0029）。長すぎるものは本体が切る
+  if (kind === "log") {
+    const { level, text } = data;
+    if ((level !== "info" && level !== "warn" && level !== "error") || typeof text !== "string") {
+      return { ok: false, id: null, error: { code: "invalid", message: "invalid log message" } };
+    }
+    return { ok: true, message: { ep: 1, kind: "log", level, text: text.slice(0, 20000) } };
   }
 
   if (kind === "call") {

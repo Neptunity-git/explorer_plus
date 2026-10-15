@@ -299,6 +299,7 @@ ep.onSettings((next) => { s = next; redraw(); });
 
 種類は `boolean`・`number`（`min`・`max`・`step`）・`text`（`maxLength`）・`choice`（`options`）・`color`（`#rrggbb`）・`secret`（下の「API キー」）。
 覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。
+利用者は、タブの右クリック・タブの `▸`・コマンドの一覧（Ctrl+Shift+P）・ホームの MOD の行の「設定」から、設定の画面を開けます。
 
 ### コマンド（commands）
 
@@ -522,7 +523,9 @@ zip は、一番上に `manifest.json` があるか、一番上のフォルダ1�
 
 ## ヒント
 
-- **開発者ツール**：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや `console.log` は、そこのコンソールに出ます（上の「top」を自分の MOD の `__frame.html` に切り替えると、MOD の中で式を試せます）
+- **ログ**：MOD の `console.log`・`console.warn`・`console.error` と、受け止めなかったエラーは、ホームの「ログ」の欄に、MOD ごとに出ます（MOD の行の「ログ」でも開けます）。
+  その MOD が本体に頼んだこと（通信・ファイルを作る・名前の変更など）と、断られた理由（`not-declared` など）も出ます。ファイルにも残るので、アプリを起動し直しても見られます
+- **開発者ツール**：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや `console.log` は、そこのコンソールにも出ます（上の「top」を自分の MOD の `__frame.html` に切り替えると、MOD の中で式を試せます）
 - **大きなフォルダ**：`entries` が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります
 - **ライブラリ**：Three.js などは、npm で入れて esbuild などで1つのファイルにまとめ、MOD のフォルダに置きます。`entry` を `dist/main.js` にしても大丈夫です
 - **アニメーション**：`ep.open(entry, { from })` の `from` を渡すと、本体の「開く」演出がその位置から出ます

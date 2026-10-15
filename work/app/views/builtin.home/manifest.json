@@ -1,10 +1,13 @@
 {
   "id": "builtin.home",
   "name": "ホーム",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 1,
   "entry": "index.js",
-  "uses": ["quickAccess", "recent", "icons"],
+  "uses": [
+    "recent",
+    "icons"
+  ],
   "location": "none",
-  "description": "新しいタブで開くページ。どのビューで開くかを選び、クイックアクセスや最近使った項目から開く（ADR 0014 判断2）"
+  "description": "新しいタブで開くページ。最近使った項目・MOD の管理・ログ（本体と MOD ごと）（ADR 0014・0029）"
 }

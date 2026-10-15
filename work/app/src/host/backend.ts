@@ -1,5 +1,7 @@
 // Rust 側（src-tauri）のコマンドを呼ぶ窓口。Rust のエラーは "<code>: <説明>" の文字列で返ってくるので、ApiError に直す。
 import { invoke } from "@tauri-apps/api/core";
+import { describeCommand, quietFailure } from "../core/logs";
+import { logService } from "./log-service";
 import { ERROR_CODES, type ApiError, type Drive, type EntryRef, type ErrorCode, type SearchQuery, type SearchStats, type SystemInfo, type TextRead } from "../api/types";
 
 export type RawEntry = {
@@ -33,11 +35,18 @@ export function toApiError(e: unknown): ApiError {
   return { code: "io", message: text };
 }
 
+// 本体のログ（ADR 0029）：ファイルを変える・開く・MOD を出し入れする操作と、その失敗を残す
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>(cmd, args);
+    const value = await invoke<T>(cmd, args);
+    const what = describeCommand(cmd, args);
+    if (what && !(cmd === "drag_out" && value === "cancelled")) logService.app("info", what);
+    return value;
   } catch (e) {
-    throw new BackendError(toApiError(e));
+    const err = toApiError(e);
+    const what = describeCommand(cmd, args);
+    if ((what || cmd === "list_dir") && !quietFailure(cmd, err.code)) logService.app("error", `${what ?? `フォルダを開く：${String(args?.path)}`} — 失敗（${err.code}）：${err.message}`);
+    throw new BackendError(err);
   }
 }
 

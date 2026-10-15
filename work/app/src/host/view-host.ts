@@ -21,6 +21,8 @@ import { checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
 import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
 import { parseNetFrame } from "../core/network";
+import { describeModCall } from "../core/logs";
+import { logService } from "./log-service";
 import type { ChoiceItem, FileChange } from "../api/types";
 import { askDialog, chooseDialog, settingsService } from "./mod-ui";
 import { collectionService, grantService } from "./collection-service";
@@ -144,6 +146,8 @@ export class ViewHost {
     }
     if (view.source === "builtin") {
       this.unsubscribe.push(onModsChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "mods", data: null })));
+      // ログが増えたら知らせる（ホームのログの欄。フォルダと関係ない標準のビューだけ。ADR 0029）
+      if (view.manifest.location === "none") this.unsubscribe.push(logService.onEntry((e) => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "logs", data: e })));
     }
     if (this.uses.has("recent")) {
       this.unsubscribe.push(recentItems.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "recent", data: null })));
@@ -303,17 +307,41 @@ export class ViewHost {
       this.tab.shortcut(msg);
       return;
     }
-    // MOD の管理は、標準のビュー（ホーム）だけ。ほかの MOD が勝手に MOD を入れ替えられないように（ADR 0020）
-    if (msg.method.startsWith("mods.") && this.view.source !== "builtin") {
-      this.reply(msg.id, Promise.reject(new HostError({ code: "denied", message: "mods.* is only for built-in views" })));
+    // MOD の console.log・エラー（ADR 0029）
+    if (msg.kind === "log") {
+      logService.mod(this.view.manifest.id, msg.level, msg.text);
+      return;
+    }
+    // MOD の管理・ログは、標準のビュー（ホーム）だけ。ほかの MOD が勝手に MOD を入れ替えたり、ほかの MOD のログを読んだりしないように（ADR 0020・0029）
+    if ((msg.method.startsWith("mods.") || msg.method.startsWith("logs.")) && this.view.source !== "builtin") {
+      this.reply(msg.id, this.track(msg, Promise.reject(new HostError({ code: "denied", message: `${msg.method} is only for built-in views` }))));
       return;
     }
     const denied = checkPermission(this.view.manifest.uses, msg.method);
     if (denied) {
-      this.reply(msg.id, Promise.reject(new HostError(denied)));
+      this.reply(msg.id, this.track(msg, Promise.reject(new HostError(denied))));
       return;
     }
-    this.reply(msg.id, this.dispatch(msg));
+    this.reply(msg.id, this.track(msg, this.dispatch(msg)));
+  }
+
+  /** MOD が本体に頼んだことを、その MOD のログに残す（ファイルを変える・通信する・断られた。ADR 0029） */
+  private track(msg: CallMessage, work: Promise<unknown>): Promise<unknown> {
+    // 標準のビューは、本体のログに残るので、ここでは残さない
+    if (this.view.source === "builtin") return work;
+    const id = this.view.manifest.id;
+    return work.then(
+      (value) => {
+        const text = describeModCall(msg.method, msg.params as Record<string, unknown>, value);
+        if (text) logService.mod(id, "info", text);
+        return value;
+      },
+      (e) => {
+        const err = e instanceof HostError || e instanceof BackendError ? e.apiError : toApiError(e);
+        logService.mod(id, "warn", `${msg.method} — ${err.code}: ${err.message}`);
+        throw e;
+      },
+    );
   }
 
   private reply(id: number, work: Promise<unknown>) {
@@ -588,6 +616,15 @@ export class ViewHost {
         return this.tab.mods.openDocs();
       case "mods.openDevtools":
         return this.tab.mods.openDevtools();
+      case "mods.openSettings":
+        return this.tab.mods.openSettings(p.id);
+      // ↓ ログ（ADR 0029）
+      case "logs.list":
+        return logService.list(p.source);
+      case "logs.sources":
+        return logService.sources();
+      case "logs.clear":
+        return logService.clear(p.source);
     }
   }
 

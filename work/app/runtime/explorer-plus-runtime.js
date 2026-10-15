@@ -18,6 +18,7 @@
   const collectionsListeners = new Set();
   const commandListeners = new Set();
   const dragTargetListeners = new Set();
+  const logsListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
   let theme = "light";
@@ -106,8 +107,45 @@
         for (const cb of changesListeners) safely(cb, m.data);
       } else if (m.event === "mods") {
         for (const cb of modsListeners) safely(cb);
+      } else if (m.event === "logs") {
+        for (const cb of logsListeners) safely(cb, m.data);
       }
     }
+  });
+
+  // ---- console.log・エラーを、本体の「MOD ごとのログ」にも送る（ADR 0029。ホームのログの欄で見られる） ----
+  // 開発者ツールのコンソールにも、これまでどおり出る
+  function describe(v) {
+    if (typeof v === "string") return v;
+    if (v instanceof Error) return v.stack || `${v.name}: ${v.message}`;
+    if (v === undefined) return "undefined";
+    if (typeof v === "function") return `[function ${v.name || ""}]`;
+    try {
+      const s = JSON.stringify(v);
+      return s === undefined ? String(v) : s.length > 2000 ? s.slice(0, 2000) + "…" : s;
+    } catch (_) {
+      return String(v);
+    }
+  }
+  function sendLog(level, args) {
+    try {
+      parent.postMessage({ ep: 1, kind: "log", level, text: Array.from(args, describe).join(" ").slice(0, 4000) }, "*");
+    } catch (_) {
+      // 送れなくても、MOD の動きは止めない
+    }
+  }
+  for (const [name, level] of [["log", "info"], ["info", "info"], ["debug", "info"], ["warn", "warn"], ["error", "error"]]) {
+    const original = console[name].bind(console);
+    console[name] = (...args) => {
+      original(...args);
+      sendLog(level, args);
+    };
+  }
+  window.addEventListener("error", (e) => sendLog("error", [`${e.message}${e.filename ? ` (${String(e.filename).split("/").pop()}:${e.lineno})` : ""}`]));
+  window.addEventListener("unhandledrejection", (e) => {
+    const r = e.reason;
+    // 本体が断った（ep.* の失敗）ものは、本体がログに残すので、ここでは「受け取らなかった」とだけ書く
+    sendLog("error", [`Uncaught (in promise) ${r && r.code ? `${r.code}: ${r.message}` : describe(r)}`]);
   });
 
   /** WebView2 が自分で処理してしまうキー：Ctrl+P・Ctrl+Shift+P（印刷）、Ctrl+F・F3・Ctrl+G（ページ内検索）、Ctrl+S（保存）、Ctrl+U・Ctrl+J・Ctrl+H */
@@ -398,7 +436,18 @@
       openFolder: (id) => call("mods.openFolder", { id }).then(() => undefined),
       openDocs: () => call("mods.openDocs").then(() => undefined),
       openDevtools: () => call("mods.openDevtools").then(() => undefined),
+      openSettings: (id) => call("mods.openSettings", { id }).then(() => undefined),
     }),
+    // ↓ 2026-10-15 に追加（ログ。ADR 0029）。標準のビューだけが使える
+    logs: Object.freeze({
+      list: (source) => call("logs.list", { source }),
+      sources: () => call("logs.sources"),
+      clear: (source) => call("logs.clear", { source }).then(() => undefined),
+    }),
+    onLogs(cb) {
+      logsListeners.add(cb);
+      return () => logsListeners.delete(cb);
+    },
     onMods(cb) {
       modsListeners.add(cb);
       return () => modsListeners.delete(cb);

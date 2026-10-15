@@ -12,6 +12,7 @@ mod folderdata;
 mod fsops;
 mod geo;
 mod icons;
+mod logs;
 mod modinstall;
 mod mods;
 mod netproxy;
@@ -83,6 +84,10 @@ pub fn run() {
             fileapi::file_read_bytes,
             fileapi::file_url,
             netproxy::net_fetch,
+            logs::log_append,
+            logs::log_tail,
+            logs::log_sources,
+            logs::log_clear,
             netproxy::net_url,
             secrets::secret_set,
             secrets::secret_status,
