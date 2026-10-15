@@ -158,7 +158,7 @@ async function renderRecent() {
         { id: "open", label: "開く", run: () => openEntry(e) },
         { id: "folder", label: "ファイルの場所を開く", run: () => ep.tabs.open(FOLDER_VIEW, { path: parentOf(e.path), replace: true }) },
       ];
-      const { chosen } = await ep.showMenu({ x: ev.clientX, y: ev.clientY, items: [], extra: menu });
+      const { chosen } = await ep.showMenu({ x: ev.clientX, y: ev.clientY, items: [], extra: menu.map(({ id, label }) => ({ id, label })) });
       menu.find((m) => m.id === chosen)?.run();
     };
     $recent.append(r);
