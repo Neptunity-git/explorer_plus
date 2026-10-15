@@ -1,7 +1,9 @@
 /* 色は、ランタイムが用意する CSS 変数（--ep-*）を使う。ライト・ダークの切り替えに自動で追従する */
 body { margin: 0; font-size: 13px; user-select: none; overflow: hidden; }
 body.resizing, body.resizing * { cursor: col-resize !important; }
-.list { height: calc(100vh - 34px); overflow: auto; outline: none; }
+.list { height: calc(100vh - 34px); overflow: auto; outline: none; position: relative; }
+/* 四角で囲んで選ぶ（Win11 の薄い青の四角） */
+.marquee { position: absolute; z-index: 3; pointer-events: none; background: color-mix(in srgb, var(--ep-accent) 22%, transparent); border: 1px solid var(--ep-accent); }
 table { border-collapse: collapse; table-layout: fixed; min-width: 100%; }
 thead th {
   position: sticky; top: 0; z-index: 1; background: var(--ep-bg); text-align: left; font-weight: normal; color: var(--ep-muted);

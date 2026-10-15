@@ -3,6 +3,8 @@
 // - 子フォルダ：アイコン付きで平面に出てくる。好きな所へ動かせる。ダブルクリックでズームインして、そのフォルダのノートへ
 // - 描く：矢印・線（付箋やフォルダにつなぐと、動かしてもついてくる）・ペン・四角・丸。色も選べる
 // - 拡大・縮小：Ctrl+ホイール、上の [−] [＋]、Ctrl+0 で 100%
+// - 選ぶ：押す（Shift で足す）、空いている所から左ドラッグで四角で囲む（ADR 0033）
+// - 平面を動かす：ホイール（Shift で横）、真ん中のボタンでドラッグ、スペースを押しながら左ドラッグ
 // 保存はそのフォルダの中（ep.folderData → .explorer_plus/view.builtin.notes.json。ADR 0022）。OneDrive などで同期すれば、
 // 別の PC でも同じノートが出る。名前変更・移動しても、フォルダについていく。
 import { createMdEditor } from "./md-editor.js";
@@ -41,7 +43,7 @@ document.body.innerHTML = `
   <div class="bar" id="bar"><span class="title" id="title">ノート</span></div>
   <div class="stage" id="stage" tabindex="0">
     <div class="world" id="world"><svg class="shapes" id="shapes"></svg></div>
-    <div class="hint" id="hint" hidden>空いている所をダブルクリックすると付箋を置けます<br>上の道具で矢印・線・ペン・四角・丸を描けます</div>
+    <div class="hint" id="hint" hidden>空いている所をダブルクリックすると付箋を置けます<br>上の道具で矢印・線・ペン・四角・丸を描けます<br>平面はホイール、またはスペースを押しながらドラッグで動かせます</div>
   </div>
   <div class="tui-message" id="message"></div>`;
 
@@ -601,15 +603,19 @@ $stage.addEventListener("pointerdown", (e) => {
   const target = e.target;
   // 書いている付箋の中は、エディタに任せる
   if (editing && target.closest(`.card[data-id="${editing.id}"]`) && !target.closest(".grip")) return;
-  if (e.button === 1 || (e.button === 0 && tool === "select" && !target.closest(".card") && !target.closest(".hit"))) {
-    // 真ん中のボタン、または空いている所を左でつかむと、平面を動かす
-    if (e.button === 0 && !e.shiftKey) {
-      selected.clear();
-      renderAll();
-    }
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    // 真ん中のボタン、またはスペースを押しながら左でつかむと、平面を動かす
     stopEditing();
     gesture = { type: "pan", sx: e.clientX, sy: e.clientY, cam: { ...cam } };
     $stage.classList.add("panning");
+  } else if (e.button === 0 && tool === "select" && !target.closest(".card") && !target.closest(".hit")) {
+    // 空いている所を左でつかむと、四角で囲んで選ぶ（Shift で今の選択に足す。ADR 0033）
+    stopEditing();
+    if (!e.shiftKey) {
+      selected.clear();
+      renderAll();
+    }
+    gesture = { type: "marquee", start: toWorld(e.clientX, e.clientY), sx: e.clientX, sy: e.clientY, base: new Set(e.shiftKey ? selected : []), el: null };
   } else if (e.button === 0 && tool === "select") {
     const cardEl = target.closest(".card");
     const id = cardEl ? cardEl.dataset.id : target.closest("g")?.dataset.id;
@@ -747,6 +753,23 @@ $stage.addEventListener("pointermove", (e) => {
   if (g.type === "pan") {
     cam = { ...g.cam, x: g.cam.x + e.clientX - g.sx, y: g.cam.y + e.clientY - g.sy };
     applyCam();
+  } else if (g.type === "marquee") {
+    if (!g.el && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < 4) return;
+    if (!g.el) g.el = document.body.appendChild(Object.assign(document.createElement("div"), { className: "marquee" }));
+    Object.assign(g.el.style, {
+      left: `${Math.min(e.clientX, g.sx)}px`,
+      top: `${Math.min(e.clientY, g.sy)}px`,
+      width: `${Math.abs(e.clientX - g.sx)}px`,
+      height: `${Math.abs(e.clientY - g.sy)}px`,
+    });
+    const p = toWorld(e.clientX, e.clientY);
+    const box = { x: Math.min(p.x, g.start.x), y: Math.min(p.y, g.start.y), w: Math.abs(p.x - g.start.x), h: Math.abs(p.y - g.start.y) };
+    const hit = (b) => b && b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
+    selected.clear();
+    for (const id of g.base) selected.add(id);
+    for (const c of doc.cards) if (hit(cardRect(c))) selected.add(c.id);
+    for (const s of doc.shapes) if (hit(shapeBox(s))) selected.add(s.id);
+    renderAll();
   } else if (g.type === "resize") {
     const c = cardOf(g.id);
     if (!g.moved) {
@@ -820,6 +843,7 @@ function endGesture(e) {
   $stage.classList.remove("panning");
   showSnap(null);
   if (!g) return;
+  if (g.type === "marquee") g.el?.remove();
   if (g.type === "pan") changed();
   else if ((g.type === "move" || g.type === "resize") && g.moved) changed();
   else if (g.type === "draw" && e.type === "pointerup") {
@@ -956,6 +980,26 @@ function deleteSelected() {
 }
 
 // ---------------------------------------------------------------- キー
+
+// スペースを押している間は、左ドラッグで平面を動かす
+let spaceDown = false;
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || editing || e.target instanceof HTMLInputElement) return;
+  e.preventDefault();
+  if (!spaceDown) {
+    spaceDown = true;
+    $stage.classList.add("can-pan");
+  }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.code !== "Space") return;
+  spaceDown = false;
+  $stage.classList.remove("can-pan");
+});
+window.addEventListener("blur", () => {
+  spaceDown = false;
+  $stage.classList.remove("can-pan");
+});
 
 document.addEventListener("keydown", (e) => {
   if (editing) {

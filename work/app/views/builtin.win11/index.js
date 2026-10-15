@@ -357,39 +357,136 @@ list.addEventListener("contextmenu", (ev) => {
 
 // ---- マウスとキーボード ----
 
-// ドラッグ＆ドロップ（ADR 0015 判断2）：押したまま少し動かすとドラッグになる。そこから先は本体が受け持つ
-let pressed = null; // { x, y, index, deferSelect }
+// マウスで押して動かす（ADR 0015 判断2・ADR 0033）。Win11 と同じく：
+// - 名前（大アイコンでは項目そのもの）をつかんで動かす：ドラッグ＆ドロップ。そこから先は本体が受け持つ
+// - 空いている所、詳細表示の名前以外の列から動かす：薄い青の四角で囲んで選ぶ（Ctrl で切り替え、Shift で足す）。端に来ると流れる
+let pressed = null; // { x, y, index（空いている所なら null）, deferSelect, marquee, ctrl, shift, pointerId }
 const DRAG_START_PX = 6;
 
-list.addEventListener("mousedown", (ev) => {
-  if (ev.button !== 0) return;
-  const tr = ev.target.closest(".item");
-  if (!tr) {
-    if (!ev.target.closest("thead")) {
+list.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0 || editing) return;
+  if (ev.target.closest("thead")) return;
+  // スクロールバーの上は、ふつうにスクロールさせる
+  const lr = list.getBoundingClientRect();
+  if (ev.clientX - lr.left >= list.clientWidth || ev.clientY - lr.top >= list.clientHeight) return;
+  const item = ev.target.closest(".item");
+  const mods = { ctrl: ev.ctrlKey, shift: ev.shiftKey };
+  if (!item) {
+    if (!ev.ctrlKey && !ev.shiftKey) {
       selected.clear();
       paintSelection();
     }
+    pressed = { x: ev.clientX, y: ev.clientY, index: null, deferSelect: false, marquee: true, ...mods, pointerId: ev.pointerId };
     return;
   }
-  const i = Number(tr.dataset.index);
+  const i = Number(item.dataset.index);
+  const onName = mode === "large" || !!ev.target.closest(".name-cell");
+  if (!onName) {
+    // 名前以外の列：離したときに選ぶ（動かしたら、四角で選ぶ）
+    pressed = { x: ev.clientX, y: ev.clientY, index: i, deferSelect: true, marquee: true, ...mods, pointerId: ev.pointerId };
+    return;
+  }
   // すでに選んでいる項目を押したときは、離すまで選び直さない（複数選んだままドラッグできるように。Win11 と同じ）
   const deferSelect = selected.has(rows[i].path) && !ev.ctrlKey && !ev.shiftKey;
-  if (!deferSelect) select(i, { ctrl: ev.ctrlKey, shift: ev.shiftKey });
-  pressed = { x: ev.clientX, y: ev.clientY, index: i, deferSelect };
+  if (!deferSelect) select(i, mods);
+  pressed = { x: ev.clientX, y: ev.clientY, index: i, deferSelect, marquee: false, ctrl: false, shift: false, pointerId: ev.pointerId };
 });
 
-list.addEventListener("mousemove", (ev) => {
-  if (!pressed || editing || !(ev.buttons & 1)) return;
+list.addEventListener("pointermove", (ev) => {
+  if (marquee) {
+    marquee.last = { x: ev.clientX, y: ev.clientY };
+    return;
+  }
+  if (!pressed || editing) return;
+  if (!(ev.buttons & 1)) {
+    pressed = null;
+    return;
+  }
   if (Math.hypot(ev.clientX - pressed.x, ev.clientY - pressed.y) < DRAG_START_PX) return;
+  if (pressed.marquee) {
+    startMarquee(pressed, ev);
+    pressed = null;
+    return;
+  }
   const items = selectedEntries();
   pressed = null;
   if (items.length > 0) ep.drag.start({ items, x: ev.clientX, y: ev.clientY, targets: dropTargets() }).catch(report);
 });
 
-list.addEventListener("mouseup", () => {
-  if (pressed?.deferSelect) select(pressed.index);
+const endPress = (ev) => {
+  if (marquee) return endMarquee();
+  if (pressed?.deferSelect && ev.type === "pointerup") select(pressed.index, pressed.marquee ? { ctrl: pressed.ctrl, shift: pressed.shift } : {});
   pressed = null;
-});
+};
+list.addEventListener("pointerup", endPress);
+list.addEventListener("pointercancel", endPress);
+
+// ---- 四角で囲んで選ぶ ----
+
+let marquee = null; // { x0, y0（一覧の中の位置）, base（始めたときの選択）, toggle, el, last（画面の位置）, raf }
+const EDGE_PX = 28;
+
+/** 画面の位置を、一覧の中の位置（スクロールを含む）にする */
+function contentPoint(cx, cy) {
+  const r = list.getBoundingClientRect();
+  return { x: cx - r.left + list.scrollLeft, y: cy - r.top + list.scrollTop };
+}
+
+function startMarquee(p, ev) {
+  list.setPointerCapture(p.pointerId);
+  const s = contentPoint(p.x, p.y);
+  const el = Object.assign(document.createElement("div"), { className: "marquee" });
+  list.appendChild(el);
+  marquee = { x0: s.x, y0: s.y, base: new Set(p.ctrl || p.shift ? selected : []), toggle: p.ctrl, el, last: { x: ev.clientX, y: ev.clientY }, raf: 0 };
+  tickMarquee();
+}
+
+/** 1コマごと：端に近ければ流し、四角に入っている項目を選び直す */
+function tickMarquee() {
+  const m = marquee;
+  if (!m) return;
+  const r = list.getBoundingClientRect();
+  const { x: cx, y: cy } = m.last;
+  const speed = (d) => Math.ceil(Math.min(d, 120) / 4);
+  if (cy < r.top + EDGE_PX) list.scrollTop -= speed(r.top + EDGE_PX - cy);
+  else if (cy > r.bottom - EDGE_PX) list.scrollTop += speed(cy - (r.bottom - EDGE_PX));
+  if (cx < r.left + EDGE_PX) list.scrollLeft -= speed(r.left + EDGE_PX - cx);
+  else if (cx > r.right - EDGE_PX) list.scrollLeft += speed(cx - (r.right - EDGE_PX));
+  const p = contentPoint(cx, cy);
+  const px = Math.max(0, Math.min(p.x, list.scrollWidth));
+  const py = Math.max(0, Math.min(p.y, list.scrollHeight));
+  const x = Math.min(px, m.x0);
+  const y = Math.min(py, m.y0);
+  const w = Math.abs(px - m.x0);
+  const h = Math.abs(py - m.y0);
+  Object.assign(m.el.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+  const next = new Set(m.base);
+  for (const it of list.querySelectorAll(".item")) {
+    const b = it.getBoundingClientRect();
+    const ix = b.left - r.left + list.scrollLeft;
+    const iy = b.top - r.top + list.scrollTop;
+    if (ix < x + w && ix + b.width > x && iy < y + h && iy + b.height > y) {
+      const path = rows[Number(it.dataset.index)].path;
+      if (m.toggle && m.base.has(path)) next.delete(path);
+      else next.add(path);
+    }
+  }
+  if (next.size !== selected.size || [...next].some((k) => !selected.has(k))) {
+    selected = next;
+    paintSelection();
+  }
+  m.raf = requestAnimationFrame(tickMarquee);
+}
+
+function endMarquee() {
+  if (!marquee) return;
+  cancelAnimationFrame(marquee.raf);
+  marquee.el.remove();
+  marquee = null;
+  // 次に Shift で選ぶときの起点は、選んだものの最初
+  const first = rows.findIndex((e) => selected.has(e.path));
+  anchor = cursor = first >= 0 ? first : null;
+}
 
 /** このビューの中の、落とせる場所（見えているフォルダの行・アイコン。選んでいるものは除く） */
 function dropTargets() {

@@ -15,7 +15,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; outline: none; cursor: default;
   background-image: radial-gradient(circle, color-mix(in srgb, var(--tui-line) 70%, transparent) 1px, transparent 1px);
 }
+.stage.can-pan { cursor: grab; }
 .stage.panning { cursor: grabbing; }
+/* 四角で囲んで選ぶ（ADR 0033） */
+.marquee { position: fixed; z-index: 30; pointer-events: none; background: color-mix(in srgb, var(--tui-accent) 18%, transparent); border: 1px solid var(--tui-accent); }
 .stage.drawing { cursor: crosshair; }
 .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .shapes { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
