@@ -79,6 +79,10 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `quickAccess` | クイックアクセス（見る・ピン留めする） | 軽い |
 | `recent` | このアプリで最近開いたファイル | 軽い |
 | `folderData` | `folderData`：フォルダについてのデータを、そのフォルダの中に保存する（下の「フォルダの中に保存」） | 軽い |
+| `fileContent` | `files.readText`・`readBytes`・`url`：ファイルの中身を読む・画面に出す | 中 |
+| `fileInfo` | `files.info`・`properties`：撮影日時・撮影場所・曲名・動画の長さなど | 中 |
+| `search` | `search.find`・`stats`：下の階層までの検索と集計 | **重い** |
+| `system` | `system.drives`・`info`：ドライブと空き容量・強調色・言語 | 軽い |
 
 保存（`storage`）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。
 
@@ -134,6 +138,80 @@ const keys = await ep.storage.keys();
 ```
 
 > フォルダごとに何かを覚えるときは、キーに `folder.id`（ファイルID）を使うと、フォルダの名前を変えたり動かしたりしても同じものが出ます。ID の無いドライブ（FAT の USB メモリなど）では `id` が空なので、パスで代わりにします：`` const key = `note:${folder.id || folder.path.toLowerCase()}`; ``
+
+### ファイルの中身（fileContent）
+
+```js
+// 文章：文字コード（UTF-8・UTF-16・Shift_JIS）を見分ける。maxBytes は 8MB まで（既定 1MB）
+const r = await ep.files.readText(entry);           // { text, size, bytesRead, truncated, encoding }
+if (r.truncated) {
+  const next = await ep.files.readText(entry, { offset: r.bytesRead });  // 続き
+}
+
+// バイト：16MB まで（既定 1MB）
+const head = await ep.files.readBytes(entry, { length: 16 });   // Uint8Array
+
+// 画像・動画・音楽をそのまま出す URL（動画・音楽はシークもできる。fetch でも読める）
+img.src = await ep.files.url(entry);
+video.src = await ep.files.url(movie);
+```
+
+- URL は、本体が「渡した項目か」を確かめてから発行する、推測できない使い捨ての URL です。保存しておいて後で使うことはできません（毎回もらってください）
+- 3D の模型（.glb）やフォントも、`url` を Three.js のローダーや `@font-face` に渡せば読めます
+- OneDrive の「クラウドにだけある」ファイルを読むと、ダウンロードが始まります
+
+### ファイルの詳しい情報（fileInfo）
+
+```js
+const [photo, song] = await ep.files.info([entryA, entryB]);
+photo.dateTaken;            // 撮影日時（ミリ秒）
+photo.latitude;             // 撮影場所（度）
+photo.width; photo.height;
+song.title; song.artists;   // 曲名・アーティスト（並び）
+song.duration;              // 長さ（ミリ秒）
+
+// Windows のプロパティの正式な名前で、ほかの情報も聞ける（エクスプローラの「詳細」と同じもの）
+const [p] = await ep.files.properties([entry], ["System.Photo.FNumber", "System.Photo.ISOSpeed"]);
+```
+
+Windows が持っている情報を返します（形式を自分で読み解く必要はありません）。一度に 500 個まで。
+
+### 下の階層まで探す・数える（search）
+
+```js
+// 名前（* ? が使える）・拡張子・種類・大きさ・日付・中身の文字で探す
+const { entries, truncated } = await ep.search.find(folder, { ext: ["jpg", "png"], minSize: 1_000_000 });
+const notes = await ep.search.find(folder, { content: "締め切り" }, { limit: 100 });
+
+// 数える：ファイル数・合計の大きさ・拡張子ごと・大きいもの・新しいもの
+const s = await ep.search.stats(folder);   // { files, folders, bytes, byExt, largest, newest, truncated }
+```
+
+- リンク（ジャンクション）の先へは入りません。数・時間に上限があり、超えると `truncated: true` で途中までを返します
+- 中身の検索は文章のファイル（4MB まで）だけ。クラウドにだけあるファイルは見ません（勝手にダウンロードしない）
+- 大きなフォルダでは時間がかかります。押したときだけ探す、などにすると軽く保てます
+
+### PC の情報（system）
+
+```js
+const drives = await ep.system.drives();   // [{ path: "C:\\", kind: "fixed", label, fileSystem, total, free }]
+const { accent, locale } = await ep.system.info();   // Windows の強調色 "#rrggbb"・"ja-JP"
+```
+
+### 変化の知らせ（onChanges）
+
+開いているフォルダの直下で、作られた・消えた・名前が変わった・書き換わったときに、1件ずつ届きます（uses に `entries`）。
+いっしょに `onFolder` も新しい中身で呼ばれるので、`onChanges` はアニメーション（ポンと出る・崩れて消える）に使うのがおすすめです。
+
+```js
+ep.onChanges((changes) => {
+  for (const c of changes) {
+    if (c.kind === "created") popIn(c.path);
+    if (c.kind === "removed") crumble(c.path);
+    if (c.kind === "renamed") glow(c.path, c.from);
+  }
+});
+```
 
 ### フォルダの中に保存（folderData）
 

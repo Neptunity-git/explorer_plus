@@ -312,6 +312,11 @@ fn entry_at(path: &Path, id: String) -> Option<RawEntry> {
     })
 }
 
+/// たどって見つけた項目を、ファイルID 付きの RawEntry にする（検索の結果など。ADR 0023）
+pub(crate) fn entry_with_id(path: &Path, name: String, is_dir: bool, hidden: bool, size: u64, modified: i64) -> RawEntry {
+    RawEntry { id: file_id(path).unwrap_or_default(), name, path: path.to_string_lossy().into_owned(), is_dir, hidden, size, modified }
+}
+
 /// ref を今の場所に解決する。まず保存しておいたパスを見て、ID が一致すればそれ。違えば ID から探す。
 pub fn resolve_one(r: &EntryRef) -> Option<RawEntry> {
     if r.id.is_empty() {

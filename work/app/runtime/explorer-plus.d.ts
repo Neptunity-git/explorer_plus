@@ -35,6 +35,101 @@ declare global {
       thumbnailUrl?: string;
     }
 
+    /** files.readText の結果（ADR 0023） */
+    interface TextRead {
+      text: string;
+      /** ファイル全体の大きさ（バイト） */
+      size: number;
+      /** offset から読んだバイト数。続きは offset + bytesRead から読む */
+      bytesRead: number;
+      /** まだ続きがあるか */
+      truncated: boolean;
+      encoding: "utf-8" | "utf-16le" | "utf-16be" | "shift_jis";
+    }
+    /** files.info の結果。無い値は入らない */
+    interface FileInfo {
+      typeName?: string;
+      /** 1970年からのミリ秒 */
+      created?: number;
+      /** 画像・動画の縦横（ピクセル） */
+      width?: number;
+      height?: number;
+      /** 写真の撮影日時（1970年からのミリ秒） */
+      dateTaken?: number;
+      cameraMaker?: string;
+      cameraModel?: string;
+      /** 写真の撮影場所（度） */
+      latitude?: number;
+      longitude?: number;
+      title?: string;
+      artists?: string[];
+      albumArtist?: string;
+      album?: string;
+      genres?: string[];
+      track?: number;
+      year?: number;
+      /** 曲・動画の長さ（ミリ秒） */
+      duration?: number;
+      bitrate?: number;
+      /** 1 秒あたりのフレーム数 */
+      frameRate?: number;
+      authors?: string[];
+      pageCount?: number;
+      wordCount?: number;
+    }
+    /** search.find の条件。全部省略すると、すべての項目 */
+    interface SearchQuery {
+      /** 名前に含む文字（大文字・小文字を区別しない）。* と ? があれば名前全体と比べる（例 "*.jpg"） */
+      name?: string;
+      /** 拡張子（小文字・点なし）のどれか */
+      ext?: string[];
+      kind?: "file" | "folder";
+      minSize?: number;
+      maxSize?: number;
+      /** 1970年からのミリ秒 */
+      modifiedAfter?: number;
+      modifiedBefore?: number;
+      /** 中身に含む文字（文章のファイルだけ。4MB まで。クラウドにだけあるファイルは見ない） */
+      content?: string;
+      /** false なら隠し項目を除く */
+      hidden?: boolean;
+    }
+    interface SearchStats {
+      files: number;
+      folders: number;
+      bytes: number;
+      /** 拡張子ごと（大きい順に 50 まで。拡張子なしは ""） */
+      byExt: { ext: string; count: number; bytes: number }[];
+      /** 大きいファイル・新しく変わったファイル（20 まで） */
+      largest: Entry[];
+      newest: Entry[];
+      /** 数・時間の上限で途中までになったか */
+      truncated: boolean;
+    }
+    interface Drive {
+      /** "C:\\" */
+      path: string;
+      kind: "fixed" | "removable" | "network" | "cdrom" | "ramdisk" | "unknown";
+      label: string;
+      fileSystem: string;
+      /** バイト（取れなければ null） */
+      total: number | null;
+      free: number | null;
+    }
+    interface SystemInfo {
+      /** Windows の強調色 "#rrggbb"（取れなければ null） */
+      accent: string | null;
+      /** "ja-JP" など */
+      locale: string;
+    }
+    /** 開いているフォルダの直下で起きた1件の変化 */
+    interface FileChange {
+      kind: "created" | "removed" | "modified" | "renamed";
+      path: string;
+      name: string;
+      /** renamed のときの、前のパス */
+      from?: string;
+    }
     interface FolderSnapshot {
       /** フォルダ自身のファイルID（取れなければ ""）。フォルダごとに何かを覚えるときに使う */
       id: string;
@@ -155,6 +250,34 @@ declare global {
         set(folder: EntryRef, value: unknown): Promise<void>;
         delete(folder: EntryRef): Promise<void>;
       };
+      /**
+       * uses に "fileContent" が要る（ADR 0023）。ファイルの中身を読む。
+       * readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分けて文字にする。maxBytes は 8MB まで（既定 1MB）。
+       * readBytes は length が 16MB まで（既定 1MB）。url は <img>・<video>・<audio>・fetch にそのまま使える URL（動画のシークもできる）。
+       * uses に "fileInfo" が要る：info は撮影日時・撮影場所・曲名・動画の長さなど。properties は Windows の正式な名前（"System.*"）で聞く
+       */
+      readonly files: {
+        readText(entry: EntryRef, opts?: { offset?: number; maxBytes?: number }): Promise<TextRead>;
+        readBytes(entry: EntryRef, opts?: { offset?: number; length?: number }): Promise<Uint8Array>;
+        url(entry: EntryRef): Promise<string>;
+        info(entries: EntryRef[]): Promise<(FileInfo | null)[]>;
+        properties(entries: EntryRef[], names: string[]): Promise<(Record<string, unknown> | null)[]>;
+      };
+      /**
+       * uses に "search" が要る（ADR 0023）。下の階層までの検索と集計。リンク（ジャンクション）の先へは入らない。
+       * depth は 1〜64（既定 64）、limit は 1〜5000（既定 1000）。数・時間の上限で途中までのときは truncated: true
+       */
+      readonly search: {
+        find(folder: EntryRef, query?: SearchQuery, opts?: { depth?: number; limit?: number }): Promise<{ entries: Entry[]; truncated: boolean }>;
+        stats(folder: EntryRef, opts?: { depth?: number }): Promise<SearchStats>;
+      };
+      /** uses に "system" が要る（ADR 0023）。ドライブと空き容量・強調色・言語 */
+      readonly system: {
+        drives(): Promise<Drive[]>;
+        info(): Promise<SystemInfo>;
+      };
+      /** 開いているフォルダの直下で起きた変化（少しまとめて届く。フォルダの中身の onFolder の後）。uses に "entries" が要る */
+      onChanges(cb: (changes: FileChange[]) => void): () => void;
       /** uses に "tree" が要る */
       getTree(opts?: { depth?: number }): Promise<TreeNode>;
       /** uses に "links" が要る。見つからなければ null */

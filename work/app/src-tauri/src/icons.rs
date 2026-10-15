@@ -44,7 +44,7 @@ fn image_list_for(size: u32) -> i32 {
 /// target がファイル名（拡張子だけでよい）なら use_attributes = true、実在するパスなら false
 /// Windows のアイコン・縮小画像の取り出しを、1つずつ順番に行うための鍵。
 /// たくさんのアイコンを同時に取り出すと、まれに空の絵になる（memo.txt のアイコンが壊れて見えた）ため
-static SHELL_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) static SHELL_LOCK: Mutex<()> = Mutex::new(());
 
 fn icon_png(target: &str, use_attributes: bool, is_dir: bool, size: u32) -> Result<Vec<u8>, String> {
     let _guard = SHELL_LOCK.lock().unwrap_or_else(|e| e.into_inner());

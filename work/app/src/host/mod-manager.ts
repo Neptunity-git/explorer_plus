@@ -23,6 +23,10 @@ const USE_LABELS: Record<Use, string> = {
   recent: "最近使った項目",
   thumbnails: "画像の縮小表示",
   folderData: "フォルダの中に、このビューのデータを保存する（同期すれば別の PC でも使える）",
+  fileContent: "ファイルの中身（文章・画像・音・動画など）を読む",
+  fileInfo: "ファイルの詳しい情報（撮影日時・撮影場所・曲名など）",
+  search: "下の階層までの検索・集計（名前・大きさ・中身の文字など）",
+  system: "PC の情報（ドライブと空き容量・強調色・言語）",
 };
 
 export type ModInfo = {

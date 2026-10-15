@@ -309,3 +309,20 @@ id が `builtin.` で始まる標準のビュー（ホーム）だけが使え�
 - 置き場所は `folder` の中の `.explorer_plus/view.<ビューの id>.json`（`.explorer_plus` は隠しフォルダ）。OneDrive などで同期すれば、別の PC でも同じものが出る
 - `folder` のファイルID が今のものと合わなければ（別のものに入れ替わった）失敗する。書けないフォルダでは、このビューの保存場所（キー `folderData:<ファイルID かパス>`）に置く
 - 本体は `.explorer_plus` と、隠し＋システムの項目（desktop.ini など）を、フォルダの一覧（entries）に入れない。ほかの隠し項目は `hidden: true` で入れる
+
+## 2026-10-15（3回目）の追加：読み取りの API（ADR 0023）
+
+| uses | メソッド | 引数 | 返り値 |
+|---|---|---|---|
+| `fileContent` | `files.readText` | `{ item, offset?=0, maxBytes?=1MB（8MB まで） }` | `{ text, size, bytesRead, truncated, encoding }`（UTF-8・UTF-16・Shift_JIS を見分ける） |
+| `fileContent` | `files.readBytes` | `{ item, offset?=0, length?=1MB（16MB まで） }` | Uint8Array |
+| `fileContent` | `files.url` | `{ item }` | `http://epfile.localhost/<推測できない印>/<名前>`。Range に対応。MOD の CSP の img・media・connect・font で許す |
+| `fileInfo` | `files.info` | `{ items }`（500 まで） | `(FileInfo \| null)[]`（Windows のプロパティから。時間はミリ秒） |
+| `fileInfo` | `files.properties` | `{ items, names }`（"System.*" を 60 まで） | `(名前→値 \| null)[]` |
+| `search` | `search.find` | `{ folder, query, depth?=64, limit?=1000（5000 まで） }` | `{ entries, truncated }` |
+| `search` | `search.stats` | `{ folder, depth? }` | `{ files, folders, bytes, byExt, largest, newest, truncated }` |
+| `system` | `system.drives`・`system.info` | なし | ドライブの一覧・`{ accent, locale }` |
+
+- 知らせ `changes`（data は `FileChange[]`）：開いているフォルダの直下の変化。uses に `entries` のあるビューだけ。`folder` の知らせの後に届く
+- たどるときは、リンクの先へ入らず、`.explorer_plus` と隠し＋システムの項目を数えない。上限（30 万項目・20 秒）で `truncated`
+

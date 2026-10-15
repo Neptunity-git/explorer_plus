@@ -19,6 +19,8 @@ import { parseModMessage } from "../core/protocol";
 import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
+import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
+import type { FileChange } from "../api/types";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
 import { storageFor } from "./view-storage";
@@ -126,6 +128,11 @@ export class ViewHost {
   private folderRef(): EntryRef {
     if (!this.folder) throw new HostError({ code: "not-found", message: "no folder is open" });
     return { id: this.folder.id, path: this.folder.path };
+  }
+
+  /** フォルダの直下で起きた変化を知らせる（ADR 0023）。フォルダの中身を見るビュー（uses に entries）だけ */
+  pushChanges(changes: FileChange[]) {
+    if (this.isReady && changes.length > 0 && this.uses.has("entries")) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "changes", data: changes });
   }
 
   /** フォルダの中のデータの名前（.explorer_plus/view.<ビューの id>.json） */
@@ -405,6 +412,29 @@ export class ViewHost {
         const box = this.iframe.getBoundingClientRect();
         return this.tab.dragEnd(box.x + p.x, box.y + p.y, p.ctrl, p.shift, p.cancel);
       }
+      // ↓ 読み取りの API（ADR 0023）
+      case "files.readText":
+        return backend.fileReadText(p.item, p.offset, p.maxBytes);
+      case "files.readBytes":
+        return new Uint8Array(await backend.fileReadBytes(p.item, p.offset, p.length));
+      case "files.url":
+        return backend.fileUrl(p.item);
+      case "files.info":
+        return (await backend.fileProperties(p.items, [...INFO_PROPERTY_NAMES])).map((m) => (m ? toFileInfo(m) : null));
+      case "files.properties":
+        return backend.fileProperties(p.items, p.names);
+      case "search.find": {
+        const r = await backend.searchFind(p.folder, p.query, p.depth, p.limit);
+        return { entries: r.entries.map((e) => toEntry(e, this.uses)), truncated: r.truncated };
+      }
+      case "search.stats": {
+        const r = await backend.searchStats(p.folder, p.depth);
+        return { ...r, largest: r.largest.map((e) => toEntry(e, this.uses)), newest: r.newest.map((e) => toEntry(e, this.uses)) };
+      }
+      case "system.drives":
+        return backend.systemDrives();
+      case "system.info":
+        return backend.systemInfo();
       case "mods.list":
         return this.tab.mods.list();
       case "mods.install":

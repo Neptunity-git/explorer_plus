@@ -7,6 +7,7 @@ import { backend, BackendError, ICON_ORIGIN, type OneDriveAction, type Place, ty
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { moveItem } from "../core/drop";
+import { pairChanges, type RawChange } from "../core/changes";
 import { DragController, type WindowTarget } from "./drag";
 import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
@@ -260,6 +261,8 @@ export class App {
 
   /** 知らせはまとめて来る（コピー中など）ので、少し待ってから1回だけ読み直す */
   private changeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** まだビューに知らせていない、フォルダごとの1件ずつの変化 */
+  private pendingChanges = new Map<string, RawChange[]>();
   private onFolderChanged(path: string) {
     const key = folderKey(path);
     clearTimeout(this.changeTimers.get(key));
@@ -267,8 +270,12 @@ export class App {
       key,
       setTimeout(() => {
         this.changeTimers.delete(key);
+        const changes = pairChanges(this.pendingChanges.get(key) ?? []);
+        this.pendingChanges.delete(key);
         for (const t of this.tabs) {
-          if (t.folderView && t.folder && folderKey(t.folder.path) === key) void this.navigate(t, t.folder.path, false).catch(() => {});
+          if (t.folderView && t.folder && folderKey(t.folder.path) === key) {
+            void this.navigate(t, t.folder.path, false).then(() => t.host.pushChanges(changes), () => {});
+          }
         }
       }, 300),
     );
@@ -320,6 +327,13 @@ export class App {
     document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
     document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
     void listen<string>("folder-changed", (e) => this.onFolderChanged(e.payload));
+    // 1件ずつの変化は、読み直しのあとでビューに知らせる（MOD のアニメーション用。ADR 0023）
+    void listen<RawChange & { folder: string }>("folder-change", (e) => {
+      const key = folderKey(e.payload.folder);
+      const list = this.pendingChanges.get(key) ?? [];
+      list.push(e.payload);
+      this.pendingChanges.set(key, list);
+    });
     // アプリの窓に戻ってきたら、時間割を読み直す（別の PC で書き換えて、OneDrive などの同期で届いたとき。ADR 0022）
     let lastRefresh = 0;
     window.addEventListener("focus", () => {

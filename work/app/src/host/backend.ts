@@ -1,6 +1,6 @@
 // Rust 側（src-tauri）のコマンドを呼ぶ窓口。Rust のエラーは "<code>: <説明>" の文字列で返ってくるので、ApiError に直す。
 import { invoke } from "@tauri-apps/api/core";
-import { ERROR_CODES, type ApiError, type EntryRef, type ErrorCode } from "../api/types";
+import { ERROR_CODES, type ApiError, type Drive, type EntryRef, type ErrorCode, type SearchQuery, type SearchStats, type SystemInfo, type TextRead } from "../api/types";
 
 export type RawEntry = {
   id: string;
@@ -94,6 +94,18 @@ export const backend = {
   cursorOverApp: () => call<boolean>("cursor_over_app"),
   /** 同梱の MOD 開発ガイドのフォルダ */
   modDocsDir: () => call<string>("mod_docs_dir"),
+  // ↓ 読み取りの API（ADR 0023）
+  fileReadText: (item: EntryRef, offset: number, maxBytes: number) => call<TextRead>("file_read_text", { item, offset, maxBytes }),
+  /** そのままのバイト列（ArrayBuffer）で届く */
+  fileReadBytes: (item: EntryRef, offset: number, length: number) => call<ArrayBuffer>("file_read_bytes", { item, offset, length }),
+  fileUrl: (item: EntryRef) => call<string>("file_url", { item }),
+  fileProperties: (items: EntryRef[], names: string[]) => call<(Record<string, unknown> | null)[]>("file_properties", { items, names }),
+  searchFind: (folder: EntryRef, query: SearchQuery, depth?: number, limit?: number) =>
+    call<{ entries: RawEntry[]; truncated: boolean }>("search_find", { folder, query, depth, limit }),
+  searchStats: (folder: EntryRef, depth?: number) =>
+    call<Omit<SearchStats, "largest" | "newest"> & { largest: RawEntry[]; newest: RawEntry[] }>("search_stats", { folder, depth }),
+  systemDrives: () => call<Drive[]>("system_drives"),
+  systemInfo: () => call<SystemInfo>("system_info"),
   /** OneDrive の中のファイル・フォルダか */
   onedriveContains: (item: EntryRef) => call<boolean>("onedrive_contains", { item }),
   /** OneDrive の操作。Windows のメニューの項目を呼び、画面は OneDrive が出す */

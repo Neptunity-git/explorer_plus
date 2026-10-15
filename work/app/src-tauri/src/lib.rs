@@ -2,6 +2,10 @@
 // エラーは "<code>: <説明>" の文字列で返す。code は MOD の API のエラーと同じ（not-found・denied・invalid・io など）。
 
 mod archive;
+mod fileapi;
+mod props;
+mod scan;
+mod sysinfo;
 mod folderdata;
 mod fsops;
 mod geo;
@@ -32,6 +36,7 @@ pub fn run() {
         .manage(mods::ModRegistry::default())
         .manage(watch::FolderWatch::default())
         .manage(modinstall::DevWatch::default())
+        .manage(fileapi::FileTokens::default())
         .register_asynchronous_uri_scheme_protocol("icon", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             // アイコンの取り出しは COM を使い時間もかかるので、画面のスレッドを止めないよう別のスレッドで行う
@@ -39,6 +44,15 @@ pub fn run() {
                 use tauri::Manager;
                 let cache = app.state::<icons::IconCache>();
                 responder.respond(icons::handle(&cache, &request));
+            });
+        })
+        // MOD に渡したファイルの URL の配信（ADR 0023）。読むのに時間がかかることがあるので、別のスレッドで
+        .register_asynchronous_uri_scheme_protocol("epfile", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                use tauri::Manager;
+                let tokens = app.state::<fileapi::FileTokens>();
+                responder.respond(fileapi::handle(&tokens, &request));
             });
         })
         .register_asynchronous_uri_scheme_protocol("mod", |ctx, request, responder| {
@@ -52,6 +66,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             fsops::list_dir,
+            fileapi::file_read_text,
+            fileapi::file_read_bytes,
+            fileapi::file_url,
+            props::file_properties,
+            scan::search_find,
+            scan::search_stats,
+            sysinfo::system_drives,
+            sysinfo::system_info,
             fsops::folder_sizes,
             fsops::resolve,
             fsops::open_entry,

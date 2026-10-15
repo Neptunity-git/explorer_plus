@@ -27,6 +27,15 @@ export const USES = [
   "thumbnails",
   // ↓ 2026-10-15 に追加（ADR 0022）。フォルダの中（.explorer_plus）に、このビューのデータを保存する
   "folderData",
+  // ↓ 2026-10-15 に追加（読み取りの API。ADR 0023）
+  /** ファイルの中身を読む（files.readText・readBytes・url） */
+  "fileContent",
+  /** ファイルの詳しい情報（files.info・properties：撮影日時・曲名・動画の長さなど） */
+  "fileInfo",
+  /** 下の階層までの検索と集計（search.find・stats） */
+  "search",
+  /** PC の情報（system.drives・info） */
+  "system",
 ] as const;
 export type Use = (typeof USES)[number];
 
@@ -135,6 +144,112 @@ export type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | nu
 /** views.list で返すビューの情報（ホームで使う） */
 export type ViewInfo = { id: string; name: string; description?: string; location: "folder" | "none" };
 
+// ---- 読み取りの API（ADR 0023） ----
+
+/** files.readText の結果 */
+export type TextRead = {
+  text: string;
+  /** ファイル全体の大きさ（バイト） */
+  size: number;
+  /** offset から読んだバイト数（続きは offset + bytesRead から） */
+  bytesRead: number;
+  /** まだ続きがあるか */
+  truncated: boolean;
+  encoding: "utf-8" | "utf-16le" | "utf-16be" | "shift_jis";
+};
+
+/** files.info の結果。無い値は入らない */
+export type FileInfo = {
+  /** "JPG ファイル" など（Windows の種類の名前） */
+  typeName?: string;
+  /** 作成日時（1970年からのミリ秒） */
+  created?: number;
+  /** 画像・動画の縦横（ピクセル） */
+  width?: number;
+  height?: number;
+  /** 写真の撮影日時（1970年からのミリ秒） */
+  dateTaken?: number;
+  cameraMaker?: string;
+  cameraModel?: string;
+  /** 写真の撮影場所（度） */
+  latitude?: number;
+  longitude?: number;
+  title?: string;
+  artists?: string[];
+  albumArtist?: string;
+  album?: string;
+  genres?: string[];
+  track?: number;
+  year?: number;
+  /** 曲・動画の長さ（ミリ秒） */
+  duration?: number;
+  /** ビットレート（bps） */
+  bitrate?: number;
+  /** 1 秒あたりのフレーム数 */
+  frameRate?: number;
+  authors?: string[];
+  pageCount?: number;
+  wordCount?: number;
+};
+
+/** search.find の条件。全部省略すると、すべての項目 */
+export type SearchQuery = {
+  /** 名前に含む文字（大文字・小文字を区別しない）。* と ? があれば名前全体と比べる（例 "*.jpg"） */
+  name?: string;
+  /** 拡張子（小文字・点なし）のどれか */
+  ext?: string[];
+  kind?: "file" | "folder";
+  minSize?: number;
+  maxSize?: number;
+  /** 1970年からのミリ秒 */
+  modifiedAfter?: number;
+  modifiedBefore?: number;
+  /** 中身に含む文字（文章のファイルだけ。4MB まで。クラウドにだけあるファイルは見ない） */
+  content?: string;
+  /** false なら隠し項目を除く */
+  hidden?: boolean;
+};
+
+export type SearchStats = {
+  files: number;
+  folders: number;
+  bytes: number;
+  /** 拡張子ごと（大きい順に 50 まで。拡張子なしは ""） */
+  byExt: { ext: string; count: number; bytes: number }[];
+  /** 大きいファイル・新しく変わったファイル（20 まで） */
+  largest: Entry[];
+  newest: Entry[];
+  /** 数・時間の上限で途中までになったか */
+  truncated: boolean;
+};
+
+export type Drive = {
+  /** "C:\\" */
+  path: string;
+  kind: "fixed" | "removable" | "network" | "cdrom" | "ramdisk" | "unknown";
+  label: string;
+  fileSystem: string;
+  /** バイト（取れなければ null） */
+  total: number | null;
+  free: number | null;
+};
+
+export type SystemInfo = {
+  /** Windows の強調色 "#rrggbb"（取れなければ null） */
+  accent: string | null;
+  /** "ja-JP" など */
+  locale: string;
+};
+
+/** 開いているフォルダの直下で起きた、1件の変化（"changes" の知らせ） */
+export type FileChange = {
+  kind: "created" | "removed" | "modified" | "renamed";
+  path: string;
+  name: string;
+  /** renamed のときの、前のパス */
+  from?: string;
+};
+
 export type FolderSnapshot = {
   /** フォルダ自身のファイルID（取れなければ ""）。ノートビューなど、フォルダごとに何かを覚えるときに使う */
   id: string;
@@ -225,6 +340,16 @@ export type CallMethod =
   | "folderData.get"
   | "folderData.set"
   | "folderData.delete"
+  // ↓ 2026-10-15 に追加（読み取りの API。ADR 0023）
+  | "files.readText"
+  | "files.readBytes"
+  | "files.url"
+  | "files.info"
+  | "files.properties"
+  | "search.find"
+  | "search.stats"
+  | "system.drives"
+  | "system.info"
   | "mods.list"
   | "mods.install"
   | "mods.remove"
@@ -290,6 +415,20 @@ export type CallParams = {
   "folderData.get": { folder: EntryRef };
   "folderData.set": { folder: EntryRef; value: unknown };
   "folderData.delete": { folder: EntryRef };
+  /** offset はバイト。maxBytes は 8MB まで（既定 1MB） */
+  "files.readText": { item: EntryRef; offset: number; maxBytes: number };
+  /** length は 16MB まで（既定 1MB） */
+  "files.readBytes": { item: EntryRef; offset: number; length: number };
+  "files.url": { item: EntryRef };
+  /** 500 個まで */
+  "files.info": { items: EntryRef[] };
+  /** Windows の正式な名前（"System.Photo.DateTaken" など）。60 個まで */
+  "files.properties": { items: EntryRef[]; names: string[] };
+  /** depth は 1〜64（既定 64）、limit は 1〜5000（既定 1000） */
+  "search.find": { folder: EntryRef; query: SearchQuery; depth?: number; limit?: number };
+  "search.stats": { folder: EntryRef; depth?: number };
+  "system.drives": Record<string, never>;
+  "system.info": Record<string, never>;
   "mods.list": Record<string, never>;
   /** 本体が zip を選ぶ画面と、確かめの画面を出す */
   "mods.install": Record<string, never>;
@@ -344,6 +483,15 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "folderData.get": "folderData",
   "folderData.set": "folderData",
   "folderData.delete": "folderData",
+  "files.readText": "fileContent",
+  "files.readBytes": "fileContent",
+  "files.url": "fileContent",
+  "files.info": "fileInfo",
+  "files.properties": "fileInfo",
+  "search.find": "search",
+  "search.stats": "search",
+  "system.drives": "system",
+  "system.info": "system",
   "mods.list": null,
   "mods.install": null,
   "mods.remove": null,
@@ -382,7 +530,9 @@ export type EventMessage =
   // ドラッグ中に、このビューのタブに切り替わった。drag.targets で落とせる場所を知らせてほしい（ADR 0015 判断2）
   | { ep: 1; kind: "event"; event: "dragTargets"; data: null }
   // 入っている MOD が変わった（入れた・外した・開発中の MOD を保存した）。標準のビューだけに届く（ADR 0020）
-  | { ep: 1; kind: "event"; event: "mods"; data: null };
+  | { ep: 1; kind: "event"; event: "mods"; data: null }
+  // 開いているフォルダの直下で起きた変化（1件ずつ。少しまとめて届く）。uses に entries があるビューだけに届く（ADR 0023）
+  | { ep: 1; kind: "event"; event: "changes"; data: FileChange[] };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 

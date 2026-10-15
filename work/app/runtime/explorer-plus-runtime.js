@@ -13,6 +13,7 @@
   const quickAccessListeners = new Set();
   const recentListeners = new Set();
   const modsListeners = new Set();
+  const changesListeners = new Set();
   const dragTargetListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
@@ -92,6 +93,8 @@
         for (const cb of recentListeners) safely(cb);
       } else if (m.event === "dragTargets") {
         for (const cb of dragTargetListeners) safely(cb);
+      } else if (m.event === "changes") {
+        for (const cb of changesListeners) safely(cb, m.data);
       } else if (m.event === "mods") {
         for (const cb of modsListeners) safely(cb);
       }
@@ -230,6 +233,38 @@
       set: (folder, value) => call("folderData.set", { folder: toRef(folder), value }).then(() => undefined),
       delete: (folder) => call("folderData.delete", { folder: toRef(folder) }).then(() => undefined),
     }),
+    // ↓ 2026-10-15 に追加（読み取りの API。ADR 0023）
+    // uses に "fileContent"：ファイルの中身。readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分ける
+    files: Object.freeze({
+      readText: (entry, opts) =>
+        call("files.readText", Object.assign({ item: toRef(entry) }, opts && opts.offset !== undefined ? { offset: opts.offset } : {}, opts && opts.maxBytes !== undefined ? { maxBytes: opts.maxBytes } : {})),
+      readBytes: (entry, opts) =>
+        call("files.readBytes", Object.assign({ item: toRef(entry) }, opts && opts.offset !== undefined ? { offset: opts.offset } : {}, opts && opts.length !== undefined ? { length: opts.length } : {})),
+      /** <img>・<video>・<audio>・fetch にそのまま使える URL（動画のシークもできる） */
+      url: (entry) => call("files.url", { item: toRef(entry) }),
+      // uses に "fileInfo"：撮影日時・曲名・動画の長さなど
+      info: (entries) => call("files.info", { items: entries.map(toRef) }),
+      properties: (entries, names) => call("files.properties", { items: entries.map(toRef), names }),
+    }),
+    // uses に "search"：下の階層までの検索と集計
+    search: Object.freeze({
+      find: (folder, query, opts) =>
+        call(
+          "search.find",
+          Object.assign({ folder: toRef(folder), query: query || {} }, opts && opts.depth !== undefined ? { depth: opts.depth } : {}, opts && opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ),
+      stats: (folder, opts) => call("search.stats", Object.assign({ folder: toRef(folder) }, opts && opts.depth !== undefined ? { depth: opts.depth } : {})),
+    }),
+    // uses に "system"：ドライブと空き容量・強調色・言語
+    system: Object.freeze({
+      drives: () => call("system.drives"),
+      info: () => call("system.info"),
+    }),
+    /** 開いているフォルダの直下で起きた変化（作られた・消えた・名前が変わった・書き換わった）。uses に "entries" が要る */
+    onChanges(cb) {
+      changesListeners.add(cb);
+      return () => changesListeners.delete(cb);
+    },
     // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（ホーム）だけが使える。ほかの MOD が呼ぶと code "denied" で失敗する
     mods: Object.freeze({
       list: () => call("mods.list"),

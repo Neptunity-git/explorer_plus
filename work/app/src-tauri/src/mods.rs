@@ -191,14 +191,16 @@ pub fn frame_csp(origin: &str, id: &str) -> String {
     let base = format!("{}/{}/", origin, id);
     let runtime = format!("{}/{}/", origin, RUNTIME_PREFIX);
     let icons = origin.replacen("://mod.", "://icon.", 1);
+    // files.url で渡したファイル（画像・動画・音楽など。ADR 0023）。URL は推測できない印つきで、本体が確かめた項目にだけ発行する
+    let files = origin.replacen("://mod.", "://epfile.", 1);
     format!(
         "default-src 'none'; \
          script-src {base} {runtime} 'wasm-unsafe-eval'; \
          style-src {base} {runtime} 'unsafe-inline'; \
-         img-src {base} {icons} data: blob:; \
-         font-src {base} data:; \
-         connect-src {base}; \
-         media-src {base} data: blob:; \
+         img-src {base} {icons} {files} data: blob:; \
+         font-src {base} {files} data:; \
+         connect-src {base} {files}; \
+         media-src {base} {files} data: blob:; \
          worker-src blob:"
     )
 }

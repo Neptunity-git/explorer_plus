@@ -318,6 +318,52 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { folder: folder.ref, value: params.value } };
     }
 
+    // ↓ 読み取りの API（ADR 0023）
+    case "files.readText":
+    case "files.readBytes": {
+      const item = parseRef(params.item);
+      const offset = optInt(params.offset, 0, Number.MAX_SAFE_INTEGER, 0);
+      const size =
+        method === "files.readText" ? optInt(params.maxBytes, 1, 8 * 1024 * 1024, 1024 * 1024) : optInt(params.length, 1, 16 * 1024 * 1024, 1024 * 1024);
+      if (!item.ok || !offset.ok || !size.ok) return { ok: false };
+      return {
+        ok: true,
+        params: method === "files.readText" ? { item: item.ref, offset: offset.value, maxBytes: size.value } : { item: item.ref, offset: offset.value, length: size.value },
+      };
+    }
+
+    case "files.url": {
+      const item = parseRef(params.item);
+      if (!item.ok) return { ok: false };
+      return { ok: true, params: { item: item.ref } };
+    }
+
+    case "files.info":
+    case "files.properties": {
+      const items = parseRefArray(params.items, 1, 500);
+      if (!items.ok) return { ok: false };
+      if (method === "files.info") return { ok: true, params: { items: items.refs } };
+      const names = params.names;
+      if (!Array.isArray(names) || names.length < 1 || names.length > 60 || !names.every((n) => isString(n) && /^System\.[A-Za-z0-9.]{1,73}$/.test(n))) return { ok: false };
+      return { ok: true, params: { items: items.refs, names } };
+    }
+
+    case "search.find":
+    case "search.stats": {
+      const folder = parseRef(params.folder);
+      const depth = optInt(params.depth, 1, 64, undefined);
+      if (!folder.ok || !depth.ok) return { ok: false };
+      if (method === "search.stats") return { ok: true, params: { folder: folder.ref, depth: depth.value } };
+      const query = parseSearchQuery(params.query);
+      const limit = optInt(params.limit, 1, 5000, undefined);
+      if (!query.ok || !limit.ok) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, query: query.query, depth: depth.value, limit: limit.value } };
+    }
+
+    case "system.drives":
+    case "system.info":
+      return { ok: true, params: {} };
+
     case "mods.list":
     case "mods.install":
     case "mods.addDev":
@@ -342,6 +388,49 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     default:
       return { ok: false };
   }
+}
+
+/** search.find の条件（ADR 0023）。知らない項目は捨てる */
+function parseSearchQuery(value: unknown): { ok: true; query: Record<string, unknown> } | { ok: false } {
+  if (value === undefined) return { ok: true, query: {} };
+  if (!isPlainObject(value)) return { ok: false };
+  const q: Record<string, unknown> = {};
+  const text = (k: string) => {
+    const v = value[k];
+    if (v === undefined) return true;
+    if (!isString(v) || v.length > 200) return false;
+    q[k] = v;
+    return true;
+  };
+  const count = (k: string) => {
+    const v = value[k];
+    if (v === undefined) return true;
+    if (!isFiniteNumber(v) || v < 0) return false;
+    q[k] = v;
+    return true;
+  };
+  if (!text("name") || !text("content")) return { ok: false };
+  if (!count("minSize") || !count("maxSize") || !count("modifiedAfter") || !count("modifiedBefore")) return { ok: false };
+  if (value.kind !== undefined) {
+    if (value.kind !== "file" && value.kind !== "folder") return { ok: false };
+    q.kind = value.kind;
+  }
+  if (value.hidden !== undefined) {
+    if (typeof value.hidden !== "boolean") return { ok: false };
+    q.hidden = value.hidden;
+  }
+  if (value.ext !== undefined) {
+    if (!Array.isArray(value.ext) || value.ext.length > 50 || !value.ext.every((e) => isString(e) && e.length <= 20)) return { ok: false };
+    q.ext = value.ext;
+  }
+  return { ok: true, query: q };
+}
+
+/** 省略できる整数（min〜max）。省略なら dflt */
+function optInt(v: unknown, min: number, max: number, dflt: number | undefined): { ok: true; value: number | undefined } | { ok: false } {
+  if (v === undefined) return { ok: true, value: dflt };
+  if (!isInt(v) || v < min || v > max) return { ok: false };
+  return { ok: true, value: v };
 }
 
 /** Number.isInteger と同じ判定。TypeScript に「数である」と伝えるための形 */
