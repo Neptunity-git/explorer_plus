@@ -138,7 +138,10 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     case "getTree": {
       const { depth } = params;
       if (!isInt(depth) || depth < TREE_DEPTH.min || depth > TREE_DEPTH.max) return { ok: false };
-      return { ok: true, params: { depth } };
+      if (params.from === undefined) return { ok: true, params: { depth } };
+      const from = parseRef(params.from);
+      if (!from.ok) return { ok: false };
+      return { ok: true, params: { depth, from: from.ref } };
     }
 
     case "resolve": {

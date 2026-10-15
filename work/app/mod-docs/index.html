@@ -230,7 +230,7 @@
 </tr>
 <tr>
 <td><code>tree</code></td>
-<td><code>getTree()</code>：今のフォルダから下の階層</td>
+<td><code>getTree()</code>：今のフォルダ（または <code>from</code> のフォルダ）から下の階層</td>
 <td>中</td>
 </tr>
 <tr>
@@ -508,7 +508,8 @@ const now = await ep.timetable.current();             // 今の授業 { slot, pe
 ep.onTimetable((tt) =&gt; { /* … */ });
 
 // uses: [&quot;tree&quot;] / [&quot;links&quot;] / [&quot;quickAccess&quot;] / [&quot;recent&quot;]
-const tree = await ep.getTree({ depth: 2 });          // { entry, children? }
+const tree = await ep.getTree({ depth: 2 });          // { entry, children? }。depth は 1〜5、1回にフォルダ 500 個まで
+const sub = await ep.getTree({ depth: 1, from: entry });  // そのフォルダから下（開いた枝だけ読むとき）
 const found = await ep.resolve([{ id, path }]);       // 見つからなければ null
 const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();

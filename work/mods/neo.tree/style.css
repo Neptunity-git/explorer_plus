@@ -1,0 +1,30 @@
+/* 樹形図の見た目。色は tui.css の変数を使い、ほかのビューとなじませる */
+
+#stage { flex: 1; min-height: 0; position: relative; overflow: hidden; outline: none; cursor: grab; }
+#stage.is-panning { cursor: grabbing; }
+#stage svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.edge { fill: none; stroke: var(--tui-line); stroke-width: 1.5; }
+
+.node { cursor: default; }
+.node-box { fill: var(--tui-bg); stroke: var(--tui-line); stroke-width: 1; }
+.node:hover .node-box { stroke: var(--tui-accent); }
+.node.is-root .node-box { stroke: var(--tui-accent); stroke-width: 2; }
+.node.is-selected .node-box { fill: var(--tui-sel-bg); stroke: var(--tui-sel-bg); }
+.node.is-selected text { fill: var(--tui-sel-fg); }
+.node.is-hidden { opacity: 0.55; }
+.node.is-new { animation: node-in 0.18s ease-out; }
+@keyframes node-in { from { opacity: 0; } }
+
+.node text { fill: var(--tui-fg); font: 13px var(--tui-font); dominant-baseline: central; }
+.node .count { fill: var(--tui-dim); font-size: 11px; }
+.node.is-selected .count { fill: var(--tui-sel-fg); opacity: 0.7; }
+.node.is-more text { fill: var(--tui-accent); }
+.node.is-more .node-box { stroke-dasharray: 3 3; }
+
+.toggle { cursor: pointer; }
+.toggle circle { fill: var(--tui-bg); stroke: var(--tui-line); }
+.toggle:hover circle { stroke: var(--tui-accent); }
+.toggle text { fill: var(--tui-accent); font-size: 10px; text-anchor: middle; }
+
+.zoom { margin-left: auto; color: var(--tui-dim); }

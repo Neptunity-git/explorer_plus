@@ -262,7 +262,7 @@
       delete: (key) => call("storage.delete", { key }).then(() => undefined),
       keys: () => call("storage.keys"),
     }),
-    getTree: (opts) => call("getTree", { depth: (opts && opts.depth) || 1 }),
+    getTree: (opts) => call("getTree", { depth: (opts && opts.depth) || 1, ...(opts && opts.from ? { from: { id: opts.from.id, path: opts.from.path } } : {}) }),
     resolve: (refs) => call("resolve", { refs: refs.map(toRef) }),
     // ↓ 2026-10-14 に追加（ADR 0009）
     rename: (entry, newName) => call("rename", Object.assign(toRef(entry), { newName })),

@@ -204,4 +204,15 @@ describe("parseModMessage", () => {
     const result = parseModMessage({ ep: 1, kind: "call", id: 5, method: "getTree", params: { depth: 5 } });
     expect(result.ok).toBe(true);
   });
+
+  it("passes getTree from through", () => {
+    const result = parseModMessage({ ep: 1, kind: "call", id: 5, method: "getTree", params: { depth: 1, from: { id: "", path: "C:\\a" } } });
+    expect(result).toEqual({ ok: true, message: { ep: 1, kind: "call", id: 5, method: "getTree", params: { depth: 1, from: { id: "", path: "C:\\a" } } } });
+  });
+
+  it("fails getTree with a broken from", () => {
+    for (const from of [null, "C:\\a", { id: "", path: "" }, { path: "C:\\a" }]) {
+      expect(parseModMessage({ ep: 1, kind: "call", id: 5, method: "getTree", params: { depth: 1, from } }).ok).toBe(false);
+    }
+  });
 });

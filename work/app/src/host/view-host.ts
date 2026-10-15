@@ -438,7 +438,7 @@ export class ViewHost {
         broadcast({ kind: "folderData", path: p.folder.path, name: this.folderDataName() });
         return store.delete(this.folderDataKey(p.folder));
       case "getTree":
-        return this.buildTree(p.depth);
+        return this.buildTree(p.depth, p.from);
       case "resolve": {
         const found = await backend.resolve(p.refs);
         return found.map((r) => (r ? toEntry(r, this.uses) : null));
@@ -641,9 +641,16 @@ export class ViewHost {
     }
   }
 
-  private async buildTree(depth: number): Promise<TreeNode> {
-    if (!this.folder) throw new HostError({ code: "not-found", message: "no folder is open" });
-    const root = this.folder;
+  private async buildTree(depth: number, from?: EntryRef): Promise<TreeNode> {
+    let root = this.folder;
+    // from があれば、そのフォルダから下（ADR 0032）。ID が今のものと完全に合うときだけ読む（ほかの API の verify と同じ）。
+    // 空の ID で確かめを飛ばせると、MOD がパスを書くだけで、本体から渡されていないフォルダの形まで読めてしまう。
+    // ID の無いドライブ（FAT の USB メモリなど）では、どちらも空なので通る
+    if (from) {
+      root = await backend.listDir(from.path);
+      if (from.id !== root.id) throw new HostError({ code: "not-found", message: "folder id does not match" });
+    }
+    if (!root) throw new HostError({ code: "not-found", message: "no folder is open" });
     let budget = TREE_MAX_FOLDERS;
     const rootRaw: RawEntry = { id: root.id, name: root.name, path: root.path, isDir: true, hidden: false, size: 0, modified: 0 };
     const walk = async (raw: RawEntry, children: RawEntry[] | null, level: number): Promise<TreeNode> => {

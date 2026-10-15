@@ -1,0 +1,21 @@
+{
+  "id": "neo.tree",
+  "name": "樹形図",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["entries", "icons", "tree"],
+  "location": "folder",
+  "description": "今のフォルダを根にして、下の階層を左から右へ枝分かれする図で見せる。枝は開いたところだけ読む（ADR 0032）",
+  "settings": [
+    {
+      "key": "initialDepth",
+      "label": "最初に開いておく深さ",
+      "type": "number",
+      "default": 2,
+      "min": 1,
+      "max": 4,
+      "step": 1
+    }
+  ]
+}

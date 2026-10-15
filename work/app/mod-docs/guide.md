@@ -74,7 +74,7 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `modified` | 更新日時 | 軽い |
 | `icons` | Windows のアイコンの URL（`iconUrl`）と種類（`iconKind`） | 軽い |
 | `thumbnails` | 画像・動画などの縮小画像の URL（`thumbnailUrl`。`size=` を 32〜256 で変えられる） | 中 |
-| `tree` | `getTree()`：今のフォルダから下の階層 | 中 |
+| `tree` | `getTree()`：今のフォルダ（または `from` のフォルダ）から下の階層 | 中 |
 | `links` | `resolve()`：保存しておいたファイルID から、今の場所を引く（名前変更・移動に強いリンク） | 軽い |
 | `tags` | タグ（見る・付ける・作る）と `onTags`。`Entry.tags` も付く | 軽い |
 | `timetable` | 開いている学校のフォルダの時間割（見る・書き換える） | 軽い |
@@ -363,7 +363,8 @@ const now = await ep.timetable.current();             // 今の授業 { slot, pe
 ep.onTimetable((tt) => { /* … */ });
 
 // uses: ["tree"] / ["links"] / ["quickAccess"] / ["recent"]
-const tree = await ep.getTree({ depth: 2 });          // { entry, children? }
+const tree = await ep.getTree({ depth: 2 });          // { entry, children? }。depth は 1〜5、1回にフォルダ 500 個まで
+const sub = await ep.getTree({ depth: 1, from: entry });  // そのフォルダから下（開いた枝だけ読むとき）
 const found = await ep.resolve([{ id, path }]);       // 見つからなければ null
 const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();

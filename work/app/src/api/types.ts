@@ -431,7 +431,8 @@ export type CallParams = {
   "storage.set": { key: string; value: unknown };
   "storage.delete": { key: string };
   "storage.keys": Record<string, never>;
-  getTree: { depth: number };
+  /** from は 2026-10-15 に追加（ADR 0032）：そのフォルダから下。省略すると今のフォルダから */
+  getTree: { depth: number; from?: EntryRef };
   resolve: { refs: EntryRef[] };
   rename: { id: string; path: string; newName: string };
   /** name は 2026-10-14 に追加。省略すると「新しいフォルダー」（重ならない番号付き） */

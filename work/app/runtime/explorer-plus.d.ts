@@ -390,8 +390,8 @@ declare global {
       /** コマンドの一覧（Ctrl+Shift+P）に出すコマンド（50 個まで。呼ぶたびに置き換える） */
       readonly commands: { set(list: ChoiceItem[]): Promise<void> };
       onCommand(cb: (id: string) => void): () => void;
-      /** uses に "tree" が要る */
-      getTree(opts?: { depth?: number }): Promise<TreeNode>;
+      /** uses に "tree" が要る。depth は 1〜5、from を渡すとそのフォルダから下（省略すると今のフォルダから） */
+      getTree(opts?: { depth?: number; from?: EntryRef }): Promise<TreeNode>;
       /** uses に "links" が要る。見つからなければ null */
       resolve(refs: EntryRef[]): Promise<(Entry | null)[]>;
 
