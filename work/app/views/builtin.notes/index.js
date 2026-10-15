@@ -653,6 +653,82 @@ $stage.addEventListener("pointerdown", (e) => {
   e.preventDefault();
 });
 
+// ---------------------------------------------------------------- ドラッグ＆ドロップ（ファイル・フォルダ）
+// フォルダ・ファイルのカードをつかんで動かすと、ふだんは平面の上で位置を動かす。次のときは、本体のドラッグ＆ドロップに切り替わる
+// （そこから先は Win11 風ビューなどと同じ：エクスプローラ・Chrome・左の欄・タブ・フォルダのカードへ落とせる。Ctrl でコピー）：
+// - 平面の外へ出したとき
+// - ほかのフォルダのカードの上で、少し止めたとき（そのフォルダへ移す）
+const HOVER_MS = 450;
+
+/** その点にある、つかんでいない（選んでいない）カード */
+function cardBelow(x, y) {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const card = el.closest?.(".card");
+    if (card && !selected.has(card.dataset.id)) return cardOf(card.dataset.id);
+  }
+  return null;
+}
+
+function setHover(g, c) {
+  if (g.hover?.id === (c?.id ?? null)) return;
+  if (g.hover) {
+    clearTimeout(g.hover.timer);
+    $world.querySelector(`.card[data-id="${g.hover.id}"]`)?.classList.remove("drop-hover");
+  }
+  g.hover = null;
+  if (!c) return;
+  $world.querySelector(`.card[data-id="${c.id}"]`)?.classList.add("drop-hover");
+  g.hover = { id: c.id, timer: setTimeout(() => gesture === g && handOver(g), HOVER_MS) };
+}
+
+function watchTransfer(g, e) {
+  if (!g.orig.some((o) => cardOf(o.id) && isEntry(cardOf(o.id)))) return;
+  g.at = { x: e.clientX, y: e.clientY };
+  if (!g.told) {
+    g.told = true;
+    say("外へドラッグするとほかのアプリへ渡せます。フォルダの上で止めると、そのフォルダへ移します（Ctrl でコピー）");
+  }
+  const r = $stage.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX >= r.right || e.clientY < r.top || e.clientY >= r.bottom) return handOver(g);
+  const under = cardBelow(e.clientX, e.clientY);
+  setHover(g, under && under.kind === "folder" ? under : null);
+}
+
+/** このビューの中の、落とせるフォルダのカード（つかんでいるものは除く）。位置は iframe の中の座標 */
+function dropTargets() {
+  const out = [];
+  for (const el of $world.querySelectorAll(".card.folder")) {
+    const c = cardOf(el.dataset.id);
+    if (!c || selected.has(c.id)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+    out.push({ entry: { id: c.fid, path: c.path }, rect: r });
+    if (out.length >= 500) break;
+  }
+  return out;
+}
+
+/** 位置を動かすのをやめて（元に戻して）、本体のドラッグ＆ドロップに任せる */
+function handOver(g) {
+  if (gesture !== g) return;
+  gesture = null;
+  setHover(g, null);
+  const items = g.orig.map((o) => cardOf(o.id)).filter((c) => c && isEntry(c)).map((c) => ({ id: c.fid, path: c.path }));
+  // 位置を、つかむ前に戻す
+  const back = new Map(g.orig.map((o) => [o.id, o.it]));
+  doc.cards = doc.cards.map((c) => (back.has(c.id) ? back.get(c.id) : c));
+  doc.shapes = doc.shapes.map((s) => (back.has(s.id) ? back.get(s.id) : s));
+  if (g.moved) undoStack.pop();
+  renderAll();
+  say("");
+  $stage.classList.remove("panning");
+  const at = g.at || { x: 0, y: 0 };
+  if (items.length) ep.drag.start({ items, x: at.x, y: at.y, targets: dropTargets() }).catch((err) => say(`ドラッグできませんでした：${err.message}`, true));
+}
+
+// ほかのビューや外のウィンドウからのドラッグ中に、このタブに切り替わったら、落とせるフォルダのカードを知らせる
+ep.onDragTargets(() => ep.drag.targets(dropTargets()).catch(() => {}));
+
 let snapEl = null;
 function showSnap(c) {
   const el = c ? $world.querySelector(`.card[data-id="${c.id}"]`) : null;
@@ -705,6 +781,7 @@ $stage.addEventListener("pointermove", (e) => {
     }
     for (const { id } of g.orig) if (cardOf(id)) renderCard(cardOf(id));
     renderShapes();
+    watchTransfer(g, e);
   } else if (g.type === "draw") {
     const p = toWorld(e.clientX, e.clientY);
     const s = g.shape;
@@ -738,6 +815,8 @@ $stage.addEventListener("pointermove", (e) => {
 function endGesture(e) {
   const g = gesture;
   gesture = null;
+  if (g?.hover) setHover(g, null);
+  if (g?.told) say("");
   $stage.classList.remove("panning");
   showSnap(null);
   if (!g) return;

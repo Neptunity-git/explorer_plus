@@ -24,6 +24,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 .card { position: absolute; box-sizing: border-box; user-select: none; }
 .card.is-selected { outline: 2px solid var(--tui-accent); outline-offset: 2px; }
+.card.drop-hover { outline: 2px solid var(--tui-accent); outline-offset: 2px; background: color-mix(in srgb, var(--tui-accent) 14%, transparent); }
 .card.snap { outline: 2px dashed var(--tui-accent); outline-offset: 4px; }
 
 .card.text { border: 1px solid var(--cc, var(--tui-line)); background: var(--tui-bg); padding: 6px 10px; display: flex; flex-direction: column;
