@@ -35,11 +35,14 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .card.text:not(.editing) .cm-content { pointer-events: none; }
 .card.text .placeholder { color: var(--tui-dim); position: absolute; left: 10px; top: 6px; pointer-events: none; }
 
-.card.folder { width: 112px; padding: 6px 4px; text-align: center; border: 1px solid transparent; }
-.card.folder:hover { border-color: var(--tui-line); background: color-mix(in srgb, var(--tui-fg) 5%, transparent); }
-.card.folder img { width: 48px; height: 48px; display: block; margin: 0 auto 4px; pointer-events: none; }
-.card.folder .name { display: block; word-break: break-all; line-height: 1.3; max-height: 3.9em; overflow: hidden; }
-.card.folder input { width: 100%; box-sizing: border-box; font: inherit; color: var(--tui-fg); background: var(--tui-bg); border: 1px solid var(--tui-accent); outline: none; text-align: center; }
+.card.folder, .card.file { width: 112px; padding: 6px 4px; text-align: center; border: 1px solid transparent; }
+.card.folder:hover, .card.file:hover { border-color: var(--tui-line); background: color-mix(in srgb, var(--tui-fg) 5%, transparent); }
+.card.folder img, .card.file img { width: 48px; height: 48px; display: block; margin: 0 auto 4px; pointer-events: none; }
+.card.is-hidden { opacity: 0.55; }
+.hide-files .card.file { display: none; }
+.card.file img { object-fit: contain; }
+.card.folder .name, .card.file .name { display: block; word-break: break-all; line-height: 1.3; max-height: 3.9em; overflow: hidden; }
+.card.folder input, .card.file input { width: 100%; box-sizing: border-box; font: inherit; color: var(--tui-fg); background: var(--tui-bg); border: 1px solid var(--tui-accent); outline: none; text-align: center; }
 
 .hint { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); color: var(--tui-dim); text-align: center; pointer-events: none; line-height: 1.9; }
 

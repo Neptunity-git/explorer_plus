@@ -13,6 +13,8 @@ const SAVE_DELAY_MS = 500;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 4;
 const HISTORY_MAX = 100;
+/** ファイルのカードは、置く数に上限を付ける（大きなフォルダで画面が重くならないように） */
+const FILES_MAX = 500;
 const FOLDER_W = 112;
 const FOLDER_H = 96;
 const GRID_COLS = 6;
@@ -213,8 +215,11 @@ function animate(from, to, opFrom, opTo, ms) {
 
 // ---------------------------------------------------------------- 形と位置
 
+/** フォルダ・ファイルのカード（実際の項目を映したもの。付箋とちがい、ここでは消さない） */
+const isEntry = (c) => c.kind === "folder" || c.kind === "file";
+
 function cardRect(c) {
-  if (c.kind === "folder") {
+  if (isEntry(c)) {
     const el = $world.querySelector(`[data-id="${c.id}"]`);
     return { x: c.x, y: c.y, w: FOLDER_W, h: el ? el.offsetHeight : FOLDER_H };
   }
@@ -262,13 +267,15 @@ function shapeBox(s) {
 }
 
 /** 新しいフォルダを置く、空いている場所（ほかのカードと重ならない、格子の目） */
-function freeSlot() {
-  const boxes = doc.cards.map(cardRect);
-  for (let i = 0; i < 2000; i++) {
+function freeSlot(boxes = doc.cards.map(cardRect)) {
+  for (let i = 0; i < 4000; i++) {
     const x = (i % GRID_COLS) * GRID_X;
     const y = Math.floor(i / GRID_COLS) * GRID_Y;
     const hit = boxes.some((b) => x < b.x + b.w + 8 && x + FOLDER_W + 8 > b.x && y < b.y + b.h + 8 && y + FOLDER_H + 8 > b.y);
-    if (!hit) return { x, y };
+    if (!hit) {
+      boxes.push({ x, y, w: FOLDER_W, h: FOLDER_H });
+      return { x, y };
+    }
   }
   return { x: 0, y: 0 };
 }
@@ -322,7 +329,10 @@ function renderCard(c) {
     editors.get(c.id)?.setText(c.text || "");
   } else {
     const entry = folder?.entries.find((e) => e.id ? e.id === c.fid : e.path === c.path);
-    el.querySelector("img").src = entry?.iconUrl || "";
+    // 画像・動画などは、Windows の縮小画像を出す
+    el.querySelector("img").src = (c.kind === "file" && entry?.iconKind === "system" && entry.thumbnailUrl) || entry?.iconUrl || "";
+    el.classList.toggle("is-hidden", !!entry?.hidden);
+    el.title = c.name;
     const name = el.querySelector(".name");
     if (name) name.textContent = c.name;
 
@@ -429,7 +439,7 @@ function setColor(c) {
   color = c;
   for (const [k, b] of swatches) b.classList.toggle("on", k === c);
   // 選んでいる形・付箋の色も変える
-  const targets = [...selected].map((id) => shapeOf(id) || cardOf(id)).filter((x) => x && x.kind !== "folder");
+  const targets = [...selected].map((id) => shapeOf(id) || cardOf(id)).filter((x) => x && !isEntry(x));
   if (targets.length) {
     remember();
     for (const t of targets) t.color = c;
@@ -506,7 +516,10 @@ function renameFolderCard(c) {
   const input = Object.assign(document.createElement("input"), { value: c.name });
   name.replaceWith(input);
   input.focus();
-  input.select();
+  // ファイルは、拡張子の前までを選ぶ
+  const dot = c.kind === "file" ? c.name.lastIndexOf(".") : -1;
+  if (dot > 0) input.setSelectionRange(0, dot);
+  else input.select();
   let done = false;
   const finish = async (ok) => {
     if (done) return;
@@ -529,29 +542,36 @@ function renameFolderCard(c) {
   input.addEventListener("pointerdown", (e) => e.stopPropagation());
 }
 
-/** フォルダの中身から、子フォルダのカードを合わせる（増えたら空いている所に置き、消えたらカードも消す） */
+/** フォルダの中身から、子フォルダ・ファイルのカードを合わせる（増えたら空いている所に置き、消えたらカードも消す） */
 function syncFolderCards() {
-  const dirs = folder.entries.filter((e) => e.kind === "folder");
   const keep = new Set();
   let added = false;
-  for (const e of dirs) {
+  let boxes = null;
+  let files = 0;
+  // フォルダを先に置く（空いている所は、置いた順に埋まる）
+  const entries = [...folder.entries.filter((e) => e.kind === "folder"), ...folder.entries.filter((e) => e.kind === "file")];
+  for (const e of entries) {
+    const same = entries.filter((x) => x.kind === e.kind);
     // ファイルID で探し、無ければ名前で探す（別の PC ではファイルID が違うので、同期したノートは名前で合わせる）
     let c =
-      doc.cards.find((x) => x.kind === "folder" && !keep.has(x.id) && e.id && x.fid === e.id) ||
-      doc.cards.find((x) => x.kind === "folder" && !keep.has(x.id) && x.name === e.name && !dirs.some((d) => d.id && d.id === x.fid));
+      doc.cards.find((x) => x.kind === e.kind && !keep.has(x.id) && e.id && x.fid === e.id) ||
+      doc.cards.find((x) => x.kind === e.kind && !keep.has(x.id) && x.name === e.name && !same.some((d) => d.id && d.id === x.fid));
     if (!c) {
-      const p = pendingPlace && pendingPlace.id === e.id ? pendingPlace : freeSlot();
+      if (e.kind === "file" && files >= FILES_MAX) continue;
+      boxes ??= doc.cards.map(cardRect);
+      const p = pendingPlace && pendingPlace.id === e.id ? pendingPlace : freeSlot(boxes);
       if (pendingPlace && pendingPlace.id === e.id) pendingPlace = null;
-      c = { id: uid(), kind: "folder", fid: e.id, path: e.path, name: e.name, x: Math.round(p.x), y: Math.round(p.y) };
+      c = { id: uid(), kind: e.kind, fid: e.id, path: e.path, name: e.name, x: Math.round(p.x), y: Math.round(p.y) };
       doc.cards.push(c);
       added = true;
     }
+    if (e.kind === "file") files++;
     c.fid = e.id;
     c.path = e.path;
     c.name = e.name;
     keep.add(c.id);
   }
-  const gone = doc.cards.filter((c) => c.kind === "folder" && !keep.has(c.id));
+  const gone = doc.cards.filter((c) => isEntry(c) && !keep.has(c.id));
   if (gone.length) {
     // 消えたフォルダにつながっていた線は、その場所に端を残す
     for (const g of gone) {
@@ -754,6 +774,7 @@ $stage.addEventListener("dblclick", (e) => {
   const c = cardOf(cardEl.dataset.id);
   if (!c) return;
   if (c.kind === "folder") enterFolder(c);
+  else if (c.kind === "file") void ep.open({ id: c.fid, path: c.path }).catch((err) => say(`開けませんでした：${err.message}`, true));
   else startEditing(c.id, e.clientX, e.clientY);
 });
 
@@ -783,9 +804,14 @@ $stage.addEventListener("contextmenu", async (e) => {
   const cardEl = e.target.closest(".card");
   const id = cardEl ? cardEl.dataset.id : e.target.closest("g")?.dataset.id;
   const c = id ? cardOf(id) : null;
-  if (c && c.kind === "folder") {
-    // フォルダは、本体のいつものメニュー（名前の変更・タグなど）
-    const { chosen } = await ep.showMenu({ x: e.clientX, y: e.clientY, items: [{ id: c.fid, path: c.path }], extra: [{ id: "enter", label: "このフォルダのノートへ" }] });
+  if (c && isEntry(c)) {
+    // フォルダ・ファイルは、本体のいつものメニュー（開く・名前の変更・タグなど）
+    const { chosen } = await ep.showMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [{ id: c.fid, path: c.path }],
+      extra: c.kind === "folder" ? [{ id: "enter", label: "このフォルダのノートへ" }] : [],
+    });
     if (chosen === "enter") enterFolder(c);
     return;
   }
@@ -827,6 +853,10 @@ ep.onAction((a) => {
   if (a.action !== "rename") return;
   const tryRename = (n) => {
     const c = doc.cards.find((x) => x.kind === "folder" && (a.entry.id ? x.fid === a.entry.id : x.path === a.entry.path));
+    if (!c) {
+      const f = doc.cards.find((x) => x.kind === "file" && (a.entry.id ? x.fid === a.entry.id : x.path === a.entry.path));
+      if (f) return renameFolderCard(f);
+    }
     if (c) renameFolderCard(c);
     else if (n > 0) setTimeout(() => tryRename(n - 1), 100);
   };
@@ -881,10 +911,11 @@ document.addEventListener("keydown", (e) => {
   } else if (k === "enter" && selected.size === 1) {
     const c = cardOf([...selected][0]);
     if (c?.kind === "folder") enterFolder(c);
+    else if (c?.kind === "file") void ep.open({ id: c.fid, path: c.path }).catch((err) => say(`開けませんでした：${err.message}`, true));
     else if (c?.kind === "text") startEditing(c.id);
   } else if (k === "f2" && selected.size === 1) {
     const c = cardOf([...selected][0]);
-    if (c?.kind === "folder") renameFolderCard(c);
+    if (c && isEntry(c)) renameFolderCard(c);
   } else {
     const t = TOOLS.find((x) => x.key === k);
     if (!t) return;
@@ -966,6 +997,11 @@ ep.onFolder(async (f) => {
   prev = { id: f.id, path: f.path, parentPath: f.parentPath };
   say("");
 });
+
+// 設定「ファイルを表示する」：オフでも、ファイルのカードの位置は覚えておく（隠すだけ）
+const applyShowFiles = (s) => $world.classList.toggle("hide-files", s.showFiles === false);
+void ep.settings.get().then(applyShowFiles);
+ep.onSettings(applyShowFiles);
 
 ep.onTheme(() => renderAll());
 window.addEventListener("blur", () => void save());
