@@ -2,6 +2,7 @@
 // エラーは "<code>: <説明>" の文字列で返す。code は MOD の API のエラーと同じ（not-found・denied・invalid・io など）。
 
 mod archive;
+mod create;
 mod fileapi;
 mod props;
 mod scan;
@@ -74,6 +75,8 @@ pub fn run() {
             scan::search_stats,
             sysinfo::system_drives,
             sysinfo::system_info,
+            create::create_entry,
+            create::create_shortcut,
             fsops::folder_sizes,
             fsops::resolve,
             fsops::open_entry,

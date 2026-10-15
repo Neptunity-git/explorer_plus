@@ -297,7 +297,7 @@ fn path_by_id(r: &EntryRef) -> Option<String> {
     Some(s.strip_prefix(r"\\?\").unwrap_or(&s).to_string())
 }
 
-fn entry_at(path: &Path, id: String) -> Option<RawEntry> {
+pub(crate) fn entry_at(path: &Path, id: String) -> Option<RawEntry> {
     use std::os::windows::fs::MetadataExt;
     let meta = std::fs::metadata(path).ok()?;
     let is_dir = meta.is_dir();

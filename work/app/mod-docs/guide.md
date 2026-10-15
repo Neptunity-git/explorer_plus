@@ -84,6 +84,8 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `fileInfo` | `files.info`・`properties`：撮影日時・撮影場所・曲名・動画の長さなど | 中 |
 | `search` | `search.find`・`stats`：下の階層までの検索と集計 | **重い** |
 | `system` | `system.drives`・`info`：ドライブと空き容量・強調色・言語 | 軽い |
+| `createFiles` | `files.create`・`createShortcut`：新しいファイル・フォルダ・ショートカットを作る（上書きしない。最初に許可を聞く） | 軽い |
+| `collections` | `collections.*`：コレクション（ファイルを場所と関係なく集めたもの）を見る・作る・変える | 軽い |
 
 保存（`storage`）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。
 
@@ -231,6 +233,33 @@ await ep.folderData.delete(folder);
 - 引数の `folder` は、`onFolder` で届いたフォルダ（`{ id, path }` があればよい）。フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入ります
 - 書けないフォルダ（`C:\` の直下など）では、代わりにこのビューの保存場所に置きます（`get` で同じように読めます）
 - 別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます
+
+### 新しく作る（createFiles）
+
+```js
+const note = await ep.files.create(folder, "メモ.txt", { text: "こんにちは" });
+const room = await ep.files.create(folder, "新しい部屋", { kind: "folder" });
+const png = await ep.files.create(folder, "スクリーンショット.png", { bytes: pngBytes });   // Uint8Array（16MB まで）
+const link = await ep.files.createShortcut(folder, targetEntry);                        // 「元の名前 - ショートカット.lnk」
+```
+
+- **新しく作るだけ**です。同じ名前があれば `exists` で失敗し、今あるファイルは書き換えません（消すのは `trash`、名前の変更は `rename`）
+- MOD ごとに、**最初に使うとき本体が利用者に許可を聞きます**（断られたら `denied`）。表示中のタブのビューから呼んでください。MOD を外すと許可も消えます
+- Windows で使えない名前（`CON`・`?` を含む、など）は `invalid`
+
+### コレクション（collections）
+
+コレクションは、ファイル・フォルダを**実際の場所と関係なく**集めて名前を付けたもの（仮想ディレクトリ）です。アプリ全体で1つで、どの MOD からも同じものが見えます。
+中身はファイルID で覚えるので、名前を変えたり動かしたりしても外れません。
+
+```js
+const trip = await ep.collections.create("夏の旅行", { color: "#57ab5a" });
+await ep.collections.add(trip.id, [photo1, photo2, video]);
+const { entries, missing } = await ep.collections.entries(trip.id);   // missing：見つからなくなったもの
+const all = await ep.collections.list();                              // [{ id, name, color, count }]
+ep.onCollections((list) => redraw(list));
+await ep.collections.delete(trip.id);   // 本体が確かめてから消す（中のファイルは消えない）
+```
 
 ### 本体の画面を使う（ui）
 

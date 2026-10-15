@@ -5,6 +5,7 @@ import { validateManifest } from "../core/manifest";
 import { formatSize } from "../core/format";
 import { backend, BackendError } from "./backend";
 import { confirmDialog } from "./effects";
+import { grantService } from "./collection-service";
 import type { ModProblem } from "./mods";
 import type { LoadedView } from "./view-host";
 
@@ -27,6 +28,8 @@ const USE_LABELS: Record<Use, string> = {
   fileInfo: "ファイルの詳しい情報（撮影日時・撮影場所・曲名など）",
   search: "下の階層までの検索・集計（名前・大きさ・中身の文字など）",
   system: "PC の情報（ドライブと空き容量・強調色・言語）",
+  createFiles: "新しいファイル・フォルダ・ショートカットを作る（使う前に許可を聞きます。書き換え・削除はできません）",
+  collections: "コレクション（ファイルを集めたもの）を見る・作る・変える",
 };
 
 export type ModInfo = {
@@ -143,6 +146,7 @@ export class ModManager {
         : `「${info.name}」を外しますか？\nMOD のフォルダはごみ箱へ送ります。この MOD が保存していたもの（メモなど）は残るので、入れ直せば続きから使えます。`;
     if (!(await confirmDialog(message, "外す"))) throw new BackendError({ code: "denied", message: "cancelled" });
     await backend.modRemove(id);
+    await grantService.revokeAll(id);
     await this.host.reloadViews([]);
     changed();
   }

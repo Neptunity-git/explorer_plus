@@ -17,7 +17,7 @@ export type Place = { kind: string; name: string; path: string };
 export type ModSource = { source: "builtin" | "user" | "dev"; dir: string; manifestText: string | null; error: string | null };
 export type Location = { latitude: number; longitude: number; accuracy: number };
 /** アプリ全体のデータの名前（Rust の mods.rs の APP_DATA_NAMES と同じ） */
-export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent" | "settings";
+export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent" | "settings" | "collections" | "grants";
 
 export class BackendError extends Error {
   constructor(readonly apiError: ApiError) {
@@ -106,6 +106,10 @@ export const backend = {
     call<Omit<SearchStats, "largest" | "newest"> & { largest: RawEntry[]; newest: RawEntry[] }>("search_stats", { folder, depth }),
   systemDrives: () => call<Drive[]>("system_drives"),
   systemInfo: () => call<SystemInfo>("system_info"),
+  // ↓ 書き込み（ADR 0025）。上書きはしない
+  createEntry: (folder: EntryRef, name: string, kind: "file" | "folder", text?: string, base64?: string) =>
+    call<RawEntry>("create_entry", { folder, name, kind, text, base64 }),
+  createShortcut: (folder: EntryRef, target: EntryRef, name?: string) => call<RawEntry>("create_shortcut", { folder, target, name }),
   /** OneDrive の中のファイル・フォルダか */
   onedriveContains: (item: EntryRef) => call<boolean>("onedrive_contains", { item }),
   /** OneDrive の操作。Windows のメニューの項目を呼び、画面は OneDrive が出す */

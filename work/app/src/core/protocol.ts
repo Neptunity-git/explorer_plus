@@ -424,6 +424,57 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     case "settings.get":
       return { ok: true, params: {} };
 
+    // ↓ 書き込みとコレクション（ADR 0025）
+    case "files.create": {
+      const folder = parseRef(params.folder);
+      const { name, text, bytes } = params;
+      const kind = params.kind ?? "file";
+      if (!folder.ok || !isNonEmptyString(name) || name.length > 200 || (kind !== "file" && kind !== "folder")) return { ok: false };
+      if (text !== undefined && bytes !== undefined) return { ok: false };
+      if (text !== undefined && !(isString(text) && text.length <= 16 * 1024 * 1024)) return { ok: false };
+      // 別の iframe から届いた Uint8Array は instanceof では見分けられないので、ArrayBuffer.isView で見る
+      if (bytes !== undefined && !(ArrayBuffer.isView(bytes) && bytes.byteLength <= 16 * 1024 * 1024)) return { ok: false };
+      if (kind === "folder" && (text !== undefined || bytes !== undefined)) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, name, kind, ...(text !== undefined ? { text } : {}), ...(bytes !== undefined ? { bytes } : {}) } };
+    }
+
+    case "files.createShortcut": {
+      const folder = parseRef(params.folder);
+      const target = parseRef(params.target);
+      const { name } = params;
+      if (!folder.ok || !target.ok) return { ok: false };
+      if (name !== undefined && !(isNonEmptyString(name) && name.length <= 150)) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, target: target.ref, ...(name !== undefined ? { name } : {}) } };
+    }
+
+    case "collections.list":
+      return { ok: true, params: {} };
+
+    case "collections.create":
+    case "collections.update": {
+      const { id, name, color } = params;
+      if (method === "collections.update" && !isNonEmptyString(id)) return { ok: false };
+      if (method === "collections.create" && !isString(name)) return { ok: false };
+      if (name !== undefined && !(isString(name) && name.length <= 100)) return { ok: false };
+      if (color !== undefined && !(isString(color) && /^#[0-9a-f]{6}$/.test(color))) return { ok: false };
+      return { ok: true, params: { ...(id !== undefined ? { id } : {}), ...(name !== undefined ? { name } : {}), ...(color !== undefined ? { color } : {}) } };
+    }
+
+    case "collections.delete":
+    case "collections.entries": {
+      const { id } = params;
+      if (!isNonEmptyString(id) || id.length > 64) return { ok: false };
+      return { ok: true, params: { id } };
+    }
+
+    case "collections.add":
+    case "collections.remove": {
+      const { id } = params;
+      const items = parseRefArray(params.items, 1, 1000);
+      if (!isNonEmptyString(id) || id.length > 64 || !items.ok) return { ok: false };
+      return { ok: true, params: { id, items: items.refs } };
+    }
+
     case "mods.list":
     case "mods.install":
     case "mods.addDev":

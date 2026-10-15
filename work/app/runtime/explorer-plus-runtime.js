@@ -15,6 +15,7 @@
   const modsListeners = new Set();
   const changesListeners = new Set();
   const settingsListeners = new Set();
+  const collectionsListeners = new Set();
   const commandListeners = new Set();
   const dragTargetListeners = new Set();
   let lastFolder = null;
@@ -95,6 +96,8 @@
         for (const cb of recentListeners) safely(cb);
       } else if (m.event === "dragTargets") {
         for (const cb of dragTargetListeners) safely(cb);
+      } else if (m.event === "collections") {
+        for (const cb of collectionsListeners) safely(cb, m.data);
       } else if (m.event === "settings") {
         for (const cb of settingsListeners) safely(cb, m.data);
       } else if (m.event === "command") {
@@ -257,6 +260,17 @@
       // uses に "fileInfo"：撮影日時・曲名・動画の長さなど
       info: (entries) => call("files.info", { items: entries.map(toRef) }),
       properties: (entries, names) => call("files.properties", { items: entries.map(toRef), names }),
+      // uses に "createFiles"（ADR 0025）：新しく作るだけ（同じ名前があれば "exists"）。最初に使うとき、本体が許可を聞く
+      create: (folder, name, opts) =>
+        call(
+          "files.create",
+          Object.assign(
+            { folder: toRef(folder), name, kind: (opts && opts.kind) || "file" },
+            opts && opts.text !== undefined ? { text: opts.text } : {},
+            opts && opts.bytes !== undefined ? { bytes: opts.bytes } : {},
+          ),
+        ),
+      createShortcut: (folder, target, opts) => call("files.createShortcut", Object.assign({ folder: toRef(folder), target: toRef(target) }, opts && opts.name ? { name: opts.name } : {})),
     }),
     // uses に "search"：下の階層までの検索と集計
     search: Object.freeze({
@@ -290,6 +304,20 @@
       ask: (opts) => call("ui.ask", opts),
       choose: (items, opts) => call("ui.choose", Object.assign({ items }, opts && opts.title ? { title: opts.title } : {})),
     }),
+    // uses に "collections"（ADR 0025）：コレクション（仮想ディレクトリ）
+    collections: Object.freeze({
+      list: () => call("collections.list"),
+      create: (name, opts) => call("collections.create", Object.assign({ name }, opts && opts.color ? { color: opts.color } : {})),
+      update: (id, patch) => call("collections.update", Object.assign({ id }, patch || {})),
+      delete: (id) => call("collections.delete", { id }).then(() => undefined),
+      add: (id, entries) => call("collections.add", { id, items: entries.map(toRef) }).then(() => undefined),
+      remove: (id, entries) => call("collections.remove", { id, items: entries.map(toRef) }).then(() => undefined),
+      entries: (id) => call("collections.entries", { id }),
+    }),
+    onCollections(cb) {
+      collectionsListeners.add(cb);
+      return () => collectionsListeners.delete(cb);
+    },
     /** manifest の settings の値。設定の画面で変わると onSettings が呼ばれる */
     settings: Object.freeze({
       get: () => call("settings.get"),

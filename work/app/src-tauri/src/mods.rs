@@ -361,7 +361,7 @@ pub fn view_storage_save(app: AppHandle, view_id: String, json: String) -> Resul
 // ---- アプリ全体のデータ（ADR 0010：タグと時間割） ----
 
 /// 保存してよい名前。ここに無い名前は断る（ファイル名に使うので）
-const APP_DATA_NAMES: &[&str] = &["tags", "timetables", "quickaccess", "recent", "settings"];
+const APP_DATA_NAMES: &[&str] = &["tags", "timetables", "quickaccess", "recent", "settings", "collections", "grants"];
 
 fn app_data_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     if !APP_DATA_NAMES.contains(&name) {

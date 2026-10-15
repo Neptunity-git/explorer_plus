@@ -43,6 +43,15 @@ declare global {
       | { key: string; label: string; type: "choice"; default: string; options: { value: string; label: string }[] }
       | { key: string; label: string; type: "color"; default: string };
     type SettingValues = Record<string, boolean | number | string>;
+    /** コレクション（仮想ディレクトリ。ADR 0025） */
+    interface Collection {
+      id: string;
+      name: string;
+      /** "#rrggbb" */
+      color: string;
+      /** 入っている数 */
+      count: number;
+    }
     /** 選択肢・コマンド */
     interface ChoiceItem {
       id: string;
@@ -276,7 +285,29 @@ declare global {
         url(entry: EntryRef): Promise<string>;
         info(entries: EntryRef[]): Promise<(FileInfo | null)[]>;
         properties(entries: EntryRef[], names: string[]): Promise<(Record<string, unknown> | null)[]>;
+        /**
+         * uses に "createFiles" が要る（ADR 0025）。folder の中に新しく作る（同じ名前があれば "exists"。上書きはしない）。
+         * 中身は text か bytes（16MB まで）。最初に使うとき、本体が利用者に許可を聞く（断られたら "denied"）
+         */
+        create(folder: EntryRef, name: string, opts?: { kind?: "file" | "folder"; text?: string; bytes?: Uint8Array }): Promise<Entry>;
+        /** target へのショートカット（.lnk）を folder に作る。name は .lnk を付けない名前（省略は「元の名前 - ショートカット」） */
+        createShortcut(folder: EntryRef, target: EntryRef, opts?: { name?: string }): Promise<Entry>;
       };
+      /**
+       * uses に "collections" が要る（ADR 0025）。コレクション（仮想ディレクトリ）：ファイル・フォルダを、場所と関係なく集めて名前を付けたもの。
+       * アプリ全体で1つ（どの MOD からも同じものが見える）。中身はファイルID で覚えるので、名前変更・移動しても外れない。
+       * delete は本体が確かめてから消す（中のファイルは消えない）。entries の missing は、見つからなくなったもの
+       */
+      readonly collections: {
+        list(): Promise<Collection[]>;
+        create(name: string, opts?: { color?: string }): Promise<Collection>;
+        update(id: string, patch: { name?: string; color?: string }): Promise<Collection>;
+        delete(id: string): Promise<void>;
+        add(id: string, entries: EntryRef[]): Promise<void>;
+        remove(id: string, entries: EntryRef[]): Promise<void>;
+        entries(id: string): Promise<{ entries: Entry[]; missing: EntryRef[] }>;
+      };
+      onCollections(cb: (collections: Collection[]) => void): () => void;
       /**
        * uses に "search" が要る（ADR 0023）。下の階層までの検索と集計。リンク（ジャンクション）の先へは入らない。
        * depth は 1〜64（既定 64）、limit は 1〜5000（既定 1000）。数・時間の上限で途中までのときは truncated: true

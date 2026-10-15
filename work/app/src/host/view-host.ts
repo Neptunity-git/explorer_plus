@@ -22,6 +22,15 @@ import { onModsChange, type ModManager } from "./mod-manager";
 import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
 import type { ChoiceItem, FileChange } from "../api/types";
 import { askDialog, chooseDialog, settingsService } from "./mod-ui";
+import { collectionService, grantService } from "./collection-service";
+
+/** バイト列を base64 に（Rust へ渡すため） */
+function bytesToBase64(bytes: Uint8Array): string {
+  let s = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) s += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  return btoa(s);
+}
 import { confirmDialog } from "./effects";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
@@ -124,6 +133,10 @@ export class ViewHost {
     if (this.uses.has("quickAccess")) {
       this.unsubscribe.push(quickAccess.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "quickAccess", data: null })));
     }
+    // コレクションが変わったら知らせる（ADR 0025）
+    if (this.uses.has("collections")) {
+      this.unsubscribe.push(collectionService.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "collections", data: collectionService.list() })));
+    }
     // 設定の値が変わったら知らせる（ADR 0024）
     if (view.manifest.settings) {
       this.unsubscribe.push(settingsService.onChange(view.manifest.id, (v) => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "settings", data: v })));
@@ -156,6 +169,22 @@ export class ViewHost {
     } finally {
       this.modalOpen = false;
     }
+  }
+
+  /**
+   * MOD ごとの許可（ADR 0025）。最初に使うときだけ本体が聞き、覚えておく。標準のビューは聞かない。
+   * 聞く画面は、表示中のタブのビューからだけ出せる
+   */
+  private async ensureGrant(what: string, doing: string) {
+    if (this.view.source === "builtin" || (await grantService.has(this.view.manifest.id, what))) return;
+    const ok = await this.modal(() =>
+      confirmDialog(
+        `「${this.view.manifest.name}」が、${doing}。\n許可しますか？\n\n許可すると、このビューは新しいファイル・フォルダ・ショートカットを作れるようになります（今あるものを書き換えたり消したりはできません）。MOD を外すと許可も消えます。`,
+        "許可する",
+      ),
+    );
+    if (!ok) throw new HostError({ code: "denied", message: "the user did not allow creating files" });
+    await grantService.grant(this.view.manifest.id, what);
   }
 
   /** コマンドの一覧で、このビューのコマンドが選ばれた */
@@ -495,6 +524,37 @@ export class ViewHost {
       case "commands.set":
         this.commands = p.commands;
         return;
+      // ↓ 書き込みとコレクション（ADR 0025）
+      case "files.create": {
+        await this.ensureGrant("createFiles", "新しいファイル・フォルダを作ろうとしています");
+        const base64 = p.bytes ? bytesToBase64(p.bytes as Uint8Array) : undefined;
+        return toEntry(await backend.createEntry(p.folder, p.name, p.kind, p.text, base64), this.uses);
+      }
+      case "files.createShortcut":
+        await this.ensureGrant("createFiles", "ショートカットを作ろうとしています");
+        return toEntry(await backend.createShortcut(p.folder, p.target, p.name), this.uses);
+      case "collections.list":
+        await collectionService.load();
+        return collectionService.list();
+      case "collections.create":
+        return collectionService.create(p.name, p.color);
+      case "collections.update":
+        return collectionService.update(p.id, p);
+      case "collections.delete": {
+        const name = collectionService.name(p.id);
+        if (name === null) throw new HostError({ code: "not-found", message: `collection ${p.id}` });
+        const ok = await this.modal(() => confirmDialog(`コレクション「${name}」を消しますか？\n中のファイル・フォルダは消えません。`, "消す"));
+        if (!ok) throw new HostError({ code: "denied", message: "cancelled" });
+        return collectionService.delete(p.id);
+      }
+      case "collections.add":
+        return collectionService.add(p.id, p.items);
+      case "collections.remove":
+        return collectionService.remove(p.id, p.items);
+      case "collections.entries": {
+        const r = await collectionService.entries(p.id);
+        return { entries: r.found.map((e) => toEntry(e, this.uses)), missing: r.missing };
+      }
       case "mods.list":
         return this.tab.mods.list();
       case "mods.install":

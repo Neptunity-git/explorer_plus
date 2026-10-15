@@ -36,6 +36,11 @@ export const USES = [
   "search",
   /** PC の情報（system.drives・info） */
   "system",
+  // ↓ 2026-10-15 に追加（書き込みとコレクション。ADR 0025）
+  /** 新しいファイル・フォルダ・ショートカットを作る（上書きはしない。MOD ごとに最初に許可を聞く） */
+  "createFiles",
+  /** コレクション（仮想ディレクトリ）：ファイルを場所と関係なく集める */
+  "collections",
 ] as const;
 export type Use = (typeof USES)[number];
 
@@ -64,6 +69,9 @@ export type SettingDef =
   | (SettingBase & { type: "choice"; default: string; options: { value: string; label: string }[] })
   | (SettingBase & { type: "color"; default: string });
 export type SettingValues = Record<string, boolean | number | string>;
+
+/** コレクション（仮想ディレクトリ。ADR 0025） */
+export type Collection = { id: string; name: string; color: string; count: number };
 
 /** ui.choose の選択肢・commands.set のコマンド */
 export type ChoiceItem = { id: string; label: string; hint?: string };
@@ -375,6 +383,16 @@ export type CallMethod =
   | "ui.choose"
   | "settings.get"
   | "commands.set"
+  // ↓ 2026-10-15 に追加（書き込みとコレクション。ADR 0025）
+  | "files.create"
+  | "files.createShortcut"
+  | "collections.list"
+  | "collections.create"
+  | "collections.update"
+  | "collections.delete"
+  | "collections.add"
+  | "collections.remove"
+  | "collections.entries"
   | "mods.list"
   | "mods.install"
   | "mods.remove"
@@ -467,6 +485,18 @@ export type CallParams = {
   "settings.get": Record<string, never>;
   /** コマンドの一覧（Ctrl+Shift+P）に出す、このビューのコマンド（50 個まで）。選ばれると "command" が届く */
   "commands.set": { commands: ChoiceItem[] };
+  /** folder の中に新しく作る（同じ名前があれば "exists"）。中身は text か bytes（16MB まで）。kind 省略は "file" */
+  "files.create": { folder: EntryRef; name: string; kind: "file" | "folder"; text?: string; bytes?: Uint8Array };
+  /** target へのショートカット（.lnk）を folder に作る。name は .lnk を付けない名前 */
+  "files.createShortcut": { folder: EntryRef; target: EntryRef; name?: string };
+  "collections.list": Record<string, never>;
+  "collections.create": { name: string; color?: string };
+  "collections.update": { id: string; name?: string; color?: string };
+  /** 本体が確かめてから消す（中のファイルは消えない） */
+  "collections.delete": { id: string };
+  "collections.add": { id: string; items: EntryRef[] };
+  "collections.remove": { id: string; items: EntryRef[] };
+  "collections.entries": { id: string };
   "mods.list": Record<string, never>;
   /** 本体が zip を選ぶ画面と、確かめの画面を出す */
   "mods.install": Record<string, never>;
@@ -538,6 +568,15 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "ui.choose": null,
   "settings.get": null,
   "commands.set": null,
+  "files.create": "createFiles",
+  "files.createShortcut": "createFiles",
+  "collections.list": "collections",
+  "collections.create": "collections",
+  "collections.update": "collections",
+  "collections.delete": "collections",
+  "collections.add": "collections",
+  "collections.remove": "collections",
+  "collections.entries": "collections",
   "mods.list": null,
   "mods.install": null,
   "mods.remove": null,
@@ -582,7 +621,9 @@ export type EventMessage =
   // 設定の画面で値が変わった（ADR 0024）
   | { ep: 1; kind: "event"; event: "settings"; data: SettingValues }
   // コマンドの一覧でこのビューのコマンドが選ばれた
-  | { ep: 1; kind: "event"; event: "command"; data: { id: string } };
+  | { ep: 1; kind: "event"; event: "command"; data: { id: string } }
+  // コレクションの一覧・中身が変わった（uses に collections があるビューだけ。ADR 0025）
+  | { ep: 1; kind: "event"; event: "collections"; data: Collection[] };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 

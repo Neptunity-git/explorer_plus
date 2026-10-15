@@ -348,3 +348,18 @@ uses の宣言は要らない。
 - 値はアプリのデータ `settings`（ビューの id ごと）に置く
 - 本体とランタイムは、WebView2 自身のショートカット（Ctrl+P・Ctrl+Shift+P の印刷、Ctrl+F・F3・Ctrl+G のページ内検索、Ctrl+S・Ctrl+U・Ctrl+J・Ctrl+H）を止める。MOD 自身のキーの処理には影響しない
 
+## 2026-10-15（5回目）の追加：書き込みとコレクション（ADR 0025）
+
+| uses | メソッド | 引数 | 返り値・決まり |
+|---|---|---|---|
+| `createFiles` | `files.create` | `{ folder, name, kind?="file", text? \| bytes?（16MB まで） }` | Entry。同じ名前があれば `exists`（上書きしない）。Windows で使えない名前は `invalid` |
+| `createFiles` | `files.createShortcut` | `{ folder, target, name? }` | Entry（.lnk）。name 省略は「元の名前 - ショートカット」 |
+| `collections` | `collections.list` | なし | `[{ id, name, color, count }]` |
+| `collections` | `collections.create`・`update` | `{ name, color? }`・`{ id, name?, color? }` | Collection。名前は 1〜60 文字で重ならない（大文字・小文字を区別しない）。色は `#rrggbb` |
+| `collections` | `collections.delete` | `{ id }` | 本体が確かめる（やめたら `denied`）。中のファイルは消えない |
+| `collections` | `collections.add`・`remove` | `{ id, items }`（1〜1000） | なし。重ねて入れない |
+| `collections` | `collections.entries` | `{ id }` | `{ entries, missing }`。名前変更・移動したものは今の場所で返し、覚えているパスも直す |
+
+- `createFiles` の許可：標準のビュー以外は、MOD ごとに最初に使うとき本体が確かめの画面を出す（表示中のタブのビューだけ）。許可はアプリのデータ `grants` に覚え、MOD を外すと消す
+- コレクションはアプリ全体で1つ（アプリのデータ `collections`）。200 個まで、1つに 10000 項目まで。知らせ `collections`（data は一覧）
+
