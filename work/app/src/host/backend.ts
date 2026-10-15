@@ -77,9 +77,11 @@ export const backend = {
   clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
   openWith: (item: EntryRef) => call<void>("open_with", { item }),
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
-  /** 圧縮（zip・7z）。作った書庫のパスを返す（ADR 0021） */
+  /** 7-Zip が入っているか（入っていなければ、メニューに圧縮・展開を出さない）と、「ここに展開」を出す拡張子（ADR 0021） */
+  archiveTool: () => call<{ available: boolean; extensions: string[] }>("archive_tool"),
+  /** 7-Zip で圧縮（zip・7z）。作った書庫のパスを返す。7-Zip の画面でやめたら code "denied" */
   archiveCreate: (items: EntryRef[], format: "zip" | "7z") => call<string>("archive_create", { items, format }),
-  /** 書庫（zip・7z・tar・tar.gz）を同じフォルダの新しいフォルダへ展開し、そのパスを返す */
+  /** 7-Zip で、書庫を同じフォルダの新しいフォルダへ展開し、そのパスを返す */
   archiveExtract: (item: EntryRef) => call<string>("archive_extract", { item }),
   /** アプリの外からドロップされたファイル（Windows が渡したパス）を移動・コピーする */
   transferPaths: (paths: string[], dest: string, effect: "move" | "copy") => call<number>("transfer_paths", { paths, dest, effect }),

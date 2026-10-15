@@ -71,6 +71,7 @@ pub fn run() {
             transfer::clipboard_paste,
             transfer::transfer,
             transfer::transfer_paths,
+            archive::archive_tool,
             archive::archive_create,
             archive::archive_extract,
             transfer::drag_out,
