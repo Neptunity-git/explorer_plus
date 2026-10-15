@@ -150,11 +150,19 @@ pub fn run() {
             dev_start_dir,
         ])
         // ウィンドウが閉じたら、そのウィンドウの分のフォルダの見張りをやめる（ADR 0030）
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
+        // 最初のウィンドウを、前に閉じたときの大きさ・位置で開く
+        .setup(|app| {
+            windows::restore_main(app.handle());
+            Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Destroyed => {
                 use tauri::Manager;
                 watch::forget_window(window.app_handle(), window.label());
             }
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => windows::track_main(window),
+            tauri::WindowEvent::CloseRequested { .. } => windows::save_main(window),
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

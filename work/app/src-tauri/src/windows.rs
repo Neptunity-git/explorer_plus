@@ -118,9 +118,98 @@ pub fn close_window_if_others(app: AppHandle, window: tauri::Window) -> Result<b
     Ok(true)
 }
 
+// ---- 最初のウィンドウの大きさ・位置を覚える（アプリを起動し直しても同じ所に開く） ----
+// アプリのデータの window.json に { x, y, width, height, maximized }（画面の実際の点の数）。
+// 最大化しているときは、最大化する前の大きさ・位置を覚えておく（戻したときに使う）
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Default, Debug, PartialEq)]
+pub struct Bounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub maximized: bool,
+}
+
+/// 最後に見た、最大化していないときの大きさ・位置
+static LAST: std::sync::Mutex<Option<Bounds>> = std::sync::Mutex::new(None);
+
+fn bounds_file(app: &AppHandle) -> Option<std::path::PathBuf> {
+    crate::mods::data_root(app).ok().map(|d| d.join("window.json"))
+}
+
+/// 覚えていた大きさが使えるか：小さすぎない・大きすぎない、どこかの画面に、題名の辺りが入っている
+pub fn usable(b: &Bounds, screens: &[(i32, i32, u32, u32)]) -> bool {
+    if b.width < 400 || b.height < 300 || b.width > 20000 || b.height > 20000 {
+        return false;
+    }
+    let (px, py) = (b.x + 60, b.y + 15);
+    screens.iter().any(|&(sx, sy, sw, sh)| px >= sx && py >= sy && px < sx + sw as i32 && py < sy + sh as i32)
+}
+
+/// 起動したとき：最初のウィンドウを、覚えていた大きさ・位置にして、見せる（見せる前に動かすので、ちらつかない）
+pub fn restore_main(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let saved: Option<Bounds> = bounds_file(app).and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok());
+    let screens: Vec<(i32, i32, u32, u32)> = w
+        .available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .map(|m| (m.position().x, m.position().y, m.size().width, m.size().height))
+        .collect();
+    if let Some(b) = saved.filter(|b| usable(b, &screens)) {
+        let _ = w.set_size(tauri::PhysicalSize::new(b.width, b.height));
+        let _ = w.set_position(tauri::PhysicalPosition::new(b.x, b.y));
+        *LAST.lock().unwrap() = Some(Bounds { maximized: false, ..b });
+        if b.maximized {
+            let _ = w.maximize();
+        }
+    }
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
+/// 最初のウィンドウが動いた・大きさが変わった：最大化・最小化していなければ、今の大きさ・位置を覚える
+pub fn track_main(window: &tauri::Window) {
+    if window.label() != "main" || window.is_maximized().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
+        return;
+    }
+    if let (Ok(p), Ok(s)) = (window.outer_position(), window.outer_size()) {
+        // 最小化したときなど、とても遠くに置かれることがあるので、それは覚えない
+        if p.x > -10000 && p.y > -10000 && s.width > 0 {
+            *LAST.lock().unwrap() = Some(Bounds { x: p.x, y: p.y, width: s.width, height: s.height, maximized: false });
+        }
+    }
+}
+
+/// 最初のウィンドウを閉じるとき：覚えた大きさ・位置をファイルに書く
+pub fn save_main(window: &tauri::Window) {
+    if window.label() != "main" {
+        return;
+    }
+    let Some(mut b) = *LAST.lock().unwrap() else { return };
+    b.maximized = window.is_maximized().unwrap_or(false);
+    if let (Some(p), Ok(text)) = (bounds_file(window.app_handle()), serde_json::to_string(&b)) {
+        let _ = std::fs::create_dir_all(p.parent().unwrap_or(&p));
+        let _ = std::fs::write(p, text);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usable_bounds() {
+        let screens = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)];
+        let b = |x, y, width, height| Bounds { x, y, width, height, maximized: false };
+        assert!(usable(&b(100, 100, 1100, 640), &screens));
+        assert!(usable(&b(2000, 50, 1100, 640), &screens));
+        // 外した画面の上・小さすぎる
+        assert!(!usable(&b(5000, 100, 1100, 640), &screens));
+        assert!(!usable(&b(-3000, 100, 1100, 640), &screens));
+        assert!(!usable(&b(100, 100, 200, 100), &screens));
+    }
 
     #[test]
     fn encodes_query() {
