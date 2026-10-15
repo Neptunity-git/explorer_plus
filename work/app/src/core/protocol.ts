@@ -1,4 +1,4 @@
-import { DROP_TARGETS_MAX, METHOD_REQUIRES, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, QUICK_ACCESS_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TRANSFER_MAX_ITEMS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
+import { DROP_TARGETS_MAX, METHOD_REQUIRES, NET_METHODS, MENU_LABEL_MAX, MENU_MAX_EXTRA, MENU_MAX_ITEMS, QUICK_ACCESS_MAX_ITEMS, RESOLVE_MAX_REFS, TAG_ASSIGN_MAX_ITEMS, TAG_NAME_MAX, TRANSFER_MAX_ITEMS, TREE_DEPTH, type ApiError, type ModToHostMessage } from "../api/types";
 
 export type ParseResult =
   | { ok: true; message: ModToHostMessage }
@@ -473,6 +473,31 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       const items = parseRefArray(params.items, 1, 1000);
       if (!isNonEmptyString(id) || id.length > 64 || !items.ok) return { ok: false };
       return { ok: true, params: { id, items: items.refs } };
+    }
+
+    // ↓ 本体が代わりに通信する（ADR 0027）。宛先が network にあるかは Rust が確かめる
+    case "net.fetch": {
+      const { url, secret, body } = params;
+      const method = params.method === undefined ? "GET" : typeof params.method === "string" ? params.method.toUpperCase() : null;
+      if (!isNonEmptyString(url) || url.length > 4096 || !(NET_METHODS as readonly (string | null)[]).includes(method)) return { ok: false };
+      if (secret !== undefined && !(isString(secret) && /^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(secret))) return { ok: false };
+      const raw = params.headers ?? [];
+      if (!Array.isArray(raw) || raw.length > 30) return { ok: false };
+      const headers: [string, string][] = [];
+      for (const h of raw) {
+        if (!Array.isArray(h) || h.length !== 2 || !isNonEmptyString(h[0]) || !isString(h[1]) || h[0].length > 64 || h[1].length > 8192) return { ok: false };
+        headers.push([h[0], h[1]]);
+      }
+      if (body !== undefined && !(isString(body) && body.length <= 4 * 1024 * 1024) && !(ArrayBuffer.isView(body) && body.byteLength <= 4 * 1024 * 1024)) return { ok: false };
+      if (body !== undefined && (method === "GET" || method === "HEAD")) return { ok: false };
+      return { ok: true, params: { url, method, headers, ...(body !== undefined ? { body } : {}), ...(secret !== undefined ? { secret } : {}) } };
+    }
+
+    case "net.url": {
+      const { url, secret } = params;
+      if (!isNonEmptyString(url) || url.length > 4096) return { ok: false };
+      if (secret !== undefined && !(isString(secret) && /^[A-Za-z][A-Za-z0-9_]{0,31}$/.test(secret))) return { ok: false };
+      return { ok: true, params: { url, ...(secret !== undefined ? { secret } : {}) } };
     }
 
     case "mods.list":

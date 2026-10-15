@@ -83,8 +83,10 @@
   <a href="#s26">見た目（TUI キット）</a>
   <a href="#s27">安全の決まり</a>
   <a href="#s28">通信（network）</a>
-  <a href="#s29">配る</a>
-  <a href="#s30">ヒント</a>
+  <a class="sub" href="#s29">本体に通信してもらう（ep.net）</a>
+  <a class="sub" href="#s30">API キー（secret）</a>
+  <a href="#s31">配る</a>
+  <a href="#s32">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -454,7 +456,7 @@ const id = await ep.ui.choose([{ id: &quot;a&quot;, label: &quot;格子に並べ
 <pre><code class="language-js">let s = await ep.settings.get();          // { spacing: 2, layout: &quot;grid&quot;, glow: true, tint: &quot;#57ab5a&quot;, title: &quot;&quot; }
 ep.onSettings((next) =&gt; { s = next; redraw(); });
 </code></pre>
-<p>種類は <code>boolean</code>・<code>number</code>（<code>min</code>・<code>max</code>・<code>step</code>）・<code>text</code>（<code>maxLength</code>）・<code>choice</code>（<code>options</code>）・<code>color</code>（<code>#rrggbb</code>）。
+<p>種類は <code>boolean</code>・<code>number</code>（<code>min</code>・<code>max</code>・<code>step</code>）・<code>text</code>（<code>maxLength</code>）・<code>choice</code>（<code>options</code>）・<code>color</code>（<code>#rrggbb</code>）・<code>secret</code>（下の「API キー」）。
 覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。</p>
 <h3 id="s20">コマンド（commands）</h3>
 <p>コマンドの一覧（<strong>Ctrl+Shift+P</strong>、またはタブの右クリック）に、このビューのコマンドを出せます。表示中のタブのビューのものが並びます。</p>
@@ -566,6 +568,10 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
 <td><code>io</code></td>
 <td>読み書きに失敗した</td>
 </tr>
+<tr>
+<td><code>network</code></td>
+<td>本体が代わりに通信して、つながらなかった（<code>ep.net</code>）</td>
+</tr>
 </tbody></table>
 <pre><code class="language-js">try {
   await ep.trash([entry]);
@@ -608,11 +614,51 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 <li>書いた先には、<code>fetch</code>・画像・音や動画・フォント・スタイルシートで通信できます。<strong>スクリプトは読み込めません</strong></li>
 <li>入れる人には、入れる前の確かめの画面で通信先を見せます。ファイルの中身を読める MOD（<code>fileContent</code>・<code>search</code>）が通信もする場合は、
 「ファイルの中身が外へ送られることがあります」と強く注意が出ます。必要な先だけを書いてください</li>
-<li>MOD の画面は隔離されているので、通信には「どこのページからか（Origin・Referer）」が付きません（Origin は <code>null</code>）。
-これを求めるサービス（例：OpenStreetMap の公式のタイル）は使えないことがあります。<code>fetch</code> で読むデータは、相手が CORS で許している必要があります</li>
+<li>MOD の画面は隔離されているので、ブラウザの <code>fetch</code>・<code>&lt;img&gt;</code> の通信には「どこのページからか（Origin・Referer）」が付きません（Origin は <code>null</code>）。
+これを求めるサービス（例：OpenStreetMap の公式のタイル）や、ブラウザからの読み込みを許していない（CORS の無い）API は、下の <strong><code>ep.net</code></strong> を使ってください</li>
 <li>版を上げて通信先を増やすと、更新の確かめの画面に「新しく増えた」と出ます</li>
 </ul>
-<h2 id="s29">配る</h2>
+<h3 id="s29">本体に通信してもらう（ep.net）</h3>
+<p><code>ep.net.fetch</code> は <code>fetch</code> に似た形で、<strong>本体が MOD の代わりに通信</strong>します。ブラウザの決まり（CORS）を受けず、
+「explorer_plus の、この MOD から」と名乗って（User-Agent）通信します。宛先は、同じく <code>network</code> に書いた先だけです。</p>
+<pre><code class="language-js">const r = await ep.net.fetch(&quot;https://api.example.com/v1/search?q=&quot; + encodeURIComponent(word));
+if (!r.ok) throw new Error(`HTTP ${r.status}`);
+const data = await r.json();          // text()・bytes()・arrayBuffer()・blob() も使える。r.headers は Headers
+
+await ep.net.fetch(&quot;https://api.example.com/v1/notes&quot;, { method: &quot;POST&quot;, json: { title: &quot;メモ&quot; } });
+
+// &lt;img&gt; などにそのまま使える URL（本体が代わりに取ってくる。同じ URL には同じものを返す）
+img.src = await ep.net.url(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`);
+</code></pre>
+<ul>
+<li><code>method</code> は GET・HEAD・POST・PUT・PATCH・DELETE。送るもの（<code>body</code>・<code>json</code>）は 4MB まで、受け取るものは 16MB まで、30 秒まで</li>
+<li>転送（リダイレクト）の先も、<code>network</code> に書いた先かを確かめます（書いていない先へ転送されたら <code>not-declared</code>）</li>
+<li>付けられないヘッダ：<code>Cookie</code>・<code>User-Agent</code>・<code>Referer</code>・<code>Origin</code>・<code>Host</code> など（本体が決めるもの）。クッキーは送らず、受け取りません</li>
+<li>宛先の名前が、PC の中や家の中の住所（<code>127.0.0.1</code>・<code>192.168.x.x</code> など）を指していたら通信しません（<code>network</code>）</li>
+<li>4xx・5xx も、エラーではなく結果として返ります（<code>r.ok</code> が false）。つながらないときは <code>network</code> のエラー</li>
+</ul>
+<h3 id="s30">API キー（secret）</h3>
+<p>天気・翻訳などの API キーは、MOD に書き込まないでください（zip を開けば誰でも読めます）。
+代わりに、設定に <code>type: &quot;secret&quot;</code> の項目を書くと、<strong>利用者が自分のキーを入れ、本体が Windows の資格情報マネージャーに預けます</strong>。
+本体が通信するときだけキーを付けるので、MOD からはキーが見えません。</p>
+<pre><code class="language-json">&quot;network&quot;: [&quot;https://api.example.com&quot;],
+&quot;settings&quot;: [
+  { &quot;key&quot;: &quot;apiKey&quot;, &quot;label&quot;: &quot;API キー&quot;, &quot;type&quot;: &quot;secret&quot;,
+    &quot;send&quot;: { &quot;origin&quot;: &quot;https://api.example.com&quot;, &quot;header&quot;: &quot;Authorization&quot;, &quot;prefix&quot;: &quot;Bearer &quot; } }
+]
+</code></pre>
+<pre><code class="language-js">const s = await ep.settings.get();     // s.apiKey は、預けてあれば true（値そのものは来ない）
+if (!s.apiKey) return ep.ui.toast(&quot;設定（タブの ▸）で API キーを入れてください&quot;);
+const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=tokyo&quot;, { secret: &quot;apiKey&quot; });
+</code></pre>
+<ul>
+<li><code>send.origin</code>：キーを送ってよい宛先。<code>network</code> に書いた、<code>*</code> の無いもの。<strong>この宛先への通信のときだけ</strong>付けます（転送で別の宛先に行ったら付けません）</li>
+<li>付け方は、ヘッダ（<code>header</code> と、前に付ける <code>prefix</code>）か、URL の <code>?名前=</code>（<code>query</code>）のどちらか。<code>query</code> のときは、MOD が同じ名前を書いていても本体の値に入れ替え、結果の <code>r.url</code> からも除きます</li>
+<li><code>ep.net.url(url, { secret: &quot;apiKey&quot; })</code> でも付けられます</li>
+<li>キーがまだ無いときは <code>not-found</code>、<code>send</code> の無い項目や secret でない項目を指すと <code>not-declared</code></li>
+<li>入れる人には、確かめの画面で「本体が預かり、○○だけに送ります」と見せます。MOD を外すと、預けたキーも消します</li>
+</ul>
+<h2 id="s31">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -620,7 +666,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s30">ヒント</h2>
+<h2 id="s32">ヒント</h2>
 <ul>
 <li><strong>開発者ツール</strong>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールに出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
 <li><strong>大きなフォルダ</strong>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>

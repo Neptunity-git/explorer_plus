@@ -166,8 +166,8 @@ export function validateManifest(
   const uses = checkUses(raw.uses, errors);
   const description = checkDescription(raw.description, errors);
   const location = checkLocation(raw.location, errors);
-  const settings = checkSettings(raw.settings, errors);
   const network = checkNetwork(raw.network, errors);
+  const settings = checkSettings(raw.settings, errors, network ?? []);
 
   if (errors.length > 0) {
     return { ok: false, errors };

@@ -59,7 +59,9 @@ export function confirmDialog(message: string, okLabel: string, confirmKey?: str
     document.addEventListener("keydown", onKey, true);
     ok.onclick = () => done(true);
     cancel.onclick = () => done(false);
-    backdrop.onclick = (e) => e.target === backdrop && done(false);
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) done(false);
+    };
     ok.focus();
   });
 }

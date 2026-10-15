@@ -38,3 +38,11 @@ export function checkNetwork(raw: unknown, errors: string[]): string[] | undefin
   }
   return out;
 }
+
+/** net.fetch の結果のバイト列（[説明の長さ 4 バイト][説明の JSON][中身]。Rust の netproxy.rs の frame）を分ける */
+export function parseNetFrame(buf: ArrayBuffer): { status: number; statusText: string; url: string; headers: [string, string][]; body: Uint8Array } {
+  const view = new DataView(buf);
+  const n = view.getUint32(0, true);
+  const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n))) as { status: number; statusText: string; url: string; headers: [string, string][] };
+  return { ...meta, body: new Uint8Array(buf.slice(4 + n)) };
+}

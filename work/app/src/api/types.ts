@@ -69,7 +69,12 @@ export type SettingDef =
   | (SettingBase & { type: "number"; default: number; min?: number; max?: number; step?: number })
   | (SettingBase & { type: "text"; default: string; maxLength?: number })
   | (SettingBase & { type: "choice"; default: string; options: { value: string; label: string }[] })
-  | (SettingBase & { type: "color"; default: string });
+  | (SettingBase & { type: "color"; default: string })
+  // 秘密の値（API キーなど。ADR 0027）。本体が資格情報マネージャーに預け、send の宛先に通信するときだけ本体が付ける。
+  // MOD には値を見せない（settings.get では「預けてあるか」の true / false だけ）
+  | (SettingBase & { type: "secret"; send: SecretSend });
+/** 秘密の値の付け方：origin（network に書いた、* の無いもの）に通信するときだけ、ヘッダ（prefix + 値）か URL の ?query= に入れる */
+export type SecretSend = { origin: string; header: string; prefix?: string } | { origin: string; query: string };
 export type SettingValues = Record<string, boolean | number | string>;
 
 /** コレクション（仮想ディレクトリ。ADR 0025） */
@@ -314,7 +319,8 @@ export type Rect = { x: number; y: number; width: number; height: number };
 // ---- エラー ----
 
 // "exists" は 2026-10-14 に追加（名前の変更・フォルダの作成で、同じ名前が既にあるとき）
-export const ERROR_CODES = ["not-declared", "denied", "not-found", "too-large", "invalid", "io", "exists"] as const;
+// "network" は 2026-10-15 に追加（本体が代わりに通信して、つながらなかったとき。ADR 0027）
+export const ERROR_CODES = ["not-declared", "denied", "not-found", "too-large", "invalid", "io", "exists", "network"] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 export type ApiError = { code: ErrorCode; message: string };
 
@@ -403,7 +409,10 @@ export type CallMethod =
   | "mods.pack"
   | "mods.openFolder"
   | "mods.openDocs"
-  | "mods.openDevtools";
+  | "mods.openDevtools"
+  // ↓ 2026-10-15 に追加（本体が代わりに通信する。ADR 0027）。manifest の network が要る
+  | "net.fetch"
+  | "net.url";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -509,6 +518,10 @@ export type CallParams = {
   "mods.openFolder": { id: string };
   "mods.openDocs": Record<string, never>;
   "mods.openDevtools": Record<string, never>;
+  /** 本体が代わりに通信する。宛先は network に書いた先だけ。body は 4MB まで、返事は 16MB まで。secret は settings の type "secret" の key */
+  "net.fetch": { url: string; method: NetMethod; headers: [string, string][]; body?: string | Uint8Array; secret?: string };
+  /** 本体が代わりに取ってくる URL（<img> などにそのまま使える） */
+  "net.url": { url: string; secret?: string };
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -588,7 +601,15 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "mods.openFolder": null,
   "mods.openDocs": null,
   "mods.openDevtools": null,
+  // 宛先が manifest の network にあるかは、本体（Rust）が確かめる
+  "net.fetch": null,
+  "net.url": null,
 };
+
+export type NetMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+export const NET_METHODS: readonly NetMethod[] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
+/** net.fetch の結果（ランタイムが Response に似た形にして MOD に渡す） */
+export type NetResult = { status: number; statusText: string; url: string; headers: [string, string][]; body: Uint8Array };
 
 export type CallMessage = {
   ep: 1;

@@ -29,6 +29,75 @@ struct ModDir {
     entry: String,
     /** manifest の network に書いた通信先（検査を通ったものだけ。ADR 0026） */
     network: Vec<String>,
+    /** settings の type "secret" の項目（どの宛先に、どう付けるか。ADR 0027） */
+    secrets: Vec<SecretDef>,
+}
+
+/// 秘密の設定（API キーなど）を、本体が通信するときにどう付けるか（ADR 0027）
+#[derive(Clone, Debug, PartialEq)]
+pub struct SecretDef {
+    pub key: String,
+    /// 付けてよい宛先（network に書いた、* の無い origin と同じもの）
+    pub origin: String,
+    pub how: SecretSend,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SecretSend {
+    /// ヘッダに "<prefix><値>" を入れる
+    Header { name: String, prefix: String },
+    /// URL の ?<name>=<値> に入れる
+    Query { name: String },
+}
+
+/// MOD が自分で付けられない・秘密を入れてはいけないヘッダ（本体が決めるもの・通信の仕組みのもの）
+pub fn forbidden_header(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    const LIST: [&str; 18] = [
+        "host", "content-length", "connection", "transfer-encoding", "cookie", "cookie2", "user-agent", "referer", "origin", "te", "trailer", "upgrade", "keep-alive", "expect", "accept-encoding", "via", "date", "dnt",
+    ];
+    LIST.contains(&n.as_str()) || n.starts_with("proxy-") || n.starts_with("sec-")
+}
+
+pub fn valid_header_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64 && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+}
+
+/// manifest の settings から、type "secret" の項目を取り出す（形の合わないものは使わない。誤りの説明は TypeScript の検査が出す）
+fn secrets_of(manifest_text: &str, network: &[String]) -> Vec<SecretDef> {
+    let v: serde_json::Value = serde_json::from_str(manifest_text).unwrap_or_default();
+    let Some(items) = v.get("settings").and_then(|s| s.as_array()) else { return Vec::new() };
+    items
+        .iter()
+        .filter(|s| s.get("type").and_then(|t| t.as_str()) == Some("secret"))
+        .filter_map(|s| {
+            let key = s.get("key")?.as_str()?;
+            let send = s.get("send")?;
+            let origin = send.get("origin")?.as_str()?;
+            if !crate::secrets::valid_key(key) || origin.contains('*') || !network.iter().any(|o| o == origin) {
+                return None;
+            }
+            let how = match (send.get("header").and_then(|h| h.as_str()), send.get("query").and_then(|q| q.as_str())) {
+                (Some(h), None) if valid_header_name(h) && !forbidden_header(h) => {
+                    let prefix = send.get("prefix").and_then(|p| p.as_str()).unwrap_or("");
+                    if prefix.len() > 40 || !prefix.bytes().all(|b| (0x20..=0x7e).contains(&b)) {
+                        return None;
+                    }
+                    SecretSend::Header { name: h.into(), prefix: prefix.into() }
+                }
+                (None, Some(q)) if !q.is_empty() && q.len() <= 40 && q.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b)) => SecretSend::Query { name: q.into() },
+                _ => return None,
+            };
+            Some(SecretDef { key: key.into(), origin: origin.into(), how })
+        })
+        .collect()
+}
+
+/// 本体が MOD の代わりに通信するときに使う、その MOD の通信先と秘密の設定（ADR 0027）
+pub fn net_of(app: &AppHandle, id: &str) -> Option<(Vec<String>, Vec<SecretDef>)> {
+    let registry = app.state::<ModRegistry>();
+    let g = registry.0.read().unwrap();
+    g.get(id).map(|m| (m.network.clone(), m.secrets.clone()))
 }
 
 /// MOD が通信してよい先として書ける形か（ADR 0026）：https の origin（"https://example.com"・"https://*.example.com"・ポート付き）だけ。
@@ -169,8 +238,10 @@ fn scan_dirs(dirs: Vec<PathBuf>, source: &str, registry: &mut HashMap<String, Mo
                 } else if registry.contains_key(&id) {
                     src.error = Some(format!("id: \"{}\" is already used by another MOD", id));
                 } else {
-                    let network = network_of(src.manifest_text.as_deref().unwrap_or(""));
-                    registry.insert(id, ModDir { dir: dir.clone(), entry, network });
+                    let text = src.manifest_text.as_deref().unwrap_or("");
+                    let network = network_of(text);
+                    let secrets = secrets_of(text, &network);
+                    registry.insert(id, ModDir { dir: dir.clone(), entry, network, secrets });
                 }
             }
         }
@@ -237,14 +308,16 @@ pub fn frame_csp(origin: &str, id: &str, network: &[String]) -> String {
     let files = origin.replacen("://mod.", "://epfile.", 1);
     // manifest の network に書いた通信先（ADR 0026）。データ・画像・音や動画・フォント・見た目の部品だけ。スクリプトは読み込ませない
     let net: String = network.iter().filter(|o| valid_origin(o)).map(|o| format!(" {}", o)).collect();
+    // 本体が代わりに取ってくる URL（net.url。ADR 0027）。通信先がある MOD だけ
+    let proxied = if net.is_empty() { String::new() } else { format!(" {}", origin.replacen("://mod.", "://epnet.", 1)) };
     format!(
         "default-src 'none'; \
          script-src {base} {runtime} 'wasm-unsafe-eval'; \
          style-src {base} {runtime} 'unsafe-inline'{net}; \
-         img-src {base} {icons} {files} data: blob:{net}; \
-         font-src {base} {files} data:{net}; \
-         connect-src {base} {files}{net}; \
-         media-src {base} {files} data: blob:{net}; \
+         img-src {base} {icons} {files} data: blob:{net}{proxied}; \
+         font-src {base} {files} data:{net}{proxied}; \
+         connect-src {base} {files}{net}{proxied}; \
+         media-src {base} {files} data: blob:{net}{proxied}; \
          worker-src blob:"
     )
 }
@@ -483,6 +556,8 @@ mod tests {
         assert!(!csp.split(';').find(|d| d.trim_start().starts_with("script-src")).unwrap().contains("epfile"));
         assert!(!csp.contains("ipc.localhost"));
         assert!(!csp.contains("*"));
+        // 通信先が無い MOD には、本体が代わりに取ってくる URL も無い
+        assert!(!csp.contains("epnet"));
     }
 
     #[test]
@@ -506,12 +581,30 @@ mod tests {
     }
 
     #[test]
+    fn secret_settings() {
+        let net = vec!["https://api.example.com".to_string(), "https://*.tiles.example.org".to_string()];
+        let m = r#"{"settings":[
+            {"key":"apiKey","type":"secret","send":{"origin":"https://api.example.com","header":"Authorization","prefix":"Bearer "}},
+            {"key":"q","type":"secret","send":{"origin":"https://api.example.com","query":"appid"}},
+            {"key":"notListed","type":"secret","send":{"origin":"https://evil.example.net","query":"k"}},
+            {"key":"wild","type":"secret","send":{"origin":"https://*.tiles.example.org","query":"k"}},
+            {"key":"cookie","type":"secret","send":{"origin":"https://api.example.com","header":"Cookie"}},
+            {"key":"both","type":"secret","send":{"origin":"https://api.example.com","header":"X-Key","query":"k"}},
+            {"key":"plain","type":"text","default":""}
+        ]}"#;
+        let s = secrets_of(m, &net);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].how, SecretSend::Header { name: "Authorization".into(), prefix: "Bearer ".into() });
+        assert_eq!(s[1].how, SecretSend::Query { name: "appid".into() });
+    }
+
+    #[test]
     fn csp_adds_network_but_not_to_scripts() {
         let csp = frame_csp("http://mod.localhost", "neo.map", &["https://tile.openstreetmap.org".into(), "javascript:".into()]);
-        assert!(csp.contains("img-src http://mod.localhost/neo.map/ http://icon.localhost http://epfile.localhost data: blob: https://tile.openstreetmap.org;"));
-        assert!(csp.contains("connect-src http://mod.localhost/neo.map/ http://epfile.localhost https://tile.openstreetmap.org;"));
+        assert!(csp.contains("img-src http://mod.localhost/neo.map/ http://icon.localhost http://epfile.localhost data: blob: https://tile.openstreetmap.org http://epnet.localhost;"));
+        assert!(csp.contains("connect-src http://mod.localhost/neo.map/ http://epfile.localhost https://tile.openstreetmap.org http://epnet.localhost;"));
         let script = csp.split(';').find(|d| d.trim_start().starts_with("script-src")).unwrap();
-        assert!(!script.contains("openstreetmap"), "スクリプトは通信先から読み込ませない");
+        assert!(!script.contains("openstreetmap") && !script.contains("epnet"), "スクリプトは通信先から読み込ませない");
         assert!(!csp.contains("javascript:"), "検査を通らないものは入れない");
     }
 

@@ -41,8 +41,42 @@ declare global {
       | { key: string; label: string; type: "number"; default: number; min?: number; max?: number; step?: number }
       | { key: string; label: string; type: "text"; default: string; maxLength?: number }
       | { key: string; label: string; type: "choice"; default: string; options: { value: string; label: string }[] }
-      | { key: string; label: string; type: "color"; default: string };
+      | { key: string; label: string; type: "color"; default: string }
+      /**
+       * 秘密の値（API キーなど。ADR 0027）。利用者が設定の画面で入れると、本体が Windows の資格情報マネージャーに預ける。
+       * ビューには値を見せない（settings.get では、預けてあれば true）。net.fetch・net.url で { secret: key } を付けると、
+       * send.origin への通信のときだけ、本体がヘッダ（prefix + 値）か URL の ?query= に入れて送る
+       */
+      | { key: string; label: string; type: "secret"; send: { origin: string; header: string; prefix?: string } | { origin: string; query: string } };
     type SettingValues = Record<string, boolean | number | string>;
+
+    /** net.fetch の引数（ADR 0027） */
+    type NetOptions = {
+      /** 既定は "GET" */
+      method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+      /** Cookie・User-Agent・Referer・Origin などは付けられない（本体が決める） */
+      headers?: Record<string, string> | [string, string][] | Headers;
+      /** 4MB まで */
+      body?: string | Uint8Array | ArrayBuffer;
+      /** JSON にして body に入れる（Content-Type も付ける） */
+      json?: unknown;
+      /** settings の type "secret" の key。その send.origin への通信のときだけ、本体が値を付ける */
+      secret?: string;
+    };
+    /** net.fetch の結果。fetch の Response に似た形（中身は 16MB まで） */
+    type NetResponse = {
+      readonly ok: boolean;
+      readonly status: number;
+      readonly statusText: string;
+      /** 転送（リダイレクト）のあとの URL。秘密の値は入らない */
+      readonly url: string;
+      readonly headers: Headers;
+      text(): Promise<string>;
+      json(): Promise<any>;
+      bytes(): Promise<Uint8Array>;
+      arrayBuffer(): Promise<ArrayBuffer>;
+      blob(): Promise<Blob>;
+    };
     /** コレクション（仮想ディレクトリ。ADR 0025） */
     interface Collection {
       id: string;
@@ -232,7 +266,7 @@ declare global {
 
     type CurrentClass = { slot: TimetableSlot; period: TimetablePeriod } | null;
 
-    type ErrorCode = "not-declared" | "denied" | "not-found" | "too-large" | "invalid" | "io" | "exists";
+    type ErrorCode = "not-declared" | "denied" | "not-found" | "too-large" | "invalid" | "io" | "exists" | "network";
 
     /** 失敗した呼び出しの Promise は、code の付いた Error で失敗する */
     interface ApiError extends Error {
@@ -298,6 +332,16 @@ declare global {
        * アプリ全体で1つ（どの MOD からも同じものが見える）。中身はファイルID で覚えるので、名前変更・移動しても外れない。
        * delete は本体が確かめてから消す（中のファイルは消えない）。entries の missing は、見つからなくなったもの
        */
+      /**
+       * 本体が代わりに通信する（ADR 0027）。宛先は manifest の network に書いた先だけ（転送の先も確かめる）。
+       * ブラウザの決まり（CORS）を受けず、「explorer_plus の、この MOD から」と名乗る（User-Agent）。クッキーは送らない。
+       * つながらないときは "network"、network に無い先は "not-declared"、秘密の値がまだ無いときは "not-found"
+       */
+      readonly net: {
+        fetch(url: string, opts?: NetOptions): Promise<NetResponse>;
+        /** <img>・<audio>・CSS の url() などにそのまま使える URL。同じ URL には同じものを返す */
+        url(url: string, opts?: { secret?: string }): Promise<string>;
+      };
       readonly collections: {
         list(): Promise<Collection[]>;
         create(name: string, opts?: { color?: string }): Promise<Collection>;

@@ -63,7 +63,10 @@ export function showMenu(x: number, y: number, lines: MenuLine[]): Promise<void>
     };
     const onBlur = () => close();
 
-    backdrop.onmousedown = (e) => e.target === backdrop && close();
+    // 中括弧で囲む：on〜 の関数が false を返すと、押したときの本来の動き（入力欄にカーソルが入る）が止まってしまう
+    backdrop.onmousedown = (e) => {
+      if (e.target === backdrop) close();
+    };
     backdrop.oncontextmenu = (e) => {
       e.preventDefault();
       if (e.target === backdrop) close();

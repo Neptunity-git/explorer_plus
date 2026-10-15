@@ -371,3 +371,21 @@ uses の宣言は要らない。
 - 入れるときの確かめの画面に通信先を出す。`fileContent`・`search` を使う MOD なら「ファイルの中身が外へ送られることがある」、ほかの uses があれば「名前などが送られることがある」と注意を出す。更新で増えた先には「新しく増えた」
 - ホームの MOD の一覧に「通信あり」
 
+## 2026-10-15（7回目）の追加：本体が代わりに通信する・API キー（ADR 0027）
+
+- `net.fetch(url, { method, headers, body | json, secret })`：本体（Rust、`netproxy.rs`）が通信して、Response に似た形で返す。uses は要らない（network が要る）
+  - 宛先は manifest の network に当てはまる https の URL だけ（IP アドレス・利用者名つきは不可）。転送は自分で1回ずつ確かめる（5 回まで）
+  - 名前を引いた住所が PC の中・家の中（private・loopback・link-local など）なら通信しない
+  - User-Agent は `explorer_plus/<版> (MOD <id>; ...)`。Cookie・User-Agent・Referer・Origin・Host・Proxy-*・Sec-* などは MOD が付けられない。Set-Cookie は返さない
+  - 送る 4MB・受け取る 16MB・30 秒。4xx・5xx は結果として返す。つながらないときはエラー `network`（ERROR_CODES に追加）
+  - Rust からの結果は `[説明の長さ 4 バイト][説明の JSON][中身]` の1つのバイト列（`parseNetFrame`）
+- `net.url(url, { secret })`：`http://epnet.localhost/<印>` を発行する（同じ URL には同じ印。4000 個まで）。GET だけ。HTML・JS・XML は text/plain にして返す。
+  CSP の img・font・connect・media に、network のある MOD だけ `http://epnet.localhost` を足す（script には足さない）
+- settings の `type: "secret"`：`send: { origin, header, prefix? } | { origin, query }`。origin は network にある * の無いもの
+  - 値は Windows の資格情報マネージャー（`explorer_plus:<id>:<key>`。開発中のアプリは `explorer_plus-dev:`）。settings.json には書かない
+  - settings.get・onSettings では、預けてあるかの true / false だけ
+  - 設定の画面ではパスワードの欄（今の値は見せない。書いたときだけ預け直す。「消す」）
+  - 本体は send.origin と同じ origin への通信のときだけ付ける。query のときは MOD が書いた同じ名前を除き、MOD に返す URL にも残さない
+  - 入れるときの確かめの画面に「○○は本体が預かり、<origin> だけに送る」。MOD を外すと消す
+- 検査は TypeScript（`settings.ts`）と Rust（`mods.rs` の `secrets_of`）の両方で行う
+

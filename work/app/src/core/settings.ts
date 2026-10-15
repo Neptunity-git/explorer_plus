@@ -1,6 +1,7 @@
 // MOD の設定（ADR 0024）。manifest の settings に項目を書くと、本体が設定の画面を作り、値を覚えておく。
 // ここは、項目の決まりの検査と、覚えている値を「今の項目」に合わせる処理（壊れた値・消えた項目は既定に戻す）。
 import type { SettingDef, SettingValues } from "../api/types";
+import { validOrigin } from "./network";
 
 export const SETTINGS_MAX = 30;
 const KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
@@ -26,11 +27,30 @@ export function validSettingValue(def: SettingDef, v: unknown): boolean {
       return typeof v === "string" && def.options.some((o) => o.value === v);
     case "color":
       return typeof v === "string" && COLOR_RE.test(v);
+    case "secret":
+      // MOD に見せるのは「預けてあるか」だけ
+      return typeof v === "boolean";
   }
 }
 
+/** 秘密の値として預けられる形（Rust の secrets.rs と同じ）：前後の空白を除いて 1〜2000 文字の、表示できる ASCII */
+export function validSecretValue(v: string): boolean {
+  const t = v.trim();
+  return t.length >= 1 && t.length <= 2000 && /^[\x20-\x7e]+$/.test(t);
+}
+
+/** MOD が自分で付けられない・秘密を入れてはいけないヘッダ（Rust の mods.rs の forbidden_header と同じ） */
+export function forbiddenHeader(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    ["host", "content-length", "connection", "transfer-encoding", "cookie", "cookie2", "user-agent", "referer", "origin", "te", "trailer", "upgrade", "keep-alive", "expect", "accept-encoding", "via", "date", "dnt"].includes(n) ||
+    n.startsWith("proxy-") ||
+    n.startsWith("sec-")
+  );
+}
+
 /** manifest の settings を確かめる。誤りは errors に足す */
-export function checkSettings(raw: unknown, errors: string[]): SettingDef[] | undefined {
+export function checkSettings(raw: unknown, errors: string[], network: readonly string[] = []): SettingDef[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw)) {
     errors.push("settings: must be an array");
@@ -74,8 +94,28 @@ export function checkSettings(raw: unknown, errors: string[]): SettingDef[] | un
       case "color":
         def = { key: s.key, label: s.label as string, type: "color", default: s.default as string };
         break;
+      case "secret": {
+        // 秘密の値（ADR 0027）：送ってよい宛先と、付け方（ヘッダか ?query=）を決めておく
+        const send = s.send;
+        if (!isObj(send) || typeof send.origin !== "string" || !validOrigin(send.origin) || send.origin.includes("*") || !network.includes(send.origin))
+          return void errors.push(`${at}.send.origin: one of "network" (without *)`);
+        const header = send.header;
+        const query = send.query;
+        if ((header === undefined) === (query === undefined)) return void errors.push(`${at}.send: either "header" or "query"`);
+        if (header !== undefined) {
+          if (typeof header !== "string" || !/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/.test(header) || forbiddenHeader(header)) return void errors.push(`${at}.send.header: a header name like "Authorization"`);
+          if (send.prefix !== undefined && !(typeof send.prefix === "string" && send.prefix.length <= 40 && /^[\x20-\x7e]*$/.test(send.prefix)))
+            return void errors.push(`${at}.send.prefix: up to 40 ASCII chars`);
+          def = { key: s.key, label: s.label as string, type: "secret", send: { origin: send.origin, header, ...(send.prefix ? { prefix: send.prefix as string } : {}) } };
+        } else {
+          if (typeof query !== "string" || !/^[A-Za-z0-9_.-]{1,40}$/.test(query)) return void errors.push(`${at}.send.query: letters, digits, _ . - (1-40)`);
+          def = { key: s.key, label: s.label as string, type: "secret", send: { origin: send.origin, query } };
+        }
+        out.push(def);
+        return;
+      }
       default:
-        return void errors.push(`${at}.type: "boolean", "number", "text", "choice" or "color"`);
+        return void errors.push(`${at}.type: "boolean", "number", "text", "choice", "color" or "secret"`);
     }
     if (!validSettingValue(def, s.default)) return void errors.push(`${at}.default: does not fit the type`);
     out.push(def);
@@ -87,6 +127,7 @@ export function checkSettings(raw: unknown, errors: string[]): SettingDef[] | un
 export function normalizeSettings(defs: readonly SettingDef[], stored: unknown): SettingValues {
   const src = isObj(stored) ? stored : {};
   const out: SettingValues = {};
-  for (const d of defs) out[d.key] = validSettingValue(d, src[d.key]) ? (src[d.key] as SettingValues[string]) : d.default;
+  // 秘密の値は覚えない（「預けてあるか」は本体が資格情報マネージャーに聞いて入れる）
+  for (const d of defs) out[d.key] = d.type === "secret" ? false : validSettingValue(d, src[d.key]) ? (src[d.key] as SettingValues[string]) : d.default;
   return out;
 }

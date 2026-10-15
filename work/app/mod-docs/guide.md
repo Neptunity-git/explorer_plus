@@ -297,7 +297,7 @@ let s = await ep.settings.get();          // { spacing: 2, layout: "grid", glow:
 ep.onSettings((next) => { s = next; redraw(); });
 ```
 
-種類は `boolean`・`number`（`min`・`max`・`step`）・`text`（`maxLength`）・`choice`（`options`）・`color`（`#rrggbb`）。
+種類は `boolean`・`number`（`min`・`max`・`step`）・`text`（`maxLength`）・`choice`（`options`）・`color`（`#rrggbb`）・`secret`（下の「API キー」）。
 覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。
 
 ### コマンド（commands）
@@ -405,6 +405,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
 | `invalid` | 引数の形が違う・使えない名前 |
 | `exists` | 同じ名前がもうある |
 | `io` | 読み書きに失敗した |
+| `network` | 本体が代わりに通信して、つながらなかった（`ep.net`） |
 
 ```js
 try {
@@ -457,9 +458,57 @@ const name = await ask({ label: "名前", okLabel: "作る" });          // や�
 - 書いた先には、`fetch`・画像・音や動画・フォント・スタイルシートで通信できます。**スクリプトは読み込めません**
 - 入れる人には、入れる前の確かめの画面で通信先を見せます。ファイルの中身を読める MOD（`fileContent`・`search`）が通信もする場合は、
   「ファイルの中身が外へ送られることがあります」と強く注意が出ます。必要な先だけを書いてください
-- MOD の画面は隔離されているので、通信には「どこのページからか（Origin・Referer）」が付きません（Origin は `null`）。
-  これを求めるサービス（例：OpenStreetMap の公式のタイル）は使えないことがあります。`fetch` で読むデータは、相手が CORS で許している必要があります
+- MOD の画面は隔離されているので、ブラウザの `fetch`・`<img>` の通信には「どこのページからか（Origin・Referer）」が付きません（Origin は `null`）。
+  これを求めるサービス（例：OpenStreetMap の公式のタイル）や、ブラウザからの読み込みを許していない（CORS の無い）API は、下の **`ep.net`** を使ってください
 - 版を上げて通信先を増やすと、更新の確かめの画面に「新しく増えた」と出ます
+
+### 本体に通信してもらう（ep.net）
+
+`ep.net.fetch` は `fetch` に似た形で、**本体が MOD の代わりに通信**します。ブラウザの決まり（CORS）を受けず、
+「explorer_plus の、この MOD から」と名乗って（User-Agent）通信します。宛先は、同じく `network` に書いた先だけです。
+
+```js
+const r = await ep.net.fetch("https://api.example.com/v1/search?q=" + encodeURIComponent(word));
+if (!r.ok) throw new Error(`HTTP ${r.status}`);
+const data = await r.json();          // text()・bytes()・arrayBuffer()・blob() も使える。r.headers は Headers
+
+await ep.net.fetch("https://api.example.com/v1/notes", { method: "POST", json: { title: "メモ" } });
+
+// <img> などにそのまま使える URL（本体が代わりに取ってくる。同じ URL には同じものを返す）
+img.src = await ep.net.url(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`);
+```
+
+- `method` は GET・HEAD・POST・PUT・PATCH・DELETE。送るもの（`body`・`json`）は 4MB まで、受け取るものは 16MB まで、30 秒まで
+- 転送（リダイレクト）の先も、`network` に書いた先かを確かめます（書いていない先へ転送されたら `not-declared`）
+- 付けられないヘッダ：`Cookie`・`User-Agent`・`Referer`・`Origin`・`Host` など（本体が決めるもの）。クッキーは送らず、受け取りません
+- 宛先の名前が、PC の中や家の中の住所（`127.0.0.1`・`192.168.x.x` など）を指していたら通信しません（`network`）
+- 4xx・5xx も、エラーではなく結果として返ります（`r.ok` が false）。つながらないときは `network` のエラー
+
+### API キー（secret）
+
+天気・翻訳などの API キーは、MOD に書き込まないでください（zip を開けば誰でも読めます）。
+代わりに、設定に `type: "secret"` の項目を書くと、**利用者が自分のキーを入れ、本体が Windows の資格情報マネージャーに預けます**。
+本体が通信するときだけキーを付けるので、MOD からはキーが見えません。
+
+```json
+"network": ["https://api.example.com"],
+"settings": [
+  { "key": "apiKey", "label": "API キー", "type": "secret",
+    "send": { "origin": "https://api.example.com", "header": "Authorization", "prefix": "Bearer " } }
+]
+```
+
+```js
+const s = await ep.settings.get();     // s.apiKey は、預けてあれば true（値そのものは来ない）
+if (!s.apiKey) return ep.ui.toast("設定（タブの ▸）で API キーを入れてください");
+const r = await ep.net.fetch("https://api.example.com/v1/forecast?city=tokyo", { secret: "apiKey" });
+```
+
+- `send.origin`：キーを送ってよい宛先。`network` に書いた、`*` の無いもの。**この宛先への通信のときだけ**付けます（転送で別の宛先に行ったら付けません）
+- 付け方は、ヘッダ（`header` と、前に付ける `prefix`）か、URL の `?名前=`（`query`）のどちらか。`query` のときは、MOD が同じ名前を書いていても本体の値に入れ替え、結果の `r.url` からも除きます
+- `ep.net.url(url, { secret: "apiKey" })` でも付けられます
+- キーがまだ無いときは `not-found`、`send` の無い項目や secret でない項目を指すと `not-declared`
+- 入れる人には、確かめの画面で「本体が預かり、○○だけに送ります」と見せます。MOD を外すと、預けたキーも消します
 
 ## 配る
 

@@ -20,6 +20,7 @@ import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
 import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
+import { parseNetFrame } from "../core/network";
 import type { ChoiceItem, FileChange } from "../api/types";
 import { askDialog, chooseDialog, settingsService } from "./mod-ui";
 import { collectionService, grantService } from "./collection-service";
@@ -524,6 +525,20 @@ export class ViewHost {
       case "commands.set":
         this.commands = p.commands;
         return;
+      // ↓ 本体が代わりに通信する（ADR 0027）。どの MOD からかは、本体が知っている id を渡す（MOD に言わせない）
+      case "net.fetch": {
+        const body = p.body === undefined ? undefined : typeof p.body === "string" ? new TextEncoder().encode(p.body) : (p.body as Uint8Array);
+        const buf = await backend.netFetch(this.view.manifest.id, {
+          url: p.url,
+          method: p.method,
+          headers: p.headers,
+          ...(body ? { bodyBase64: bytesToBase64(body) } : {}),
+          ...(p.secret ? { secret: p.secret } : {}),
+        });
+        return parseNetFrame(buf);
+      }
+      case "net.url":
+        return backend.netUrl(this.view.manifest.id, p.url, p.secret);
       // ↓ 書き込みとコレクション（ADR 0025）
       case "files.create": {
         await this.ensureGrant("createFiles", "新しいファイル・フォルダを作ろうとしています");

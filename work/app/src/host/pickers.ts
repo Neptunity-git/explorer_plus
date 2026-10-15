@@ -46,7 +46,10 @@ export function panel(title: string): { body: HTMLElement; footer: HTMLElement; 
     resolve();
   };
   document.addEventListener("keydown", onKey, true);
-  backdrop.onmousedown = (e) => e.target === backdrop && close();
+  // 中括弧で囲む：on〜 の関数が false を返すと、押したときの本来の動き（入力欄にカーソルが入る）が止まってしまう
+  backdrop.onmousedown = (e) => {
+    if (e.target === backdrop) close();
+  };
   return { body, footer, close, done };
 }
 

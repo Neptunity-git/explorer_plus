@@ -1,7 +1,7 @@
 // MOD が本体に頼む画面（ADR 0024）：入力・選択・設定・コマンドの一覧。見た目は本体の確かめの画面と同じ。
 // 設定の値は、アプリのデータ（settings）にビューごとに覚える。
 import type { ChoiceItem, SettingDef, SettingValues } from "../api/types";
-import { normalizeSettings, validSettingValue } from "../core/settings";
+import { normalizeSettings, validSecretValue, validSettingValue } from "../core/settings";
 import { backend } from "./backend";
 import { panel } from "./pickers";
 
@@ -76,17 +76,47 @@ export function chooseDialog(title: string, items: readonly ChoiceItem[]): Promi
   return p.done.then(() => result);
 }
 
+/** 設定の画面で変えたもの。secrets は、新しく預ける値（null は消す）。書かなかった秘密の項目は入らない */
+export type SettingsChange = { values: SettingValues; secrets: Record<string, string | null> };
+
 /** 設定の画面。保存したら新しい値、やめたら null */
-export function settingsDialog(title: string, defs: readonly SettingDef[], values: SettingValues): Promise<SettingValues | null> {
+export function settingsDialog(title: string, defs: readonly SettingDef[], values: SettingValues): Promise<SettingsChange | null> {
   const p = panel(title);
   const form = el("div", "settings-form");
   p.body.appendChild(form);
   const read: (() => unknown)[] = [];
+  const secrets: Record<string, string | null> = {};
+  const secretInputs: { key: string; label: string; input: HTMLInputElement }[] = [];
   for (const d of defs) {
     const row = el("label", "settings-row");
     row.append(el("span", "settings-label", d.label));
     const v = values[d.key];
     let input: HTMLInputElement | HTMLSelectElement;
+    if (d.type === "secret") {
+      // 秘密の値（ADR 0027）：今の値は見せない。書いたときだけ預け直す
+      const t = el("input", "picker-input");
+      t.type = "password";
+      t.autocomplete = "off";
+      t.maxLength = 2000;
+      t.placeholder = v === true ? "預けてあります" : "まだありません";
+      const origin = d.send.origin;
+      row.title = `本体が資格情報マネージャーに預け、${origin} に通信するときだけ付けます。ビューからは見えません`;
+      secretInputs.push({ key: d.key, label: d.label, input: t });
+      read.push(() => v === true);
+      row.append(t);
+      if (v === true) {
+        const clear = button("消す", false, () => {
+          secrets[d.key] = null;
+          t.value = "";
+          t.placeholder = "保存すると消します";
+          clear.disabled = true;
+        });
+        clear.type = "button";
+        row.append(clear);
+      }
+      form.appendChild(row);
+      continue;
+    }
     if (d.type === "boolean") {
       const c = el("input");
       c.type = "checkbox";
@@ -121,7 +151,7 @@ export function settingsDialog(title: string, defs: readonly SettingDef[], value
   }
   const message = el("div", "picker-message");
   p.body.appendChild(message);
-  let result: SettingValues | null = null;
+  let result: SettingsChange | null = null;
   const save = () => {
     const next: SettingValues = {};
     for (let i = 0; i < defs.length; i++) {
@@ -132,11 +162,20 @@ export function settingsDialog(title: string, defs: readonly SettingDef[], value
       }
       next[defs[i].key] = value as SettingValues[string];
     }
-    result = next;
+    for (const s of secretInputs) {
+      if (s.input.value === "") continue;
+      if (!validSecretValue(s.input.value)) {
+        message.textContent = `「${s.label}」は、英数字と記号（2000 文字まで）で入力してください`;
+        return;
+      }
+      secrets[s.key] = s.input.value.trim();
+    }
+    result = { values: next, secrets };
     p.close();
   };
+  // 既定に戻しても、預けた秘密の値はそのまま（消すときは「消す」）
   const reset = () => {
-    result = normalizeSettings(defs, null);
+    result = { values: normalizeSettings(defs, null), secrets: {} };
     p.close();
   };
   p.footer.append(button("保存", true, save), button("既定に戻す", false, reset), button("やめる", false, p.close));
@@ -147,6 +186,7 @@ export function settingsDialog(title: string, defs: readonly SettingDef[], value
 
 class SettingsService {
   private data: Record<string, unknown> = {};
+  private readonly defs = new Map<string, readonly SettingDef[]>();
   private loading: Promise<void> | null = null;
   private readonly listeners = new Map<string, Set<(v: SettingValues) => void>>();
 
@@ -161,16 +201,29 @@ class SettingsService {
     return this.loading;
   }
 
+  /** 今の値。秘密の項目は「預けてあるか」（資格情報マネージャーに聞く） */
   async get(viewId: string, defs: readonly SettingDef[]): Promise<SettingValues> {
     await this.load();
-    return normalizeSettings(defs, this.data[viewId]);
+    this.defs.set(viewId, defs);
+    const values = normalizeSettings(defs, this.data[viewId]);
+    const keys = defs.filter((d) => d.type === "secret").map((d) => d.key);
+    if (keys.length > 0) {
+      const has = await backend.secretStatus(viewId, keys).catch(() => keys.map(() => false));
+      keys.forEach((k, i) => (values[k] = has[i]));
+    }
+    return values;
   }
 
-  async set(viewId: string, values: SettingValues): Promise<void> {
+  /** 値を覚える。秘密の値は資格情報マネージャーへ（settings のファイルには書かない） */
+  async set(viewId: string, change: SettingsChange): Promise<void> {
     await this.load();
-    this.data[viewId] = values;
+    const defs = this.defs.get(viewId) ?? [];
+    const secretKeys = new Set(defs.filter((d) => d.type === "secret").map((d) => d.key));
+    for (const [key, value] of Object.entries(change.secrets)) if (secretKeys.has(key)) await backend.secretSet(viewId, key, value);
+    this.data[viewId] = Object.fromEntries(Object.entries(change.values).filter(([k]) => !secretKeys.has(k)));
     await backend.appDataSave("settings", JSON.stringify(this.data));
-    for (const cb of this.listeners.get(viewId) ?? []) cb(values);
+    const now = await this.get(viewId, defs);
+    for (const cb of this.listeners.get(viewId) ?? []) cb(now);
   }
 
   onChange(viewId: string, cb: (v: SettingValues) => void): () => void {

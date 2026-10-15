@@ -106,6 +106,14 @@ export const backend = {
     call<Omit<SearchStats, "largest" | "newest"> & { largest: RawEntry[]; newest: RawEntry[] }>("search_stats", { folder, depth }),
   systemDrives: () => call<Drive[]>("system_drives"),
   systemInfo: () => call<SystemInfo>("system_info"),
+  /** 本体が MOD の代わりに通信する（ADR 0027）。結果は parseNetFrame で分ける */
+  netFetch: (viewId: string, request: { url: string; method: string; headers: [string, string][]; bodyBase64?: string; secret?: string }) =>
+    call<ArrayBuffer>("net_fetch", { viewId, request }),
+  netUrl: (viewId: string, url: string, secret?: string) => call<string>("net_url", { viewId, url, secret }),
+  /** 秘密の設定を資格情報マネージャーに預ける（null で消す） */
+  secretSet: (viewId: string, key: string, value: string | null) => call<void>("secret_set", { viewId, key, value }),
+  secretStatus: (viewId: string, keys: string[]) => call<boolean[]>("secret_status", { viewId, keys }),
+  secretClear: (viewId: string) => call<void>("secret_clear", { viewId }),
   // ↓ 書き込み（ADR 0025）。上書きはしない
   createEntry: (folder: EntryRef, name: string, kind: "file" | "folder", text?: string, base64?: string) =>
     call<RawEntry>("create_entry", { folder, name, kind, text, base64 }),

@@ -6,6 +6,7 @@ mod create;
 mod fileapi;
 mod props;
 mod scan;
+mod secrets;
 mod sysinfo;
 mod folderdata;
 mod fsops;
@@ -13,6 +14,7 @@ mod geo;
 mod icons;
 mod modinstall;
 mod mods;
+mod netproxy;
 mod shellmenu;
 mod transfer;
 mod watch;
@@ -38,6 +40,7 @@ pub fn run() {
         .manage(watch::FolderWatch::default())
         .manage(modinstall::DevWatch::default())
         .manage(fileapi::FileTokens::default())
+        .manage(netproxy::NetTokens::default())
         .register_asynchronous_uri_scheme_protocol("icon", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             // アイコンの取り出しは COM を使い時間もかかるので、画面のスレッドを止めないよう別のスレッドで行う
@@ -56,6 +59,15 @@ pub fn run() {
                 responder.respond(fileapi::handle(&tokens, &request));
             });
         })
+        // 本体が MOD の代わりに取ってくる URL（net.url。ADR 0027）。インターネットと通信するので、別のスレッドで
+        .register_asynchronous_uri_scheme_protocol("epnet", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                use tauri::Manager;
+                let tokens = app.state::<netproxy::NetTokens>();
+                responder.respond(netproxy::handle(&app, &tokens, &request));
+            });
+        })
         .register_asynchronous_uri_scheme_protocol("mod", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
@@ -70,6 +82,11 @@ pub fn run() {
             fileapi::file_read_text,
             fileapi::file_read_bytes,
             fileapi::file_url,
+            netproxy::net_fetch,
+            netproxy::net_url,
+            secrets::secret_set,
+            secrets::secret_status,
+            secrets::secret_clear,
             props::file_properties,
             scan::search_find,
             scan::search_stats,

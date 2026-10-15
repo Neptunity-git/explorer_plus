@@ -126,6 +126,7 @@ export class ModManager {
         : [
             "このビューが通信する先：",
             ...net.map((o) => `・${o}${inspected.installedVersion && added.includes(o) ? "（新しく増えた）" : ""}`),
+            ...(m.settings ?? []).flatMap((d) => (d.type === "secret" ? [`・「${d.label}」は本体が預かり、${d.send.origin} だけに送ります（ビューからは見えません）`] : [])),
             readsContent
               ? "⚠ このビューはファイルの中身を読め、インターネットにも通信できます。ファイルの中身が外へ送られることがあります。信頼できる作者の MOD だけを入れてください。"
               : readsNames
@@ -170,6 +171,8 @@ export class ModManager {
     if (!(await confirmDialog(message, "外す"))) throw new BackendError({ code: "denied", message: "cancelled" });
     await backend.modRemove(id);
     await grantService.revokeAll(id);
+    // 預けた API キーなども消す（開発中の MOD は、読み込みをやめるだけなので残す）
+    if (info.source === "user") await backend.secretClear(id).catch(() => {});
     await this.host.reloadViews([]);
     changed();
   }

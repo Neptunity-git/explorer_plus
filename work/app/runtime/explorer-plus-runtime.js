@@ -145,6 +145,52 @@
     return ctx;
   });
 
+  // ---- net.fetch（ADR 0027）の引数と結果 ----
+  function netParams(url, opts) {
+    const o = opts || {};
+    let headers = [];
+    if (o.headers instanceof Headers) headers = Array.from(o.headers.entries());
+    else if (Array.isArray(o.headers)) headers = o.headers.map((h) => [String(h[0]), String(h[1])]);
+    else if (o.headers) headers = Object.entries(o.headers).map(([k, v]) => [k, String(v)]);
+    let body = o.body;
+    if (o.json !== undefined) {
+      body = JSON.stringify(o.json);
+      if (!headers.some((h) => h[0].toLowerCase() === "content-type")) headers.push(["Content-Type", "application/json"]);
+    }
+    if (body instanceof ArrayBuffer) body = new Uint8Array(body);
+    else if (ArrayBuffer.isView(body) && !(body instanceof Uint8Array)) body = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+    return Object.assign(
+      { url: String(url), method: o.method ? String(o.method).toUpperCase() : "GET", headers },
+      body !== undefined && body !== null ? { body } : {},
+      o.secret ? { secret: o.secret } : {},
+    );
+  }
+
+  function netResponse(r) {
+    const headers = new Headers(r.headers);
+    const bytes = r.body;
+    const text = () => {
+      const m = /charset=["']?([^;"']+)/i.exec(headers.get("content-type") || "");
+      try {
+        return new TextDecoder(m ? m[1].trim() : "utf-8").decode(bytes);
+      } catch (_) {
+        return new TextDecoder().decode(bytes);
+      }
+    };
+    return Object.freeze({
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      statusText: r.statusText,
+      url: r.url,
+      headers,
+      text: async () => text(),
+      json: async () => JSON.parse(text()),
+      bytes: async () => bytes,
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      blob: async () => new Blob([bytes], { type: headers.get("content-type") || "" }),
+    });
+  }
+
   window.explorerPlus = Object.freeze({
     apiVersion: 1,
     ready: () => ready,
@@ -303,6 +349,13 @@
       confirm: (message, opts) => call("ui.confirm", Object.assign({ message }, opts && opts.okLabel ? { okLabel: opts.okLabel } : {})),
       ask: (opts) => call("ui.ask", opts),
       choose: (items, opts) => call("ui.choose", Object.assign({ items }, opts && opts.title ? { title: opts.title } : {})),
+    }),
+    // ↓ 2026-10-15 に追加（本体が代わりに通信する。ADR 0027）。manifest の network に書いた先だけ
+    net: Object.freeze({
+      /** fetch に似た形。ブラウザの決まり（CORS）を受けず、「explorer_plus の、この MOD から」と名乗って通信する */
+      fetch: (url, opts) => call("net.fetch", netParams(url, opts)).then(netResponse),
+      /** <img>・<audio>・CSS などにそのまま使える URL（本体が代わりに取ってくる） */
+      url: (url, opts) => call("net.url", Object.assign({ url: String(url) }, opts && opts.secret ? { secret: opts.secret } : {})),
     }),
     // uses に "collections"（ADR 0025）：コレクション（仮想ディレクトリ）
     collections: Object.freeze({
