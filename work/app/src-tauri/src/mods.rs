@@ -182,7 +182,20 @@ pub(crate) fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
         // 開発中は、ソースのフォルダを直接見る（保存すればすぐ反映される）
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().map(|p| p.join(name)).unwrap_or_default()
     } else {
-        app.path().resource_dir().unwrap_or_default().join(name)
+        plain_path(app.path().resource_dir().unwrap_or_default()).join(name)
+    }
+}
+
+/// "\\?\C:\..." の形を、ふつうの "C:\..." にする。
+/// Tauri はアプリの置き場所をこの形で返すが、エクスプローラの仕組み（ドラッグ＆ドロップ・コピー）はこの形を受け付けない
+pub(crate) fn plain_path(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{}", rest));
+    }
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => p,
     }
 }
 
@@ -578,6 +591,13 @@ mod tests {
         assert!(!valid_origin("https://a.com:0"));
         assert!(!valid_origin("https://user@a.com"));
         assert_eq!(network_of(r#"{"network":["https://a.com","http://b.com",3,"https://c.org"]}"#), vec!["https://a.com", "https://c.org"]);
+    }
+
+    #[test]
+    fn plain_paths() {
+        assert_eq!(plain_path(PathBuf::from(r"\\?\C:\Users\a\app")), PathBuf::from(r"C:\Users\a\app"));
+        assert_eq!(plain_path(PathBuf::from(r"\\?\UNC\server\share\app")), PathBuf::from(r"\\server\share\app"));
+        assert_eq!(plain_path(PathBuf::from(r"C:\Users\a")), PathBuf::from(r"C:\Users\a"));
     }
 
     #[test]
