@@ -70,15 +70,18 @@
   <a class="sub" href="#s13">PC の情報（system）</a>
   <a class="sub" href="#s14">変化の知らせ（onChanges）</a>
   <a class="sub" href="#s15">フォルダの中に保存（folderData）</a>
-  <a class="sub" href="#s16">メニュー</a>
-  <a class="sub" href="#s17">クリップボード・ドラッグ</a>
-  <a class="sub" href="#s18">タグ・時間割・ほか</a>
-  <a class="sub" href="#s19">データの形</a>
-  <a class="sub" href="#s20">エラー</a>
-  <a href="#s21">見た目（TUI キット）</a>
-  <a href="#s22">安全の決まり</a>
-  <a href="#s23">配る</a>
-  <a href="#s24">ヒント</a>
+  <a class="sub" href="#s16">本体の画面を使う（ui）</a>
+  <a class="sub" href="#s17">設定（settings）</a>
+  <a class="sub" href="#s18">コマンド（commands）</a>
+  <a class="sub" href="#s19">メニュー</a>
+  <a class="sub" href="#s20">クリップボード・ドラッグ</a>
+  <a class="sub" href="#s21">タグ・時間割・ほか</a>
+  <a class="sub" href="#s22">データの形</a>
+  <a class="sub" href="#s23">エラー</a>
+  <a href="#s24">見た目（TUI キット）</a>
+  <a href="#s25">安全の決まり</a>
+  <a href="#s26">配る</a>
+  <a href="#s27">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -163,6 +166,11 @@
 <td><code>location</code></td>
 <td></td>
 <td><code>&quot;folder&quot;</code>（フォルダを見るビュー。省略時）か <code>&quot;none&quot;</code>（フォルダと関係ないビュー。例：タグの一覧）</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td></td>
+<td>設定の項目（30 個まで）。書くと本体が設定の画面を作る（下の「設定」）</td>
 </tr>
 <tr>
 <td><code>description</code></td>
@@ -383,7 +391,43 @@ await ep.folderData.delete(folder);
 <li>書けないフォルダ（<code>C:\</code> の直下など）では、代わりにこのビューの保存場所に置きます（<code>get</code> で同じように読めます）</li>
 <li>別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます</li>
 </ul>
-<h3 id="s16">メニュー</h3>
+<h3 id="s16">本体の画面を使う（ui）</h3>
+<p>宣言は要りません。お知らせ・確かめ・入力・選択は、<strong>表示中のタブのビューだけ</strong>が出せます（裏のタブから急に画面が出ないように）。</p>
+<pre><code class="language-js">await ep.ui.toast(&quot;保存しました&quot;);                       // 画面の下に短く（200 文字まで）
+await ep.ui.status(&quot;3 枚を選択中&quot;);                      // 画面の下の状態の欄（null で消す）
+await ep.ui.tab({ badge: &quot;12&quot; });                         // タブのバッジ（null で消す）。title でタブの名前も変えられる
+const ok = await ep.ui.confirm(&quot;並べ替えを元に戻しますか？&quot;, { okLabel: &quot;戻す&quot; });   // true / false
+const name = await ep.ui.ask({ label: &quot;新しい部屋の名前&quot;, value: &quot;部屋 1&quot; });      // 文字 / やめたら null
+const id = await ep.ui.choose([{ id: &quot;a&quot;, label: &quot;格子に並べる&quot; }, { id: &quot;b&quot;, label: &quot;渦に並べる&quot;, hint: &quot;たくさんのとき&quot; }]);
+</code></pre>
+<p>見た目は本体の確かめの画面と同じで、Esc でやめられます。</p>
+<h3 id="s17">設定（settings）</h3>
+<p>manifest に項目を書くと、本体が設定の画面を作ります（タブの <code>▸</code>・タブの右クリック・コマンドの一覧から開く）。値は本体が覚えます。</p>
+<pre><code class="language-json">&quot;settings&quot;: [
+  { &quot;key&quot;: &quot;spacing&quot;, &quot;label&quot;: &quot;間隔&quot;, &quot;type&quot;: &quot;number&quot;, &quot;default&quot;: 2, &quot;min&quot;: 1, &quot;max&quot;: 10, &quot;step&quot;: 1 },
+  { &quot;key&quot;: &quot;layout&quot;, &quot;label&quot;: &quot;並べ方&quot;, &quot;type&quot;: &quot;choice&quot;, &quot;default&quot;: &quot;grid&quot;,
+    &quot;options&quot;: [{ &quot;value&quot;: &quot;grid&quot;, &quot;label&quot;: &quot;格子&quot; }, { &quot;value&quot;: &quot;spiral&quot;, &quot;label&quot;: &quot;渦&quot; }] },
+  { &quot;key&quot;: &quot;glow&quot;, &quot;label&quot;: &quot;光らせる&quot;, &quot;type&quot;: &quot;boolean&quot;, &quot;default&quot;: true },
+  { &quot;key&quot;: &quot;tint&quot;, &quot;label&quot;: &quot;色&quot;, &quot;type&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#57ab5a&quot; },
+  { &quot;key&quot;: &quot;title&quot;, &quot;label&quot;: &quot;見出し&quot;, &quot;type&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;maxLength&quot;: 40 }
+]
+</code></pre>
+<pre><code class="language-js">let s = await ep.settings.get();          // { spacing: 2, layout: &quot;grid&quot;, glow: true, tint: &quot;#57ab5a&quot;, title: &quot;&quot; }
+ep.onSettings((next) =&gt; { s = next; redraw(); });
+</code></pre>
+<p>種類は <code>boolean</code>・<code>number</code>（<code>min</code>・<code>max</code>・<code>step</code>）・<code>text</code>（<code>maxLength</code>）・<code>choice</code>（<code>options</code>）・<code>color</code>（<code>#rrggbb</code>）。
+覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。</p>
+<h3 id="s18">コマンド（commands）</h3>
+<p>コマンドの一覧（<strong>Ctrl+Shift+P</strong>、またはタブの右クリック）に、このビューのコマンドを出せます。表示中のタブのビューのものが並びます。</p>
+<pre><code class="language-js">await ep.commands.set([
+  { id: &quot;shuffle&quot;, label: &quot;並べ直す&quot; },
+  { id: &quot;export&quot;, label: &quot;画像として保存&quot;, hint: &quot;PNG&quot; },
+]);
+ep.onCommand((id) =&gt; {
+  if (id === &quot;shuffle&quot;) shuffle();
+});
+</code></pre>
+<h3 id="s19">メニュー</h3>
 <pre><code class="language-js">el.oncontextmenu = async (e) =&gt; {
   e.preventDefault();
   const { chosen } = await ep.showMenu({
@@ -395,7 +439,7 @@ await ep.folderData.delete(folder);
 };
 </code></pre>
 <p><code>items</code> を空にして <code>extra</code> だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。</p>
-<h3 id="s17">クリップボード・ドラッグ</h3>
+<h3 id="s20">クリップボード・ドラッグ</h3>
 <pre><code class="language-js">await ep.clipboard.copy([entry]);   // Windows のエクスプローラと同じ形式。エクスプローラにも貼り付けられる
 await ep.clipboard.cut([entry]);
 const { count } = await ep.clipboard.paste();   // 開いているフォルダへ
@@ -408,7 +452,7 @@ el.onpointermove = (e) =&gt; {
 ep.onDragTargets(() =&gt; ep.drag.targets(folderTargets()));   // ドラッグ中にこのタブへ切り替わったとき
 // folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）
 </code></pre>
-<h3 id="s18">タグ・時間割・ほか</h3>
+<h3 id="s21">タグ・時間割・ほか</h3>
 <pre><code class="language-js">// uses: [&quot;tags&quot;]
 const tags = await ep.tags.list();                    // [{ id, name, color: &quot;#rrggbb&quot; }]
 const tag = await ep.tags.create(&quot;提出物&quot;, &quot;#e5484d&quot;);
@@ -428,7 +472,7 @@ const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();
 </code></pre>
 <p>すべての関数と型は、ひな形に入っている <code>explorer-plus.d.ts</code> にあります。迷ったらそちらが正しいです。</p>
-<h3 id="s19">データの形</h3>
+<h3 id="s22">データの形</h3>
 <pre><code class="language-ts">type Entry = {
   id: string;          // ファイルID。名前変更・移動で変わらない（ID の無いドライブでは &quot;&quot;）
   name: string;        // &quot;report.docx&quot;
@@ -446,7 +490,7 @@ const recent = await ep.recent.list();
 type EntryRef = { id: string; path: string };   // 保存しておくときは、この2つだけ覚える
 </code></pre>
 <p><code>entries</code> の並びは、フォルダが先、次にファイル。それぞれ名前の自然な順（<code>file2</code> が <code>file10</code> より前）です。</p>
-<h3 id="s20">エラー</h3>
+<h3 id="s23">エラー</h3>
 <p>失敗した Promise は <code>Error</code> になり、<code>code</code> に次のどれかが入ります。</p>
 <table>
 <thead>
@@ -490,7 +534,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
   if (err.code !== &quot;denied&quot;) showMessage(`ごみ箱へ送れませんでした：${err.message}`);
 }
 </code></pre>
-<h2 id="s21">見た目（TUI キット）</h2>
+<h2 id="s24">見た目（TUI キット）</h2>
 <p>標準のビューと同じ見た目の部品を使えます（使わなくてもかまいません）。明るい・暗い画面にも自動で合います。</p>
 <pre><code class="language-js">// CSS：色の変数（--tui-fg・--tui-dim・--tui-line・--tui-accent・--tui-warn・--tui-bg）と部品のクラス
 document.head.append(Object.assign(document.createElement(&quot;link&quot;), { rel: &quot;stylesheet&quot;, href: &quot;/__runtime/tui.css&quot; }));
@@ -505,7 +549,7 @@ import { ask, pick, pickColor, confirm, button, PALETTE } from &quot;/__runtime/
 const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; });          // やめたら null
 </code></pre>
 <p>操作は<strong>マウス（左右のクリック）が主、キーボードは補助</strong>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
-<h2 id="s22">安全の決まり</h2>
+<h2 id="s25">安全の決まり</h2>
 <ul>
 <li><strong>通信できるのは自分の MOD のフォルダだけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。インターネット上のライブラリ・フォント・画像は読めません。使うものは MOD のフォルダに入れてください（ライブラリは1つのファイルにまとめると楽です）</li>
 <li>画像は、自分のフォルダ・アイコンと縮小画像の URL・<code>data:</code>・<code>blob:</code> が使えます。WebAssembly と Web Worker（<code>blob:</code>）も使えます</li>
@@ -515,7 +559,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ul>
 <blockquote class="warn"><p><strong>入れる人は、あなたの MOD を信頼して入れます。</strong> <code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</p>
 </blockquote>
-<h2 id="s23">配る</h2>
+<h2 id="s26">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -523,7 +567,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s24">ヒント</h2>
+<h2 id="s27">ヒント</h2>
 <ul>
 <li><strong>開発者ツール</strong>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールに出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
 <li><strong>大きなフォルダ</strong>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>

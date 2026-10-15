@@ -35,6 +35,20 @@ declare global {
       thumbnailUrl?: string;
     }
 
+    /** manifest の settings の1項目（ADR 0024） */
+    type SettingDef =
+      | { key: string; label: string; type: "boolean"; default: boolean }
+      | { key: string; label: string; type: "number"; default: number; min?: number; max?: number; step?: number }
+      | { key: string; label: string; type: "text"; default: string; maxLength?: number }
+      | { key: string; label: string; type: "choice"; default: string; options: { value: string; label: string }[] }
+      | { key: string; label: string; type: "color"; default: string };
+    type SettingValues = Record<string, boolean | number | string>;
+    /** 選択肢・コマンド */
+    interface ChoiceItem {
+      id: string;
+      label: string;
+      hint?: string;
+    }
     /** files.readText の結果（ADR 0023） */
     interface TextRead {
       text: string;
@@ -278,6 +292,24 @@ declare global {
       };
       /** 開いているフォルダの直下で起きた変化（少しまとめて届く。フォルダの中身の onFolder の後）。uses に "entries" が要る */
       onChanges(cb: (changes: FileChange[]) => void): () => void;
+      /**
+       * 本体の画面を使う（ADR 0024。uses は要らない）。お知らせ・確かめ・入力・選択は、表示中のタブのビューだけが出せる（ほかは "denied"）。
+       * confirm はやめたら false、ask・choose はやめたら null
+       */
+      readonly ui: {
+        toast(text: string): Promise<void>;
+        status(text: string | null): Promise<void>;
+        tab(opts: { title?: string | null; badge?: string | null }): Promise<void>;
+        confirm(message: string, opts?: { okLabel?: string }): Promise<boolean>;
+        ask(opts: { label: string; value?: string; placeholder?: string; okLabel?: string }): Promise<string | null>;
+        choose(items: ChoiceItem[], opts?: { title?: string }): Promise<string | null>;
+      };
+      /** manifest の settings の値（ADR 0024）。設定の画面は本体が作る（タブの ▸・タブの右クリック・コマンドの一覧から開く） */
+      readonly settings: { get(): Promise<SettingValues> };
+      onSettings(cb: (values: SettingValues) => void): () => void;
+      /** コマンドの一覧（Ctrl+Shift+P）に出すコマンド（50 個まで。呼ぶたびに置き換える） */
+      readonly commands: { set(list: ChoiceItem[]): Promise<void> };
+      onCommand(cb: (id: string) => void): () => void;
       /** uses に "tree" が要る */
       getTree(opts?: { depth?: number }): Promise<TreeNode>;
       /** uses に "links" が要る。見つからなければ null */

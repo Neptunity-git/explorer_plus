@@ -14,6 +14,8 @@
   const recentListeners = new Set();
   const modsListeners = new Set();
   const changesListeners = new Set();
+  const settingsListeners = new Set();
+  const commandListeners = new Set();
   const dragTargetListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
@@ -93,6 +95,10 @@
         for (const cb of recentListeners) safely(cb);
       } else if (m.event === "dragTargets") {
         for (const cb of dragTargetListeners) safely(cb);
+      } else if (m.event === "settings") {
+        for (const cb of settingsListeners) safely(cb, m.data);
+      } else if (m.event === "command") {
+        for (const cb of commandListeners) safely(cb, m.data.id);
       } else if (m.event === "changes") {
         for (const cb of changesListeners) safely(cb, m.data);
       } else if (m.event === "mods") {
@@ -100,6 +106,10 @@
       }
     }
   });
+
+  /** WebView2 が自分で処理してしまうキー：Ctrl+P・Ctrl+Shift+P（印刷）、Ctrl+F・F3・Ctrl+G（ページ内検索）、Ctrl+S（保存）、Ctrl+U・Ctrl+J・Ctrl+H */
+  const BROWSER_KEY = (e) =>
+    e.key === "F3" || (e.ctrlKey && !e.altKey && ["p", "f", "g", "s", "u", "j", "h"].includes(e.key.length === 1 ? e.key.toLowerCase() : ""));
 
   // ブラウザ本来の右クリックのメニュー（戻る・印刷・開発者ツールなど）は出さない。文字の入力欄だけは、コピー・貼り付けのために残す。
   // MOD が自分の右クリックの動きを付けたいときは、ep.showMenu を使う（ADR 0009 判断2）
@@ -114,6 +124,8 @@
     (e) => {
       const reload = e.key === "F5" || (e.ctrlKey && (e.key === "r" || e.key === "R"));
       if (reload) e.preventDefault();
+      // WebView2 自身のショートカット（印刷・ページ内検索・ページの保存など）は止める。MOD 自身のキーの処理はそのまま動く
+      if (BROWSER_KEY(e)) e.preventDefault();
       if (!e.ctrlKey && !e.altKey && e.key !== "F5") return;
       parent.postMessage({ ep: 1, kind: "key", key: reload ? "F5" : e.key, ctrl: reload ? false : e.ctrlKey, shift: e.shiftKey, alt: e.altKey }, "*");
     },
@@ -264,6 +276,35 @@
     onChanges(cb) {
       changesListeners.add(cb);
       return () => changesListeners.delete(cb);
+    },
+    // ↓ 2026-10-15 に追加（本体の画面を使う。ADR 0024）。uses の宣言は要らない
+    ui: Object.freeze({
+      /** 画面の下に短いお知らせ（表示中のタブのビューだけ） */
+      toast: (text) => call("ui.toast", { text: String(text) }).then(() => undefined),
+      /** 画面の下の状態の欄（null で消す） */
+      status: (text) => call("ui.status", { text: text === null || text === undefined ? null : String(text) }).then(() => undefined),
+      /** タブの名前・バッジ（null で元に戻す・消す） */
+      tab: (opts) => call("ui.tab", opts || {}).then(() => undefined),
+      /** 本体の確かめ・入力・選択の画面（表示中のタブのビューだけ。同時に1つ） */
+      confirm: (message, opts) => call("ui.confirm", Object.assign({ message }, opts && opts.okLabel ? { okLabel: opts.okLabel } : {})),
+      ask: (opts) => call("ui.ask", opts),
+      choose: (items, opts) => call("ui.choose", Object.assign({ items }, opts && opts.title ? { title: opts.title } : {})),
+    }),
+    /** manifest の settings の値。設定の画面で変わると onSettings が呼ばれる */
+    settings: Object.freeze({
+      get: () => call("settings.get"),
+    }),
+    onSettings(cb) {
+      settingsListeners.add(cb);
+      return () => settingsListeners.delete(cb);
+    },
+    /** コマンドの一覧（Ctrl+Shift+P）に出すコマンド。選ばれると onCommand に id が届く */
+    commands: Object.freeze({
+      set: (list) => call("commands.set", { commands: list }).then(() => undefined),
+    }),
+    onCommand(cb) {
+      commandListeners.add(cb);
+      return () => commandListeners.delete(cb);
     },
     // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（ホーム）だけが使える。ほかの MOD が呼ぶと code "denied" で失敗する
     mods: Object.freeze({

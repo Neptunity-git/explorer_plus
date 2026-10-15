@@ -18,7 +18,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 }
 
 /** 画面の中央に出す小さな画面の枠。close() で閉じる。Esc・外側のクリックでも閉じる */
-function panel(title: string): { body: HTMLElement; footer: HTMLElement; close: () => void; done: Promise<void> } {
+export function panel(title: string): { body: HTMLElement; footer: HTMLElement; close: () => void; done: Promise<void> } {
   const backdrop = el("div", "dialog-backdrop");
   const box = el("div", "dialog picker");
   box.setAttribute("role", "dialog");

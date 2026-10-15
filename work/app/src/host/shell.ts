@@ -14,6 +14,7 @@ import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
 import { slotPicker, tagPicker } from "./pickers";
 import { ModManager } from "./mod-manager";
+import { chooseDialog, settingsDialog, settingsService } from "./mod-ui";
 import { loadViews } from "./mods";
 import { quickAccess, recentItems } from "./ref-list-service";
 import { timetableService } from "./timetable-service";
@@ -48,6 +49,12 @@ class Tab implements TabActions {
   readonly button = el("div", "tab");
   private readonly label = el("span", "tab-label", "…");
   private readonly badge = el("span", "tab-view");
+  /** MOD が付けるバッジ（ADR 0024） */
+  private readonly modBadge = el("span", "tab-badge");
+  /** MOD が決めたタブの名前（null なら、フォルダの名前・ビューの名前） */
+  private titleOverride: string | null = null;
+  /** MOD が出す、画面の下の状態の欄の文字 */
+  statusText: string | null = null;
   folder: RawFolder | null = null;
   back: string[] = [];
   forward: string[] = [];
@@ -79,7 +86,13 @@ class Tab implements TabActions {
       this.button.title = view.manifest.name;
     }
     // ホーム・タグなど、場所と関係ないビューのタブには ▸ を出さない（切り替える先が無いため）
-    this.button.append(...(isFolderView(view) ? [views] : []), this.label, this.badge, close);
+    this.button.append(...(isFolderView(view) ? [views] : []), this.label, this.modBadge, this.badge, close);
+    this.modBadge.hidden = true;
+    // タブを右クリック：このビューの設定・タブを閉じる（ADR 0024）
+    this.button.oncontextmenu = (e) => {
+      e.preventDefault();
+      void app.tabMenu(this, e.clientX, e.clientY);
+    };
     this.button.onclick = () => app.activate(this);
     this.button.onauxclick = (e) => e.button === 1 && app.closeTab(this);
     this.host = new ViewHost(this.pane, view, this);
@@ -91,7 +104,7 @@ class Tab implements TabActions {
 
   setFolder(folder: RawFolder) {
     this.folder = folder;
-    this.label.textContent = folder.name;
+    this.label.textContent = this.titleOverride ?? folder.name;
     this.button.title = `${folder.path}\n${this.view.manifest.name}`;
     this.host.setFolder(folder);
   }
@@ -125,6 +138,23 @@ class Tab implements TabActions {
       throw e;
     });
   clipboardPaste = () => this.app.paste(this);
+  // ↓ 本体の画面を使う（ADR 0024）
+  isActive = () => this.app.isActive(this);
+  toast = (text: string) => this.app.notify(text);
+  setStatus = (text: string | null) => {
+    this.statusText = text;
+    this.app.statusChanged(this);
+  };
+  setTabLabel = (p: { title?: string | null; badge?: string | null }) => {
+    if (p.title !== undefined) {
+      this.titleOverride = p.title;
+      this.label.textContent = p.title ?? this.folder?.name ?? (this.folderView ? "…" : this.view.manifest.name);
+    }
+    if (p.badge !== undefined) {
+      this.modBadge.textContent = p.badge ?? "";
+      this.modBadge.hidden = !p.badge;
+    }
+  };
   dragStart = (items: EntryRef[], x: number, y: number, targets: WindowTarget[]) => this.app.drag.start(this.tabId, items, x, y, targets);
   dragTargets = (targets: WindowTarget[]) => this.app.drag.setTargets(this.tabId, targets);
   dragMove = (x: number, y: number, ctrl: boolean, shift: boolean) => this.app.drag.move(x, y, ctrl, shift);
@@ -370,6 +400,15 @@ export class App {
     document.addEventListener("keydown", (e) => this.drag.active && e.key === "Escape" && void this.drag.end(0, 0, false, false, true));
 
     document.addEventListener("keydown", (e) => {
+      // WebView2 自身のショートカット（Ctrl+P・Ctrl+Shift+P の印刷、Ctrl+F のページ内検索、Ctrl+S の保存など）は止める
+      if (e.key === "F3" || (e.ctrlKey && !e.altKey && ["p", "f", "g", "s", "u", "j", "h"].includes(e.key.length === 1 ? e.key.toLowerCase() : ""))) {
+        if (!(e.target instanceof Element && e.target.closest("input, textarea"))) e.preventDefault();
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
+          e.preventDefault();
+          void this.commandPalette();
+          return;
+        }
+      }
       // F5・Ctrl+R はブラウザの再読み込みを止めて、フォルダの読み直しにする
       if (e.key === "F5" || (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "r")) {
         e.preventDefault();
@@ -597,15 +636,59 @@ export class App {
   /** タブの ▸ から、そのタブのビューを選び直す（ADR 0017）。新しいタブは開かず、今のタブのまま見せ方を変える */
   async chooseView(tab: Tab, anchor: HTMLElement) {
     const r = anchor.getBoundingClientRect();
-    await showMenu(
-      r.left,
-      r.bottom + 2,
+    await showMenu(r.left, r.bottom + 2, [
       // 選べるのは、フォルダを見るビューだけ（ホーム・タグは場所と関係ないので、ここでは選ばない）
-      this.views.filter(isFolderView).map((v) => ({
-        label: `${v === tab.view ? "● " : "　 "}${v.manifest.name}`,
+      ...this.views.filter(isFolderView).map((v) => ({
+        label: `${v.manifest.id === tab.view.manifest.id ? "● " : "　 "}${v.manifest.name}`,
         run: () => void this.changeView(tab, v),
       })),
-    );
+      ...(tab.view.manifest.settings ? (["separator", { label: "このビューの設定…", run: () => void this.openSettings(tab) }] as MenuLine[]) : []),
+    ]);
+  }
+
+  // ---- MOD が本体の画面を使う（ADR 0024） ----
+
+  isActive(tab: Tab): boolean {
+    return this.active === tab;
+  }
+
+  statusChanged(tab: Tab) {
+    if (tab === this.active) this.updateChrome();
+  }
+
+  /** タブを右クリックしたときのメニュー */
+  async tabMenu(tab: Tab, x: number, y: number) {
+    await showMenu(x, y, [
+      ...(tab.view.manifest.settings ? [{ label: "このビューの設定…", run: () => void this.openSettings(tab) }] : []),
+      { label: "コマンドの一覧…", shortcut: "Ctrl+Shift+P", run: () => void (this.activate(tab), this.commandPalette()) },
+      "separator",
+      { label: "タブを閉じる", shortcut: "Ctrl+W", run: () => this.closeTab(tab) },
+    ]);
+  }
+
+  /** MOD の設定の画面（manifest の settings から作る） */
+  async openSettings(tab: Tab) {
+    const defs = tab.view.manifest.settings;
+    if (!defs) return;
+    const next = await settingsDialog(`${tab.view.manifest.name} の設定`, defs, await settingsService.get(tab.view.manifest.id, defs));
+    if (next) await settingsService.set(tab.view.manifest.id, next);
+  }
+
+  /** コマンドの一覧（Ctrl+Shift+P）：表示中のビューのコマンドと、本体のコマンド */
+  async commandPalette() {
+    const t = this.active;
+    const own: { id: string; label: string; hint?: string; run: () => void }[] = [
+      { id: "@newtab", label: "新しいタブ", hint: "Ctrl+T", run: () => void this.openHome() },
+      ...(t?.view.manifest.settings ? [{ id: "@settings", label: "このビューの設定…", hint: t.view.manifest.name, run: () => void this.openSettings(t) }] : []),
+      ...(t?.folderView
+        ? this.views.filter((v) => isFolderView(v) && v.manifest.id !== t.view.manifest.id).map((v) => ({ id: `@view:${v.manifest.id}`, label: `ビューを「${v.manifest.name}」に変える`, run: () => void this.changeView(t, v) }))
+        : []),
+    ];
+    const mod = (t?.host.commands ?? []).map((c) => ({ ...c, id: `mod:${c.id}`, hint: c.hint ?? t!.view.manifest.name }));
+    const chosen = await chooseDialog("コマンド", [...mod, ...own]);
+    if (!chosen) return;
+    if (chosen.startsWith("mod:")) t?.host.runCommand(chosen.slice(4));
+    else own.find((o) => o.id === chosen)?.run();
   }
 
   /** タブのビューを変える。フォルダと履歴（戻る・進む）はそのまま引き継ぐ */
@@ -721,7 +804,8 @@ export class App {
     this.backBtn.disabled = !t || t.back.length === 0;
     this.forwardBtn.disabled = !t || t.forward.length === 0;
     this.upBtn.disabled = !t?.folder?.parentPath;
-    this.status.textContent = t?.folderView && t.folder ? `${t.folder.entries.length} 個の項目` : "";
+    const count = t?.folderView && t.folder ? `${t.folder.entries.length} 個の項目` : "";
+    this.status.textContent = [count, t?.statusText ?? ""].filter(Boolean).join("　｜　");
     document.title = t?.folder ? `${t.folder.name} - explorer_plus` : t ? `${t.view.manifest.name} - explorer_plus` : "explorer_plus";
   }
 
@@ -939,6 +1023,11 @@ export class App {
     const key = k.key.length === 1 ? k.key.toLowerCase() : k.key;
     if (key === "F5") {
       this.refresh();
+      return true;
+    }
+    // コマンドの一覧（ADR 0024）
+    if (k.ctrl && k.shift && !k.alt && key === "p") {
+      void this.commandPalette();
       return true;
     }
     if (k.ctrl && k.shift && !k.alt && key === "n") {

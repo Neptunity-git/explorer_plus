@@ -169,3 +169,13 @@ body.dragging, body.dragging * { cursor: default !important; }
 .view-pane.active { z-index: 1; }
 .tab { transition: transform 150ms ease; }
 .tab.tab-dragging { transition: none; z-index: 2; position: relative; box-shadow: var(--shadow); }
+/* MOD が本体の画面を使う（ADR 0024） */
+.tab-badge { font-size: 11px; padding: 0 6px; border-radius: 8px; background: var(--accent); color: #fff; white-space: nowrap; }
+:root[data-theme="dark"] .tab-badge { color: #000; }
+.picker-grow { flex: 1; }
+.picker-hint { color: var(--muted); font-size: 12px; }
+.settings-form { display: flex; flex-direction: column; gap: 8px; }
+.settings-row { display: flex; align-items: center; gap: 12px; }
+.settings-label { flex: 1; }
+.settings-row .picker-input { margin-top: 0; width: 180px; }
+

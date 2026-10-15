@@ -50,7 +50,23 @@ export type Manifest = {
   description?: string;
   /** フォルダと関係するか（ADR 0014 判断1）。省略は "folder"。"none" のタブではアドレスバーを隠す */
   location?: "folder" | "none";
+  /** 設定の項目（ADR 0024）。書くと、本体が「このビューの設定」の画面を作る。30 個まで */
+  settings?: SettingDef[];
 };
+
+// ---- MOD の設定（ADR 0024） ----
+
+type SettingBase = { key: string; label: string };
+export type SettingDef =
+  | (SettingBase & { type: "boolean"; default: boolean })
+  | (SettingBase & { type: "number"; default: number; min?: number; max?: number; step?: number })
+  | (SettingBase & { type: "text"; default: string; maxLength?: number })
+  | (SettingBase & { type: "choice"; default: string; options: { value: string; label: string }[] })
+  | (SettingBase & { type: "color"; default: string });
+export type SettingValues = Record<string, boolean | number | string>;
+
+/** ui.choose の選択肢・commands.set のコマンド */
+export type ChoiceItem = { id: string; label: string; hint?: string };
 
 // ---- データ ----
 
@@ -350,6 +366,15 @@ export type CallMethod =
   | "search.stats"
   | "system.drives"
   | "system.info"
+  // ↓ 2026-10-15 に追加（本体の画面を使う API。ADR 0024）。uses の宣言は要らない
+  | "ui.toast"
+  | "ui.status"
+  | "ui.tab"
+  | "ui.confirm"
+  | "ui.ask"
+  | "ui.choose"
+  | "settings.get"
+  | "commands.set"
   | "mods.list"
   | "mods.install"
   | "mods.remove"
@@ -429,6 +454,19 @@ export type CallParams = {
   "search.stats": { folder: EntryRef; depth?: number };
   "system.drives": Record<string, never>;
   "system.info": Record<string, never>;
+  /** 画面の下に短く出す（200 文字まで）。表示中のタブのビューだけ */
+  "ui.toast": { text: string };
+  /** 画面の下の状態の欄に出す（120 文字まで。null で消す） */
+  "ui.status": { text: string | null };
+  /** タブの名前（40 文字まで）とバッジ（8 文字まで）。null で元に戻す・消す。省略は変えない */
+  "ui.tab": { title?: string | null; badge?: string | null };
+  /** 本体の確かめの画面。表示中のタブのビューだけ（ほかは "denied"） */
+  "ui.confirm": { message: string; okLabel?: string };
+  "ui.ask": { label: string; value?: string; placeholder?: string; okLabel?: string };
+  "ui.choose": { title?: string; items: ChoiceItem[] };
+  "settings.get": Record<string, never>;
+  /** コマンドの一覧（Ctrl+Shift+P）に出す、このビューのコマンド（50 個まで）。選ばれると "command" が届く */
+  "commands.set": { commands: ChoiceItem[] };
   "mods.list": Record<string, never>;
   /** 本体が zip を選ぶ画面と、確かめの画面を出す */
   "mods.install": Record<string, never>;
@@ -492,6 +530,14 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "search.stats": "search",
   "system.drives": "system",
   "system.info": "system",
+  "ui.toast": null,
+  "ui.status": null,
+  "ui.tab": null,
+  "ui.confirm": null,
+  "ui.ask": null,
+  "ui.choose": null,
+  "settings.get": null,
+  "commands.set": null,
   "mods.list": null,
   "mods.install": null,
   "mods.remove": null,
@@ -532,7 +578,11 @@ export type EventMessage =
   // 入っている MOD が変わった（入れた・外した・開発中の MOD を保存した）。標準のビューだけに届く（ADR 0020）
   | { ep: 1; kind: "event"; event: "mods"; data: null }
   // 開いているフォルダの直下で起きた変化（1件ずつ。少しまとめて届く）。uses に entries があるビューだけに届く（ADR 0023）
-  | { ep: 1; kind: "event"; event: "changes"; data: FileChange[] };
+  | { ep: 1; kind: "event"; event: "changes"; data: FileChange[] }
+  // 設定の画面で値が変わった（ADR 0024）
+  | { ep: 1; kind: "event"; event: "settings"; data: SettingValues }
+  // コマンドの一覧でこのビューのコマンドが選ばれた
+  | { ep: 1; kind: "event"; event: "command"; data: { id: string } };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 

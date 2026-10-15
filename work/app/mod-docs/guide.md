@@ -58,6 +58,7 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `entry` | ○ | 入口の `.js` への相対パス。区切りは `/`（例 `index.js`・`dist/main.js`） |
 | `uses` | ○ | 使う情報の名前の配列（空でもよい）。下の表 |
 | `location` | | `"folder"`（フォルダを見るビュー。省略時）か `"none"`（フォルダと関係ないビュー。例：タグの一覧） |
+| `settings` | | 設定の項目（30 個まで）。書くと本体が設定の画面を作る（下の「設定」） |
 | `description` | | 200文字まで。入れるときの確かめの画面に出る |
 
 ### 使う情報（uses）
@@ -230,6 +231,58 @@ await ep.folderData.delete(folder);
 - 引数の `folder` は、`onFolder` で届いたフォルダ（`{ id, path }` があればよい）。フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入ります
 - 書けないフォルダ（`C:\` の直下など）では、代わりにこのビューの保存場所に置きます（`get` で同じように読めます）
 - 別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます
+
+### 本体の画面を使う（ui）
+
+宣言は要りません。お知らせ・確かめ・入力・選択は、**表示中のタブのビューだけ**が出せます（裏のタブから急に画面が出ないように）。
+
+```js
+await ep.ui.toast("保存しました");                       // 画面の下に短く（200 文字まで）
+await ep.ui.status("3 枚を選択中");                      // 画面の下の状態の欄（null で消す）
+await ep.ui.tab({ badge: "12" });                         // タブのバッジ（null で消す）。title でタブの名前も変えられる
+const ok = await ep.ui.confirm("並べ替えを元に戻しますか？", { okLabel: "戻す" });   // true / false
+const name = await ep.ui.ask({ label: "新しい部屋の名前", value: "部屋 1" });      // 文字 / やめたら null
+const id = await ep.ui.choose([{ id: "a", label: "格子に並べる" }, { id: "b", label: "渦に並べる", hint: "たくさんのとき" }]);
+```
+
+見た目は本体の確かめの画面と同じで、Esc でやめられます。
+
+### 設定（settings）
+
+manifest に項目を書くと、本体が設定の画面を作ります（タブの `▸`・タブの右クリック・コマンドの一覧から開く）。値は本体が覚えます。
+
+```json
+"settings": [
+  { "key": "spacing", "label": "間隔", "type": "number", "default": 2, "min": 1, "max": 10, "step": 1 },
+  { "key": "layout", "label": "並べ方", "type": "choice", "default": "grid",
+    "options": [{ "value": "grid", "label": "格子" }, { "value": "spiral", "label": "渦" }] },
+  { "key": "glow", "label": "光らせる", "type": "boolean", "default": true },
+  { "key": "tint", "label": "色", "type": "color", "default": "#57ab5a" },
+  { "key": "title", "label": "見出し", "type": "text", "default": "", "maxLength": 40 }
+]
+```
+
+```js
+let s = await ep.settings.get();          // { spacing: 2, layout: "grid", glow: true, tint: "#57ab5a", title: "" }
+ep.onSettings((next) => { s = next; redraw(); });
+```
+
+種類は `boolean`・`number`（`min`・`max`・`step`）・`text`（`maxLength`）・`choice`（`options`）・`color`（`#rrggbb`）。
+覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。
+
+### コマンド（commands）
+
+コマンドの一覧（**Ctrl+Shift+P**、またはタブの右クリック）に、このビューのコマンドを出せます。表示中のタブのビューのものが並びます。
+
+```js
+await ep.commands.set([
+  { id: "shuffle", label: "並べ直す" },
+  { id: "export", label: "画像として保存", hint: "PNG" },
+]);
+ep.onCommand((id) => {
+  if (id === "shuffle") shuffle();
+});
+```
 
 ### メニュー
 

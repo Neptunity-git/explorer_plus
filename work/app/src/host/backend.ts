@@ -17,7 +17,7 @@ export type Place = { kind: string; name: string; path: string };
 export type ModSource = { source: "builtin" | "user" | "dev"; dir: string; manifestText: string | null; error: string | null };
 export type Location = { latitude: number; longitude: number; accuracy: number };
 /** アプリ全体のデータの名前（Rust の mods.rs の APP_DATA_NAMES と同じ） */
-export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent";
+export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent" | "settings";
 
 export class BackendError extends Error {
   constructor(readonly apiError: ApiError) {

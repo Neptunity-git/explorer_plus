@@ -364,6 +364,66 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     case "system.info":
       return { ok: true, params: {} };
 
+    // ↓ 本体の画面を使う API（ADR 0024）
+    case "ui.toast": {
+      const { text } = params;
+      if (!isNonEmptyString(text) || text.length > 200) return { ok: false };
+      return { ok: true, params: { text } };
+    }
+
+    case "ui.status": {
+      const { text } = params;
+      if (text !== null && !(isString(text) && text.length <= 120)) return { ok: false };
+      return { ok: true, params: { text } };
+    }
+
+    case "ui.tab": {
+      const out: Record<string, unknown> = {};
+      for (const [k, max] of [["title", 40], ["badge", 8]] as const) {
+        const v = params[k];
+        if (v === undefined) continue;
+        if (v !== null && !(isNonEmptyString(v) && v.length <= max)) return { ok: false };
+        out[k] = v;
+      }
+      return { ok: true, params: out };
+    }
+
+    case "ui.confirm": {
+      const { message, okLabel } = params;
+      if (!isNonEmptyString(message) || message.length > 500) return { ok: false };
+      if (okLabel !== undefined && !(isNonEmptyString(okLabel) && okLabel.length <= 20)) return { ok: false };
+      return { ok: true, params: { message, ...(okLabel !== undefined ? { okLabel } : {}) } };
+    }
+
+    case "ui.ask": {
+      const { label, value, placeholder, okLabel } = params;
+      if (!isNonEmptyString(label) || label.length > 60) return { ok: false };
+      if (value !== undefined && !(isString(value) && value.length <= 500)) return { ok: false };
+      if (placeholder !== undefined && !(isString(placeholder) && placeholder.length <= 100)) return { ok: false };
+      if (okLabel !== undefined && !(isNonEmptyString(okLabel) && okLabel.length <= 20)) return { ok: false };
+      return { ok: true, params: { label, ...(value !== undefined ? { value } : {}), ...(placeholder !== undefined ? { placeholder } : {}), ...(okLabel !== undefined ? { okLabel } : {}) } };
+    }
+
+    case "ui.choose":
+    case "commands.set": {
+      const list = method === "ui.choose" ? params.items : params.commands;
+      const max = method === "ui.choose" ? 200 : 50;
+      if (!Array.isArray(list) || list.length > max || (method === "ui.choose" && list.length === 0)) return { ok: false };
+      const items: { id: string; label: string; hint?: string }[] = [];
+      for (const it of list) {
+        if (!isPlainObject(it) || !isNonEmptyString(it.id) || it.id.length > 64 || !isNonEmptyString(it.label) || it.label.length > 60) return { ok: false };
+        if (it.hint !== undefined && !(isString(it.hint) && it.hint.length <= 60)) return { ok: false };
+        items.push({ id: it.id, label: it.label, ...(it.hint !== undefined ? { hint: it.hint as string } : {}) });
+      }
+      if (method === "commands.set") return { ok: true, params: { commands: items } };
+      const { title } = params;
+      if (title !== undefined && !(isString(title) && title.length <= 60)) return { ok: false };
+      return { ok: true, params: { items, ...(title !== undefined ? { title } : {}) } };
+    }
+
+    case "settings.get":
+      return { ok: true, params: {} };
+
     case "mods.list":
     case "mods.install":
     case "mods.addDev":

@@ -326,3 +326,25 @@ id が `builtin.` で始まる標準のビュー（ホーム）だけが使え�
 - 知らせ `changes`（data は `FileChange[]`）：開いているフォルダの直下の変化。uses に `entries` のあるビューだけ。`folder` の知らせの後に届く
 - たどるときは、リンクの先へ入らず、`.explorer_plus` と隠し＋システムの項目を数えない。上限（30 万項目・20 秒）で `truncated`
 
+## 2026-10-15（4回目）の追加：本体の画面を使う API（ADR 0024）
+
+uses の宣言は要らない。
+
+| メソッド | 引数 | 返り値・決まり |
+|---|---|---|
+| `ui.toast` | `{ text }`（200 文字まで） | 表示中のタブのビューだけ。0.3 秒に1回まで（ほかは黙って捨てる） |
+| `ui.status` | `{ text \| null }`（120 文字まで） | 画面の下の状態の欄（「n 個の項目」の横）。タブごとに覚える |
+| `ui.tab` | `{ title?: 文字 \| null（40 文字まで）, badge?: 文字 \| null（8 文字まで） }` | null で元に戻す・消す。省略は変えない |
+| `ui.confirm` | `{ message（500 文字まで）, okLabel? }` | true / false |
+| `ui.ask` | `{ label, value?, placeholder?, okLabel? }` | 文字 / null |
+| `ui.choose` | `{ title?, items: [{ id, label, hint? }]（200 個まで） }` | 選んだ id / null |
+| `settings.get` | なし | manifest の settings の値（覚えている値を今の項目に合わせたもの） |
+| `commands.set` | `{ commands: [{ id, label, hint? }]（50 個まで） }` | コマンドの一覧（Ctrl+Shift+P）に出す |
+
+- confirm・ask・choose は表示中のタブのビューだけ、同時に1つまで（ほかは `denied`）
+- 知らせ `settings`（data は値）：設定の画面で保存した。知らせ `command`（data は `{ id }`）：コマンドの一覧で選ばれた
+- manifest の `settings`：`{ key（英字で始まる英数字と _、32 文字まで）, label（40 文字まで）, type, default, ... }` を 30 個まで。
+  type は `boolean`・`number`（`min`・`max`・`step`）・`text`（`maxLength` 200 まで）・`choice`（`options` 2〜30 個）・`color`（`#rrggbb`）
+- 値はアプリのデータ `settings`（ビューの id ごと）に置く
+- 本体とランタイムは、WebView2 自身のショートカット（Ctrl+P・Ctrl+Shift+P の印刷、Ctrl+F・F3・Ctrl+G のページ内検索、Ctrl+S・Ctrl+U・Ctrl+J・Ctrl+H）を止める。MOD 自身のキーの処理には影響しない
+

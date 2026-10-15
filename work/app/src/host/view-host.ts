@@ -20,7 +20,9 @@ import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
 import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
-import type { FileChange } from "../api/types";
+import type { ChoiceItem, FileChange } from "../api/types";
+import { askDialog, chooseDialog, settingsService } from "./mod-ui";
+import { confirmDialog } from "./effects";
 import { backend, BackendError, MOD_ORIGIN, toApiError, type RawEntry, type RawFolder } from "./backend";
 import { toEntry, toSnapshot } from "./snapshot";
 import { storageFor } from "./view-storage";
@@ -61,6 +63,12 @@ export interface TabActions {
   dragEnd(x: number, y: number, ctrl: boolean, shift: boolean, cancel: boolean): Promise<void>;
   /** MOD の管理（ADR 0020）。標準のビューだけが使える */
   readonly mods: ModManager;
+  // ↓ 本体の画面を使う（ADR 0024）
+  /** このタブが表示中か（確かめの画面・お知らせは、表示中のタブのビューだけが出せる） */
+  isActive(): boolean;
+  toast(text: string): void;
+  setStatus(text: string | null): void;
+  setTabLabel(p: { title?: string | null; badge?: string | null }): void;
 }
 
 /** 並べ替えのためだけに Entry を作るときの uses（余計な情報を付けない） */
@@ -116,6 +124,10 @@ export class ViewHost {
     if (this.uses.has("quickAccess")) {
       this.unsubscribe.push(quickAccess.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "quickAccess", data: null })));
     }
+    // 設定の値が変わったら知らせる（ADR 0024）
+    if (view.manifest.settings) {
+      this.unsubscribe.push(settingsService.onChange(view.manifest.id, (v) => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "settings", data: v })));
+    }
     if (view.source === "builtin") {
       this.unsubscribe.push(onModsChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "mods", data: null })));
     }
@@ -128,6 +140,27 @@ export class ViewHost {
   private folderRef(): EntryRef {
     if (!this.folder) throw new HostError({ code: "not-found", message: "no folder is open" });
     return { id: this.folder.id, path: this.folder.path };
+  }
+
+  /** このビューのコマンド（コマンドの一覧に出す。ADR 0024） */
+  commands: ChoiceItem[] = [];
+  private lastToast = 0;
+  private modalOpen = false;
+
+  /** 確かめ・入力・選択の画面。表示中のタブのビューだけ、同時に1つまで */
+  private async modal<T>(open: () => Promise<T>): Promise<T> {
+    if (!this.tab.isActive() || this.modalOpen) throw new HostError({ code: "denied", message: "only the visible view can open one dialog at a time" });
+    this.modalOpen = true;
+    try {
+      return await open();
+    } finally {
+      this.modalOpen = false;
+    }
+  }
+
+  /** コマンドの一覧で、このビューのコマンドが選ばれた */
+  runCommand(id: string) {
+    if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "command", data: { id } });
   }
 
   /** フォルダの直下で起きた変化を知らせる（ADR 0023）。フォルダの中身を見るビュー（uses に entries）だけ */
@@ -435,6 +468,33 @@ export class ViewHost {
         return backend.systemDrives();
       case "system.info":
         return backend.systemInfo();
+      // ↓ 本体の画面を使う（ADR 0024）
+      case "ui.toast":
+        // 表示中のタブのビューだけ。続けて出しすぎないよう、0.3 秒に1回まで
+        if (this.tab.isActive() && Date.now() - this.lastToast > 300) {
+          this.lastToast = Date.now();
+          this.tab.toast(p.text);
+        }
+        return;
+      case "ui.status":
+        return this.tab.setStatus(p.text);
+      case "ui.tab":
+        return this.tab.setTabLabel(p);
+      case "ui.confirm":
+      case "ui.ask":
+      case "ui.choose":
+        return this.modal<unknown>(() =>
+          msg.method === "ui.confirm"
+            ? confirmDialog(p.message, p.okLabel ?? "OK")
+            : msg.method === "ui.ask"
+              ? askDialog(p as { label: string })
+              : chooseDialog(p.title ?? this.view.manifest.name, p.items),
+        );
+      case "settings.get":
+        return settingsService.get(this.view.manifest.id, this.view.manifest.settings ?? []);
+      case "commands.set":
+        this.commands = p.commands;
+        return;
       case "mods.list":
         return this.tab.mods.list();
       case "mods.install":
