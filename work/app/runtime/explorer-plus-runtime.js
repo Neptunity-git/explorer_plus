@@ -19,6 +19,7 @@
   const commandListeners = new Set();
   const dragTargetListeners = new Set();
   const logsListeners = new Set();
+  const folderDataListeners = new Set();
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
   let theme = "light";
@@ -107,6 +108,8 @@
         for (const cb of changesListeners) safely(cb, m.data);
       } else if (m.event === "mods") {
         for (const cb of modsListeners) safely(cb);
+      } else if (m.event === "folderData") {
+        for (const cb of folderDataListeners) safely(cb, m.data);
       } else if (m.event === "logs") {
         for (const cb of logsListeners) safely(cb, m.data);
       }
@@ -332,6 +335,11 @@
       set: (folder, value) => call("folderData.set", { folder: toRef(folder), value }).then(() => undefined),
       delete: (folder) => call("folderData.delete", { folder: toRef(folder) }).then(() => undefined),
     }),
+    /** 開いているフォルダのこのビューのデータを、ほかのウィンドウ（同じビューで同じフォルダを開いている）が書き換えた。folderData.get で読み直す（ADR 0030） */
+    onFolderData(cb) {
+      folderDataListeners.add(cb);
+      return () => folderDataListeners.delete(cb);
+    },
     // ↓ 2026-10-15 に追加（読み取りの API。ADR 0023）
     // uses に "fileContent"：ファイルの中身。readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分ける
     files: Object.freeze({

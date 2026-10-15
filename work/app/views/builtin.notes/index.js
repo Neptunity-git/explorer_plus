@@ -1082,6 +1082,21 @@ const applyShowFiles = (s) => $world.classList.toggle("hide-files", s.showFiles 
 void ep.settings.get().then(applyShowFiles);
 ep.onSettings(applyShowFiles);
 
+// 同じフォルダのノートを、ほかのウィンドウで書き換えて保存した（ADR 0030）：読み直す。見ている場所（cam）はそのまま。
+// このウィンドウで書いている・動かしている・まだ保存していない変更があるときは、こちらを優先する（あとで保存したほうが残る）
+ep.onFolderData(async () => {
+  if (!folder || dirty || editing || gesture) return;
+  const at = key;
+  const saved = await ep.folderData.get(folder).catch(() => undefined);
+  if (at !== key || dirty || editing || gesture || !saved || !Array.isArray(saved.cards)) return;
+  doc = { cards: saved.cards, shapes: saved.shapes || [] };
+  undoStack = [];
+  redoStack = [];
+  for (const id of [...selected]) if (!cardOf(id) && !shapeOf(id)) selected.delete(id);
+  syncFolderCards();
+  renderAll();
+});
+
 ep.onTheme(() => renderAll());
 window.addEventListener("blur", () => void save());
 setTool("select");

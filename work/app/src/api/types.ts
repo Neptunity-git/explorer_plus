@@ -663,6 +663,8 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "command"; data: { id: string } }
   // コレクションの一覧・中身が変わった（uses に collections があるビューだけ。ADR 0025）
   | { ep: 1; kind: "event"; event: "collections"; data: Collection[] }
+  // 開いているフォルダの、このビューのデータ（folderData）を、ほかのウィンドウが書き換えた（ADR 0030）
+  | { ep: 1; kind: "event"; event: "folderData"; data: { path: string } }
   // ログが1件増えた（標準のビューだけに届く。ADR 0029）
   | { ep: 1; kind: "event"; event: "logs"; data: LogEntry };
 

@@ -399,3 +399,8 @@ uses の宣言は要らない。
 - ファイル：アプリのデータの `logs/app.log`・`logs/mod.<id>.log`（1行1件の JSON。1MB で `.old.log` へ入れ替え）
 - 標準のビューだけが使える：`logs.list({ source })`・`logs.sources()`・`logs.clear({ source })`・知らせ `logs`（1件ずつ。フォルダと関係ない標準のビューだけに届く）・`mods.openSettings({ id })`。`mods.list` の各 MOD に `hasSettings`
 
+## 2026-10-15（9回目）の追加：ウィンドウ（ADR 0030）
+
+- 知らせ `folderData`（data は `{ path }`）・`ep.onFolderData(cb)`：開いているフォルダのこのビューのデータ（folderData）を、ほかのウィンドウが書き換えた。uses に folderData があるビューだけに届く
+- ビューごとの保存（storage）・設定・タグなどは、本体がウィンドウのあいだで合わせる（MOD は何もしなくてよい）
+

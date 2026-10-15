@@ -87,7 +87,10 @@ export const backend = {
   clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
   openWith: (item: EntryRef) => call<void>("open_with", { item }),
   /** 新しいウィンドウ（ADR 0030）。path を渡すとそのフォルダを view のビューで、無ければホームを開く */
-  openWindow: (path?: string, view?: string) => call<string>("open_window", { path, view }),
+  openWindow: (path?: string, view?: string, atCursor = false) => call<string>("open_window", { path, view, atCursor }),
+  /** マウスの下の、このアプリのウィンドウ（名前と、その中の位置）。ほかのアプリ・デスクトップなら null（ADR 0030 第2段階） */
+  windowUnderCursor: () => call<{ label: string; x: number; y: number } | null>("window_under_cursor"),
+  focusWindow: (label: string) => call<void>("focus_window", { label }),
   /** 最後のタブを閉じた：ほかにウィンドウがあれば、このウィンドウを閉じる */
   closeWindowIfOthers: () => call<boolean>("close_window_if_others"),
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),

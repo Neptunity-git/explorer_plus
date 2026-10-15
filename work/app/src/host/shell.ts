@@ -14,7 +14,7 @@ import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
 import { slotPicker, tagPicker } from "./pickers";
 import { ModManager, notifyModsChanged } from "./mod-manager";
-import { onSync } from "./sync";
+import { broadcast, onSync, windowLabel } from "./sync";
 import { chooseDialog, settingsDialog, settingsService } from "./mod-ui";
 import { loadViews } from "./mods";
 import { quickAccess, recentItems } from "./ref-list-service";
@@ -166,6 +166,9 @@ export class App {
   private tabs: Tab[] = [];
   private active: Tab | null = null;
   private readonly tabStrip = el("div", "tab-strip");
+  private readonly tabsRow = el("div", "tabs-row");
+  /** ほかのウィンドウからタブを持ってきたときの、入る位置の印（ADR 0030） */
+  private readonly dropMarker = el("div", "tab-drop-marker");
   private readonly navRow = el("div", "nav-row");
   private readonly addressBar = el("div", "address-bar");
   private readonly crumbs = el("div", "crumbs");
@@ -325,8 +328,9 @@ export class App {
     const newTab = el("button", "tab-new", "+");
     newTab.title = "新しいタブ (Ctrl+T)";
     newTab.onclick = () => void this.openHome();
-    const tabsRow = el("div", "tabs-row");
-    tabsRow.append(this.tabStrip, newTab);
+    const tabsRow = this.tabsRow;
+    this.dropMarker.hidden = true;
+    tabsRow.append(this.tabStrip, newTab, this.dropMarker);
 
     this.backBtn.title = "戻る (Alt+←)";
     this.forwardBtn.title = "進む (Alt+→)";
@@ -432,6 +436,13 @@ export class App {
     // ほかのウィンドウで MOD が出し入れされたら、このウィンドウでも読み直す（ADR 0030）
     onSync((m) => {
       if (m.kind === "mods") void this.reloadViews([]).then(notifyModsChanged);
+      // ほかのウィンドウからタブを持ってきた（ADR 0030 第2段階）
+      else if (m.kind === "tabHover") this.showDropMarker(m.to === windowLabel ? m.x : null, m.y);
+      else if (m.kind === "tabIn" && m.to === windowLabel) {
+        this.showDropMarker(null, 0);
+        const view = this.views.find((v) => v.manifest.id === m.view) ?? this.defaultView();
+        void this.openTab(view, isFolderView(view) ? m.path : undefined, this.tabIndexAt(m.x, m.y));
+      }
     });
   }
 
@@ -608,12 +619,8 @@ export class App {
   async moveToNewWindow(tab: Tab) {
     if (this.tabs.length < 2) return;
     const path = tab.folderView ? tab.folder?.path : undefined;
-    try {
-      await backend.openWindow(path, tab.view.manifest.id);
-      this.closeTab(tab);
-    } catch (e) {
-      this.toast(`ウィンドウを開けませんでした：${errorText(e)}`);
-    }
+    this.closeTab(tab, false);
+    await backend.openWindow(path, tab.view.manifest.id).catch((e) => this.toast(`ウィンドウを開けませんでした：${errorText(e)}`));
   }
 
   // ---- タブ ----
@@ -753,7 +760,8 @@ export class App {
     else await this.openTab(view, target);
   }
 
-  closeTab(tab: Tab) {
+  /** focus が false なら、残ったタブにキーボードを向けない（ほかのウィンドウを前に出すとき） */
+  closeTab(tab: Tab, focus = true) {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
     if (this.tabs.length === 1) {
@@ -764,7 +772,7 @@ export class App {
     this.tabs.splice(i, 1);
     tab.destroy();
     this.syncWatch();
-    if (this.active === tab) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)]);
+    if (this.active === tab) this.activate(this.tabs[Math.min(i, this.tabs.length - 1)], focus);
   }
 
   activate(tab: Tab, focus = true) {
@@ -781,6 +789,56 @@ export class App {
 
   // ---- タブの並べ替え（ADR 0015 判断3）：ドラッグすると、まわりのタブが滑らかに避ける ----
 
+  /** タブの列の、x の位置に入れるときの並びの番号（y がタブの列の近くでなければ最後） */
+  private tabIndexAt(x: number, y: number): number {
+    const row = this.tabsRow.getBoundingClientRect();
+    if (y > row.bottom + 24) return this.tabs.length;
+    const i = this.tabs.findIndex((t) => {
+      const r = t.button.getBoundingClientRect();
+      return x < r.x + r.width / 2;
+    });
+    return i < 0 ? this.tabs.length : i;
+  }
+
+  /** ほかのウィンドウのタブが、このウィンドウのタブの列の上に来た：入る位置に印を出す（x が null なら消す） */
+  private showDropMarker(x: number | null, y: number) {
+    const row = this.tabsRow.getBoundingClientRect();
+    if (x === null || y > row.bottom + 24) {
+      this.dropMarker.hidden = true;
+      return;
+    }
+    const i = this.tabIndexAt(x, y);
+    const last = this.tabs[this.tabs.length - 1]?.button.getBoundingClientRect();
+    const at = i < this.tabs.length ? this.tabs[i].button.getBoundingClientRect().x - 1 : last ? last.right + 1 : row.x + 8;
+    this.dropMarker.style.left = `${at - row.x}px`;
+    this.dropMarker.hidden = false;
+  }
+
+  /**
+   * タブを、ほかのウィンドウ・新しいウィンドウへ移す（ADR 0030 第2段階）。ボタンを離したところで、マウスの下を Windows に聞いて決める：
+   * - このアプリのほかのウィンドウの上 → そのウィンドウへ（タブの列の上なら、その位置に）
+   * - それ以外（デスクトップ・ほかのアプリの上、このウィンドウのタブの列から大きく離れた所）→ その場所に新しいウィンドウを開く
+   */
+  private async detachTab(tab: Tab) {
+    const target = await backend.windowUnderCursor().catch(() => null);
+    broadcast({ kind: "tabHover", to: null, x: 0, y: 0 });
+    const path = tab.folderView ? tab.folder?.path : undefined;
+    const view = tab.view.manifest.id;
+    if (target && target.label !== windowLabel) {
+      broadcast({ kind: "tabIn", to: target.label, x: target.x, y: target.y, path, view });
+      void backend.focusWindow(target.label);
+      // 最後のタブを渡したら、このウィンドウは閉じる
+      if (this.tabs.length > 1) this.closeTab(tab);
+      else void backend.closeWindowIfOthers().catch(() => {});
+      return;
+    }
+    // 1つしかないタブは、新しいウィンドウにしても同じなので、そのまま
+    if (this.tabs.length < 2) return;
+    // 先にこのタブを閉じる（あとで閉じると、このウィンドウが前に出て、新しいウィンドウが隠れる）
+    this.closeTab(tab, false);
+    await backend.openWindow(path, view, true).catch((e) => this.toast(`ウィンドウを開けませんでした：${errorText(e)}`));
+  }
+
   private enableTabReorder(tab: Tab) {
     const b = tab.button;
     b.addEventListener("pointerdown", (down) => {
@@ -790,14 +848,45 @@ export class App {
       const rects = this.tabs.map((t) => t.button.getBoundingClientRect());
       let moving = false;
       let to = from;
+      /** タブの列から引き出している（ウィンドウの外、またはタブの列から下へ大きく離れた） */
+      let away = false;
+      let lastAsk = 0;
+      /** ほかのウィンドウに「入る位置」を出してもらっているか（消すときに1回だけ知らせる） */
+      let hoverSent = false;
+      const clearHover = () => {
+        if (hoverSent) broadcast({ kind: "tabHover", to: null, x: 0, y: 0 });
+        hoverSent = false;
+      };
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - startX;
-        if (!moving && Math.abs(dx) < 5) return;
+        if (!moving && Math.abs(dx) < 5 && Math.abs(e.clientY - down.clientY) < 5) return;
         if (!moving) {
           moving = true;
           b.setPointerCapture(down.pointerId);
           b.classList.add("tab-dragging");
         }
+        const row = this.tabsRow.getBoundingClientRect();
+        away = e.clientX < 0 || e.clientY < 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight || e.clientY > row.bottom + 80;
+        b.classList.toggle("tab-detaching", away);
+        if (away) {
+          for (const t of this.tabs) if (t !== tab) t.button.style.transform = "";
+          b.style.transform = "";
+          to = from;
+          // ほかのウィンドウのタブの列の上なら、そのウィンドウに入る位置を出してもらう（聞きすぎないよう、0.1 秒に1回）
+          if (performance.now() - lastAsk > 100) {
+            lastAsk = performance.now();
+            void backend.windowUnderCursor().then(
+              (t) => {
+                if (!away) return;
+                broadcast({ kind: "tabHover", to: t && t.label !== windowLabel ? t.label : null, x: t?.x ?? 0, y: t?.y ?? 0 });
+                hoverSent = true;
+              },
+              () => {},
+            );
+          }
+          return;
+        }
+        clearHover();
         b.style.transform = `translateX(${dx}px)`;
         // 動かしているタブの真ん中が、ほかのタブの真ん中を越えたら、そのタブを1つ分ずらす
         const center = rects[from].x + rects[from].width / 2 + dx;
@@ -814,12 +903,18 @@ export class App {
           t.button.style.transform = shift ? `translateX(${shift}px)` : "";
         });
       };
-      const onUp = () => {
+      const onUp = (e: PointerEvent) => {
         b.removeEventListener("pointermove", onMove);
         b.removeEventListener("pointerup", onUp);
         b.removeEventListener("pointercancel", onUp);
         if (!moving) return;
-        b.classList.remove("tab-dragging");
+        b.classList.remove("tab-dragging", "tab-detaching");
+        if (away && e.type === "pointerup") {
+          for (const t of this.tabs) t.button.style.transform = "";
+          void this.detachTab(tab);
+          return;
+        }
+        clearHover();
         // 並べ替えたあとは、ずらしたぶんを外し、本当の位置に入れ直す
         for (const t of this.tabs) t.button.style.transform = "";
         if (to !== from) {

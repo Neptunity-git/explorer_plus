@@ -32,7 +32,12 @@ button { font: inherit; color: inherit; }
 #app { display: flex; flex-direction: column; height: 100%; }
 
 /* ---- タブ ---- */
-.tabs-row { display: flex; align-items: flex-end; gap: 2px; padding: 6px 8px 0; }
+.tabs-row { display: flex; align-items: flex-end; gap: 2px; padding: 6px 8px 0; position: relative; }
+/* ほかのウィンドウからタブを持ってきたときの、入る位置（ADR 0030） */
+.tab-drop-marker { position: absolute; top: 6px; bottom: 0; width: 3px; margin-left: -2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.tab-drop-marker[hidden] { display: none; }
+/* タブを、ウィンドウの外へ引き出している */
+.tab.tab-detaching { opacity: 0.45; }
 .tab-strip { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .tab {
   display: flex; align-items: center; gap: 6px; min-width: 120px; max-width: 220px; height: 34px; padding: 0 6px;

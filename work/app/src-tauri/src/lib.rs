@@ -87,6 +87,8 @@ pub fn run() {
             netproxy::net_fetch,
             windows::open_window,
             windows::close_window_if_others,
+            windows::window_under_cursor,
+            windows::focus_window,
             logs::log_append,
             logs::log_tail,
             logs::log_sources,

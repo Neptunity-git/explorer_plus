@@ -12,7 +12,13 @@ export type SyncMessage =
   /** 入っている MOD が変わった（入れた・外した・開発中の MOD を足した） */
   | { kind: "mods" }
   /** ログが1件増えた（ファイルへは、増やしたウィンドウが書く） */
-  | { kind: "log"; entry: import("../api/types").LogEntry };
+  | { kind: "log"; entry: import("../api/types").LogEntry }
+  /** タブをドラッグして、そのウィンドウの上に来た（to が null なら、どのウィンドウの上でもなくなった）。x・y は to のウィンドウの中の位置 */
+  | { kind: "tabHover"; to: string | null; x: number; y: number }
+  /** タブを、そのウィンドウへ移した（受け取ったウィンドウが、x の位置にタブを開く） */
+  | { kind: "tabIn"; to: string; x: number; y: number; path?: string; view: string }
+  /** フォルダの中のデータ（ノートなど。.explorer_plus/<name>）を書き換えた */
+  | { kind: "folderData"; path: string; name: string };
 
 const EVENT = "ep-sync";
 let label = "main";
@@ -29,8 +35,18 @@ export function broadcast(msg: SyncMessage) {
   void emit(EVENT, { from: label, msg }).catch(() => {});
 }
 
-export function onSync(cb: (msg: SyncMessage) => void): void {
-  void listen<{ from: string; msg: SyncMessage }>(EVENT, (e) => {
-    if (e.payload.from !== label) cb(e.payload.msg);
-  }).catch(() => {});
+const listeners = new Set<(msg: SyncMessage) => void>();
+let listening = false;
+
+/** ほかのウィンドウからの知らせを受け取る。返り値を呼ぶと、受け取るのをやめる（タブを閉じたときなど） */
+export function onSync(cb: (msg: SyncMessage) => void): () => void {
+  listeners.add(cb);
+  if (!listening) {
+    listening = true;
+    void listen<{ from: string; msg: SyncMessage }>(EVENT, (e) => {
+      if (e.payload.from === label) return;
+      for (const f of listeners) f(e.payload.msg);
+    }).catch(() => {});
+  }
+  return () => listeners.delete(cb);
 }

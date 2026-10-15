@@ -308,6 +308,11 @@ declare global {
         delete(folder: EntryRef): Promise<void>;
       };
       /**
+       * 開いているフォルダのこのビューのデータを、ほかのウィンドウ（同じビューで同じフォルダを開いている）が書き換えた（ADR 0030）。
+       * folderData.get で読み直すと、ウィンドウのあいだで食い違わない
+       */
+      onFolderData(cb: (data: { path: string }) => void): () => void;
+      /**
        * uses に "fileContent" が要る（ADR 0023）。ファイルの中身を読む。
        * readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分けて文字にする。maxBytes は 8MB まで（既定 1MB）。
        * readBytes は length が 16MB まで（既定 1MB）。url は <img>・<video>・<audio>・fetch にそのまま使える URL（動画のシークもできる）。

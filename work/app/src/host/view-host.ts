@@ -23,6 +23,7 @@ import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
 import { parseNetFrame } from "../core/network";
 import { describeModCall } from "../core/logs";
 import { logService } from "./log-service";
+import { broadcast, onSync } from "./sync";
 import type { ChoiceItem, FileChange } from "../api/types";
 import { askDialog, chooseDialog, settingsService } from "./mod-ui";
 import { collectionService, grantService } from "./collection-service";
@@ -143,6 +144,15 @@ export class ViewHost {
     // 設定の値が変わったら知らせる（ADR 0024）
     if (view.manifest.settings) {
       this.unsubscribe.push(settingsService.onChange(view.manifest.id, (v) => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "settings", data: v })));
+    }
+    // ほかのウィンドウが、開いているフォルダのこのビューのデータを書き換えた（ADR 0030）
+    if (this.uses.has("folderData")) {
+      this.unsubscribe.push(
+        onSync((m) => {
+          if (m.kind !== "folderData" || m.name !== this.folderDataName() || !this.isReady) return;
+          if (this.folder && this.folder.path.toLowerCase() === m.path.toLowerCase()) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "folderData", data: { path: this.folder.path } });
+        }),
+      );
     }
     if (view.source === "builtin") {
       this.unsubscribe.push(onModsChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "mods", data: null })));
@@ -414,6 +424,8 @@ export class ViewHost {
         if (bad) throw new HostError(bad);
         try {
           await backend.folderDataWrite(p.folder, this.folderDataName(), JSON.stringify(p.value));
+          // 同じフォルダを開いている、ほかのウィンドウのビューに知らせる（ADR 0030）
+          broadcast({ kind: "folderData", path: p.folder.path, name: this.folderDataName() });
           return store.delete(this.folderDataKey(p.folder));
         } catch (e) {
           // フォルダが無い・別のものに入れ替わった（ファイルID が違う）ときは、保存しない
@@ -423,6 +435,7 @@ export class ViewHost {
       }
       case "folderData.delete":
         await backend.folderDataDelete(p.folder, this.folderDataName()).catch(() => {});
+        broadcast({ kind: "folderData", path: p.folder.path, name: this.folderDataName() });
         return store.delete(this.folderDataKey(p.folder));
       case "getTree":
         return this.buildTree(p.depth);
