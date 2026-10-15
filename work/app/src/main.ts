@@ -4,6 +4,30 @@ import { loadViews } from "./host/mods";
 import { App } from "./host/shell";
 import { logService } from "./host/log-service";
 import { getVersion } from "@tauri-apps/api/app";
+import { onSync, windowLabel } from "./host/sync";
+import { collectionService, grantService } from "./host/collection-service";
+import { settingsService } from "./host/mod-ui";
+import { forgetStorage } from "./host/view-storage";
+
+/** ほかのウィンドウで保存されたら、このウィンドウでも読み直す（ADR 0030） */
+function watchOtherWindows() {
+  onSync((m) => {
+    if (m.kind === "log") logService.addRemote(m.entry);
+    else if (m.kind === "viewStorage") forgetStorage(m.viewId);
+    else if (m.kind === "appData") {
+      const reload: Record<string, () => Promise<void>> = {
+        tags: () => tagService.reload(),
+        timetables: () => timetableService.reload(),
+        quickaccess: () => quickAccess.reload(),
+        recent: () => recentItems.reload(),
+        settings: () => settingsService.reload(),
+        collections: () => collectionService.reload(),
+        grants: () => grantService.reload(),
+      };
+      void reload[m.name]?.().catch((e) => console.warn("reload failed", m.name, e));
+    }
+  });
+}
 import { tagService } from "./host/tag-service";
 import { timetableService } from "./host/timetable-service";
 import { quickAccess, recentItems } from "./host/ref-list-service";
@@ -14,7 +38,8 @@ window.addEventListener("unhandledrejection", (e) => logService.app("error", `�
 window.addEventListener("beforeunload", () => void logService.flush());
 
 async function start() {
-  void getVersion().then((v) => logService.app("info", `起動しました（explorer_plus ${v}）`), () => logService.app("info", "起動しました"));
+  if (windowLabel === "main") void getVersion().then((v) => logService.app("info", `起動しました（explorer_plus ${v}）`), () => logService.app("info", "起動しました"));
+  else logService.app("info", "ウィンドウを開きました");
   const root = document.getElementById("app")!;
   const [{ views, problems }, places, startDir] = await Promise.all([
     loadViews(),
@@ -31,7 +56,11 @@ async function start() {
     return;
   }
   for (const p of problems) logService.app("warn", `MOD を読み込めません：${p.dir} — ${p.errors.join(" / ")}`);
-  new App(views, problems, places, startDir).mount(root);
+  // 新しいウィンドウ（ADR 0030）は、開く場所とビューを URL で受け取る。最初のウィンドウは、開発中の試験用のフォルダ（ふだんは無し）
+  const q = new URLSearchParams(location.search);
+  const firstDir = q.get("path") ?? (windowLabel === "main" ? startDir : null);
+  new App(views, problems, places, firstDir, q.get("view")).mount(root);
+  watchOtherWindows();
 }
 
 start().catch((e) => {

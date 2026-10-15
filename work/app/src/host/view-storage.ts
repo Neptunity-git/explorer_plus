@@ -44,6 +44,13 @@ class ViewStorage {
     this.scheduleSave();
   }
 
+  /** ほかのウィンドウが保存した：次に読むときに読み直す（このウィンドウに、まだ書いていない変更があれば、そちらを書く） */
+  forget() {
+    if (this.timer) return;
+    this.data = null;
+    this.loading = null;
+  }
+
   async keys(): Promise<string[]> {
     return Object.keys(await this.load());
   }
@@ -58,6 +65,11 @@ class ViewStorage {
 }
 
 const stores = new Map<string, ViewStorage>();
+
+/** ほかのウィンドウが、そのビューの保存を書き換えた */
+export function forgetStorage(viewId: string) {
+  stores.get(viewId)?.forget();
+}
 
 export function storageFor(viewId: string): ViewStorage {
   let s = stores.get(viewId);

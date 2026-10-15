@@ -6,7 +6,7 @@
 use notify::event::{EventKind, ModifyKind, RenameMode};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
@@ -14,9 +14,41 @@ use tauri::{AppHandle, Emitter};
 /// 見張りの係と、いま見張っているフォルダ（知らせの中でも読むので共有する）
 type Watched = Arc<Mutex<HashSet<PathBuf>>>;
 
+/// ウィンドウが複数あるとき（ADR 0030）は、ウィンドウごとに見張りたいフォルダを覚え、その全部を見張る
 #[derive(Default)]
 pub struct FolderWatch {
     inner: Mutex<Option<(RecommendedWatcher, Watched)>>,
+    wanted: Mutex<HashMap<String, HashSet<PathBuf>>>,
+}
+
+/// ウィンドウが閉じたら、そのウィンドウの分の見張りをやめる
+pub fn forget_window(app: &AppHandle, label: &str) {
+    use tauri::Manager;
+    let state = app.state::<FolderWatch>();
+    let wanted = {
+        let mut w = state.wanted.lock().unwrap();
+        w.remove(label);
+        w.values().flatten().cloned().collect::<HashSet<PathBuf>>()
+    };
+    let mut guard = state.inner.lock().unwrap();
+    if let Some((watcher, watched)) = guard.as_mut() {
+        apply(watcher, watched, &wanted);
+    }
+}
+
+/// 見張っているフォルダを、wanted に合わせる
+fn apply(watcher: &mut RecommendedWatcher, watched: &Watched, wanted: &HashSet<PathBuf>) {
+    let mut current = watched.lock().unwrap();
+    for p in current.difference(wanted).cloned().collect::<Vec<_>>() {
+        let _ = watcher.unwatch(&p);
+        current.remove(&p);
+    }
+    for p in wanted.difference(&current).cloned().collect::<Vec<_>>() {
+        // 見張れないフォルダ（権限が無い、など）は、F5 で読み直せばよいので飛ばす
+        if watcher.watch(&p, RecursiveMode::NonRecursive).is_ok() {
+            current.insert(p);
+        }
+    }
 }
 
 /// 変化のあったパスから、知らせるフォルダを決める：そのパスの親（直下の項目が変わった）と、そのパス自身（見張っているフォルダそのものが変わった）
@@ -79,8 +111,13 @@ fn same_path(a: &Path, b: &Path) -> bool {
 
 /// 見張るフォルダの一覧を、まるごと置き換える（タブで開いているフォルダが変わるたびに呼ぶ）
 #[tauri::command]
-pub fn watch_folders(app: AppHandle, state: tauri::State<'_, FolderWatch>, paths: Vec<String>) -> Result<(), String> {
-    let wanted: HashSet<PathBuf> = paths.iter().map(PathBuf::from).filter(|p| p.is_dir()).collect();
+pub fn watch_folders(app: AppHandle, window: tauri::Window, state: tauri::State<'_, FolderWatch>, paths: Vec<String>) -> Result<(), String> {
+    let mine: HashSet<PathBuf> = paths.iter().map(PathBuf::from).filter(|p| p.is_dir()).collect();
+    let wanted: HashSet<PathBuf> = {
+        let mut w = state.wanted.lock().unwrap();
+        w.insert(window.label().to_string(), mine);
+        w.values().flatten().cloned().collect()
+    };
     let mut guard = state.inner.lock().unwrap();
     if guard.is_none() {
         let watched: Watched = Arc::default();
@@ -102,17 +139,7 @@ pub fn watch_folders(app: AppHandle, state: tauri::State<'_, FolderWatch>, paths
         *guard = Some((watcher, watched));
     }
     let (watcher, watched) = guard.as_mut().unwrap();
-    let mut current = watched.lock().unwrap();
-    for p in current.difference(&wanted).cloned().collect::<Vec<_>>() {
-        let _ = watcher.unwatch(&p);
-        current.remove(&p);
-    }
-    for p in wanted.difference(&current).cloned().collect::<Vec<_>>() {
-        // 見張れないフォルダ（権限が無い、など）は、F5 で読み直せばよいので飛ばす
-        if watcher.watch(&p, RecursiveMode::NonRecursive).is_ok() {
-            current.insert(p);
-        }
-    }
+    apply(watcher, watched, &wanted);
     Ok(())
 }
 

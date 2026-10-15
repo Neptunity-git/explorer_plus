@@ -47,6 +47,13 @@ class CollectionService {
     return () => this.listeners.delete(cb);
   }
 
+  /** ほかのウィンドウが保存した：読み直す */
+  async reload() {
+    this.loading = null;
+    await this.load();
+    for (const cb of this.listeners) cb();
+  }
+
   list(): Collection[] {
     return this.store.collections.map((c) => ({ id: c.id, name: c.name, color: c.color, count: c.items.length }));
   }
@@ -131,6 +138,12 @@ class GrantService {
       })
       .catch(() => {});
     return this.loading;
+  }
+
+  /** ほかのウィンドウが保存した：読み直す */
+  async reload() {
+    this.loading = null;
+    await this.load();
   }
 
   async has(viewId: string, what: string): Promise<boolean> {

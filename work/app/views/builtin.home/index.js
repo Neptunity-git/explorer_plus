@@ -29,7 +29,7 @@ document.head.appendChild(
       .log-source .count { color: var(--tui-warn); margin-left: 0.5ch; }
       .log-line { display: flex; gap: 1ch; padding: 0 1ch; white-space: pre-wrap; word-break: break-all; line-height: 1.45; }
       .log-line .time { color: var(--tui-dim); flex: none; }
-      .log-line .level { flex: none; width: 4ch; }
+      .log-line .level { flex: none; width: 6ch; }
       .log-line.warn .level { color: var(--tui-now); }
       .log-line.error .level, .log-line.error .text { color: var(--tui-warn); }
       .log-empty { padding: 0 1ch; color: var(--tui-dim); }

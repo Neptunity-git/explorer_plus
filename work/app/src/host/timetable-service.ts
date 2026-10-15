@@ -138,6 +138,14 @@ class TimetableService {
     this.notify();
   }
 
+  /** ほかのウィンドウが一覧を保存した：読み直す（ADR 0030） */
+  async reload(): Promise<void> {
+    this.loading = null;
+    await this.load();
+    this.notify();
+    await this.refresh();
+  }
+
   /** フォルダの中のファイルを読み直す（別の PC で書き換えられ、同期で届いたとき。アプリの窓に戻ってきたときに呼ぶ） */
   async refresh(): Promise<void> {
     await this.load();

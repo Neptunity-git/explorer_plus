@@ -2,6 +2,7 @@
 // ファイルへは少しまとめて書く。初めて見るときに、ファイルに残っている分を読み込む（アプリを起動し直しても見られる）。
 import { invoke } from "@tauri-apps/api/core";
 import { APP_LOG, LogLimiter, LogRing, clip, fromLine, toLine, type LogEntry, type LogLevel } from "../core/logs";
+import { broadcast } from "./sync";
 
 const FLUSH_MS = 1000;
 
@@ -26,6 +27,13 @@ class LogService {
     list.push(e);
     this.pending.set(source, list);
     this.timer ??= setTimeout(() => void this.flush(), FLUSH_MS);
+    for (const cb of this.listeners) cb(e);
+    broadcast({ kind: "log", entry: e });
+  }
+
+  /** ほかのウィンドウで増えたログ（ファイルへは、そのウィンドウが書く。ADR 0030） */
+  addRemote(e: LogEntry) {
+    this.ring(e.source).add(e);
     for (const cb of this.listeners) cb(e);
   }
 

@@ -226,6 +226,17 @@ class SettingsService {
     for (const cb of this.listeners.get(viewId) ?? []) cb(now);
   }
 
+  /** ほかのウィンドウが保存した：読み直し、このウィンドウのビューに新しい値を知らせる */
+  async reload() {
+    this.loading = null;
+    await this.load();
+    for (const [viewId, set] of this.listeners) {
+      if (set.size === 0) continue;
+      const now = await this.get(viewId, this.defs.get(viewId) ?? []);
+      for (const cb of set) cb(now);
+    }
+  }
+
   onChange(viewId: string, cb: (v: SettingValues) => void): () => void {
     const set = this.listeners.get(viewId) ?? new Set();
     set.add(cb);

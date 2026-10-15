@@ -34,6 +34,14 @@ class TagService {
     return this.loading;
   }
 
+  /** ほかのウィンドウが保存した：読み直す（このウィンドウに、まだ書いていない変更があれば、そちらを書く） */
+  async reload() {
+    if (this.timer) return;
+    this.loading = null;
+    await this.load();
+    for (const cb of this.listeners) cb();
+  }
+
   onChange(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);

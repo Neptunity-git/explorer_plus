@@ -27,6 +27,13 @@ class RefListService {
     return this.loading;
   }
 
+  /** ほかのウィンドウが保存した：読み直す */
+  async reload() {
+    this.loading = null;
+    await this.load();
+    for (const cb of this.listeners) cb();
+  }
+
   onChange(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);

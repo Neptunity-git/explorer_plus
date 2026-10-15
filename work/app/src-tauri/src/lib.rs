@@ -19,6 +19,7 @@ mod netproxy;
 mod shellmenu;
 mod transfer;
 mod watch;
+mod windows;
 
 /// 開発中だけ、環境変数 EXPLORER_PLUS_START_DIR のフォルダで起動する（試験の操作が、ふだんのフォルダに及ばないように）。
 /// リリース版では常に None
@@ -84,6 +85,8 @@ pub fn run() {
             fileapi::file_read_bytes,
             fileapi::file_url,
             netproxy::net_fetch,
+            windows::open_window,
+            windows::close_window_if_others,
             logs::log_append,
             logs::log_tail,
             logs::log_sources,
@@ -144,6 +147,13 @@ pub fn run() {
             geo::get_location,
             dev_start_dir,
         ])
+        // ウィンドウが閉じたら、そのウィンドウの分のフォルダの見張りをやめる（ADR 0030）
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                use tauri::Manager;
+                watch::forget_window(window.app_handle(), window.label());
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

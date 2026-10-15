@@ -6,6 +6,7 @@ import { formatSize } from "../core/format";
 import { backend, BackendError } from "./backend";
 import { confirmDialog } from "./effects";
 import { grantService } from "./collection-service";
+import { broadcast } from "./sync";
 import type { ModProblem } from "./mods";
 import type { LoadedView } from "./view-host";
 
@@ -67,6 +68,17 @@ export function onModsChange(cb: () => void): () => void {
 }
 function changed() {
   for (const cb of listeners) cb();
+}
+
+/** このウィンドウで MOD を出し入れした：ほかのウィンドウにも知らせる（ADR 0030） */
+function changedEverywhere() {
+  changed();
+  broadcast({ kind: "mods" });
+}
+
+/** ほかのウィンドウで MOD が出し入れされた（読み直したあとに呼ぶ） */
+export function notifyModsChanged() {
+  changed();
 }
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -157,7 +169,7 @@ export class ModManager {
     try {
       const id = await backend.modInstall(inspected.staging);
       await this.host.reloadViews([]);
-      changed();
+      changedEverywhere();
       this.host.toast(`「${m.name}」を入れました。タブの ▸ やホームから使えます`);
       return id;
     } catch (e) {
@@ -179,7 +191,7 @@ export class ModManager {
     // 預けた API キーなども消す（開発中の MOD は、読み込みをやめるだけなので残す）
     if (info.source === "user") await backend.secretClear(id).catch(() => {});
     await this.host.reloadViews([]);
-    changed();
+    changedEverywhere();
   }
 
   async addDev(): Promise<string | null> {
@@ -187,7 +199,7 @@ export class ModManager {
       const dir = await backend.devModAdd();
       if (!dir) return null;
       await this.host.reloadViews([]);
-      changed();
+      changedEverywhere();
       this.host.toast("開発中の MOD を読み込みました。フォルダの中を保存すると、自動で読み直します");
       return dir;
     } catch (e) {
@@ -202,7 +214,7 @@ export class ModManager {
       const dir = await backend.devModCreate(name);
       if (!dir) return null;
       await this.host.reloadViews([]);
-      changed();
+      changedEverywhere();
       this.host.openFolder(dir);
       this.host.toast(`「${name}」のひな形を作りました。index.js を書き換えて保存すると、すぐ反映されます`);
       return dir;

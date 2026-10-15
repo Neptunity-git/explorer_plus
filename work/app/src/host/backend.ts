@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { describeCommand, quietFailure } from "../core/logs";
 import { logService } from "./log-service";
+import { broadcast } from "./sync";
 import { ERROR_CODES, type ApiError, type Drive, type EntryRef, type ErrorCode, type SearchQuery, type SearchStats, type SystemInfo, type TextRead } from "../api/types";
 
 export type RawEntry = {
@@ -75,15 +76,20 @@ export const backend = {
   openDevtools: () => call<void>("open_devtools"),
   userModsDir: () => call<string>("user_mods_dir"),
   viewStorageLoad: (viewId: string) => call<string | null>("view_storage_load", { viewId }),
-  viewStorageSave: (viewId: string, json: string) => call<void>("view_storage_save", { viewId, json }),
+  viewStorageSave: (viewId: string, json: string) => call<void>("view_storage_save", { viewId, json }).then(() => broadcast({ kind: "viewStorage", viewId })),
   getLocation: () => call<Location>("get_location"),
   devStartDir: () => call<string | null>("dev_start_dir"),
   appDataLoad: (name: AppDataName) => call<string | null>("app_data_load", { name }),
-  appDataSave: (name: AppDataName, json: string) => call<void>("app_data_save", { name, json }),
+  // 保存したら、ほかのウィンドウに知らせる（ADR 0030）
+  appDataSave: (name: AppDataName, json: string) => call<void>("app_data_save", { name, json }).then(() => broadcast({ kind: "appData", name })),
   fileIds: (paths: string[]) => call<string[]>("file_ids", { paths }),
   clipboardSet: (items: EntryRef[], cut: boolean) => call<void>("clipboard_set", { items, cut }),
   clipboardPaste: (dest: string) => call<number>("clipboard_paste", { dest }),
   openWith: (item: EntryRef) => call<void>("open_with", { item }),
+  /** 新しいウィンドウ（ADR 0030）。path を渡すとそのフォルダを view のビューで、無ければホームを開く */
+  openWindow: (path?: string, view?: string) => call<string>("open_window", { path, view }),
+  /** 最後のタブを閉じた：ほかにウィンドウがあれば、このウィンドウを閉じる */
+  closeWindowIfOthers: () => call<boolean>("close_window_if_others"),
   transfer: (items: EntryRef[], dest: string, effect: "move" | "copy") => call<number>("transfer", { items, dest, effect }),
   /** 7-Zip が入っているか（入っていなければ、メニューに圧縮・展開を出さない）と、「ここに展開」を出す拡張子（ADR 0021） */
   archiveTool: () => call<{ available: boolean; extensions: string[] }>("archive_tool"),

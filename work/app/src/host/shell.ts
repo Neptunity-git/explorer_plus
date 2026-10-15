@@ -13,7 +13,8 @@ import { confirmDialog, playOpen, playTrash } from "./effects";
 import { showMenu, type MenuLine } from "./menu";
 import type { ModProblem } from "./mods";
 import { slotPicker, tagPicker } from "./pickers";
-import { ModManager } from "./mod-manager";
+import { ModManager, notifyModsChanged } from "./mod-manager";
+import { onSync } from "./sync";
 import { chooseDialog, settingsDialog, settingsService } from "./mod-ui";
 import { loadViews } from "./mods";
 import { quickAccess, recentItems } from "./ref-list-service";
@@ -182,8 +183,10 @@ export class App {
     private views: LoadedView[],
     private problems: ModProblem[],
     private readonly places: Place[],
-    /** 最初に開くフォルダ（開発中に、試験用のフォルダで起動するため。ふだんは null） */
+    /** 最初に開くフォルダ（新しいウィンドウで開いたフォルダ・開発中の試験用のフォルダ。ふだんは null） */
     private readonly startDir: string | null = null,
+    /** 最初のフォルダを開くビュー（タブを新しいウィンドウへ移したとき。ADR 0030） */
+    private readonly startView: string | null = null,
   ) {}
 
   // ---- MOD の管理（ADR 0020） ----
@@ -424,8 +427,12 @@ export class App {
     for (const p of this.problems) console.warn(`MOD を読み込めませんでした: ${p.dir}\n${p.errors.join("\n")}`);
     if (this.problems.length > 0) this.toast(`読み込めない MOD が ${this.problems.length} 個あります（詳細は開発者ツールのコンソール）`);
     // 起動したらホームを開く（開発中に試験用のフォルダを指定したときは、そのフォルダ）
-    if (this.startDir) void this.openTab(this.defaultView(), this.startDir);
+    if (this.startDir) void this.openTab(this.views.find((v) => v.manifest.id === this.startView && isFolderView(v)) ?? this.defaultView(), this.startDir);
     else void this.openHome();
+    // ほかのウィンドウで MOD が出し入れされたら、このウィンドウでも読み直す（ADR 0030）
+    onSync((m) => {
+      if (m.kind === "mods") void this.reloadViews([]).then(notifyModsChanged);
+    });
   }
 
   private homePath(): string {
@@ -573,6 +580,7 @@ export class App {
         void showMenu(e.clientX, e.clientY, [
           { label: "開く", run: () => void this.goTo(r.path) },
           { label: "新しいタブで開く", run: () => void this.openTab(this.defaultView(), r.path) },
+          { label: "新しいウィンドウで開く", run: () => void this.openWindow(r.path) },
           "separator",
           { label: "クイックアクセスから外す", run: () => quickAccess.unpin([ref]) },
         ]);
@@ -587,6 +595,25 @@ export class App {
     if (!t) return;
     if (t.folderView) await this.navigate(t, path).catch(() => {});
     else await this.replaceTab(t, this.defaultView(), path);
+  }
+
+  // ---- ウィンドウ（ADR 0030） ----
+
+  /** 新しいウィンドウ。path を渡すとそのフォルダを、無ければホームを開く */
+  async openWindow(path?: string, viewId?: string) {
+    await backend.openWindow(path, viewId).catch((e) => this.toast(`ウィンドウを開けませんでした：${errorText(e)}`));
+  }
+
+  /** タブを新しいウィンドウへ移す（同じフォルダ・同じビューで開き、このウィンドウのタブは閉じる） */
+  async moveToNewWindow(tab: Tab) {
+    if (this.tabs.length < 2) return;
+    const path = tab.folderView ? tab.folder?.path : undefined;
+    try {
+      await backend.openWindow(path, tab.view.manifest.id);
+      this.closeTab(tab);
+    } catch (e) {
+      this.toast(`ウィンドウを開けませんでした：${errorText(e)}`);
+    }
   }
 
   // ---- タブ ----
@@ -663,6 +690,9 @@ export class App {
       ...(tab.view.manifest.settings ? [{ label: "このビューの設定…", run: () => void this.openSettings(tab) }] : []),
       { label: "コマンドの一覧…", shortcut: "Ctrl+Shift+P", run: () => void (this.activate(tab), this.commandPalette()) },
       "separator",
+      { label: "このタブを新しいウィンドウへ移す", disabled: this.tabs.length < 2, run: () => void this.moveToNewWindow(tab) },
+      { label: "新しいウィンドウ", shortcut: "Ctrl+N", run: () => void this.openWindow() },
+      "separator",
       { label: "タブを閉じる", shortcut: "Ctrl+W", run: () => this.closeTab(tab) },
     ]);
   }
@@ -684,6 +714,7 @@ export class App {
     const t = this.active;
     const own: { id: string; label: string; hint?: string; run: () => void }[] = [
       { id: "@newtab", label: "新しいタブ", hint: "Ctrl+T", run: () => void this.openHome() },
+      { id: "@newwindow", label: "新しいウィンドウ", hint: "Ctrl+N", run: () => void this.openWindow() },
       ...(t?.view.manifest.settings ? [{ id: "@settings", label: "このビューの設定…", hint: t.view.manifest.name, run: () => void this.openSettings(t) }] : []),
       ...(t?.folderView
         ? this.views.filter((v) => isFolderView(v) && v.manifest.id !== t.view.manifest.id).map((v) => ({ id: `@view:${v.manifest.id}`, label: `ビューを「${v.manifest.name}」に変える`, run: () => void this.changeView(t, v) }))
@@ -726,7 +757,8 @@ export class App {
     const i = this.tabs.indexOf(tab);
     if (i < 0) return;
     if (this.tabs.length === 1) {
-      // 最後のタブは閉じずに残す（空の画面にしない）
+      // 最後のタブ：ほかにウィンドウがあれば、このウィンドウを閉じる（Chrome と同じ）。1つだけなら、閉じずに残す（空の画面にしない）
+      void backend.closeWindowIfOthers().catch(() => {});
       return;
     }
     this.tabs.splice(i, 1);
@@ -980,6 +1012,7 @@ export class App {
         // 「開く」はメニューに出さない（ダブルクリック・Enter で足りる。ADR 0015 判断5）。「プログラムから開く」はファイルのときだけ
         ...(single && raws[0] && !raws[0].isDir ? [{ label: "プログラムから開く…", run: run(() => backend.openWith(single)) }] : []),
         { label: "新しいタブで開く", disabled: !allFolders, run: run(async () => { for (const r of items) await this.openTab(tab.folderView ? tab.view : this.defaultView(), r.path); }) },
+        { label: "新しいウィンドウで開く", disabled: !single || !allFolders, run: run(() => this.openWindow(single!.path, tab.folderView ? tab.view.manifest.id : undefined)) },
         "separator",
         // 切り取り・コピー・貼り付けはメニューに出さない（知っていて当然の操作なので、キーだけにする。ADR 0015 判断1）
         { label: "名前の変更", shortcut: "F2", disabled: !single || !raws[0], run: () => raws[0] && tab.host.requestRename(raws[0]) },
@@ -1042,6 +1075,10 @@ export class App {
     if (k.ctrl && !k.alt) {
       if (key === "t") {
         void this.openHome();
+        return true;
+      }
+      if (key === "n" && !k.shift) {
+        void this.openWindow();
         return true;
       }
       if (key === "w") {
