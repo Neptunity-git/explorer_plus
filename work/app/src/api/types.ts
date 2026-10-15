@@ -25,6 +25,8 @@ export const USES = [
   "quickAccess",
   "recent",
   "thumbnails",
+  // ↓ 2026-10-15 に追加（ADR 0022）。フォルダの中（.explorer_plus）に、このビューのデータを保存する
+  "folderData",
 ] as const;
 export type Use = (typeof USES)[number];
 
@@ -220,6 +222,9 @@ export type CallMethod =
   | "drag.move"
   | "drag.end"
   // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（id が builtin. で始まる）だけが使える
+  | "folderData.get"
+  | "folderData.set"
+  | "folderData.delete"
   | "mods.list"
   | "mods.install"
   | "mods.remove"
@@ -280,6 +285,11 @@ export type CallParams = {
   "drag.move": { x: number; y: number; ctrl: boolean; shift: boolean };
   /** ボタンを離した（cancel は Esc でやめたとき）。ランタイムが自動で送る */
   "drag.end": { x: number; y: number; ctrl: boolean; shift: boolean; cancel: boolean };
+  /** folder についてのデータ（フォルダの中の .explorer_plus/view.<ビューの id>.json）。無ければ undefined。
+   *  フォルダを明示するのは、フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入るようにするため */
+  "folderData.get": { folder: EntryRef };
+  "folderData.set": { folder: EntryRef; value: unknown };
+  "folderData.delete": { folder: EntryRef };
   "mods.list": Record<string, never>;
   /** 本体が zip を選ぶ画面と、確かめの画面を出す */
   "mods.install": Record<string, never>;
@@ -331,6 +341,9 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "drag.targets": null,
   "drag.move": null,
   "drag.end": null,
+  "folderData.get": "folderData",
+  "folderData.set": "folderData",
+  "folderData.delete": "folderData",
   "mods.list": null,
   "mods.install": null,
   "mods.remove": null,

@@ -22,6 +22,7 @@ const USE_LABELS: Record<Use, string> = {
   quickAccess: "クイックアクセス（見る・ピン留めする）",
   recent: "最近使った項目",
   thumbnails: "画像の縮小表示",
+  folderData: "フォルダの中に、このビューのデータを保存する（同期すれば別の PC でも使える）",
 };
 
 export type ModInfo = {
@@ -184,8 +185,9 @@ export class ModManager {
     this.host.openFolder(info.dir);
   }
 
-  openDocs(): Promise<void> {
-    return backend.openModDocs();
+  /** MOD 開発ガイドのフォルダを、アプリの新しいタブで開く（guide.md・index.html が入っている） */
+  async openDocs(): Promise<void> {
+    this.host.openFolder(await backend.modDocsDir());
   }
 
   openDevtools(): Promise<void> {

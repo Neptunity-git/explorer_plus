@@ -363,11 +363,10 @@ pub fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
 }
 
-/// アプリに同梱した MOD 開発ガイドを、既定のブラウザで開く
+/// アプリに同梱した MOD 開発ガイドのフォルダ（ホームの「MOD 開発ガイド」で、アプリの新しいタブに開く）
 #[tauri::command]
-pub fn open_mod_docs(app: AppHandle) -> Result<(), String> {
-    let p = builtin_root(&app, "mod-docs").join("index.html");
-    tauri_plugin_opener::open_path(p, None::<&str>).map_err(io_err)
+pub fn mod_docs_dir(app: AppHandle) -> String {
+    builtin_root(&app, "mod-docs").to_string_lossy().into_owned()
 }
 
 // ---------------------------------------------------------------- 開発中の MOD の見張り（ホットリロード）

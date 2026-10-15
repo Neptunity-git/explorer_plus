@@ -78,6 +78,7 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `timetable` | 開いている学校のフォルダの時間割（見る・書き換える） | 軽い |
 | `quickAccess` | クイックアクセス（見る・ピン留めする） | 軽い |
 | `recent` | このアプリで最近開いたファイル | 軽い |
+| `folderData` | `folderData`：フォルダについてのデータを、そのフォルダの中に保存する（下の「フォルダの中に保存」） | 軽い |
 
 保存（`storage`）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。
 
@@ -133,6 +134,24 @@ const keys = await ep.storage.keys();
 ```
 
 > フォルダごとに何かを覚えるときは、キーに `folder.id`（ファイルID）を使うと、フォルダの名前を変えたり動かしたりしても同じものが出ます。ID の無いドライブ（FAT の USB メモリなど）では `id` が空なので、パスで代わりにします：`` const key = `note:${folder.id || folder.path.toLowerCase()}`; ``
+
+### フォルダの中に保存（folderData）
+
+「このフォルダについてのメモや配置」のように、フォルダと一緒に持ち歩きたいデータは、`folderData` でそのフォルダの中に保存できます（uses に `folderData`）。
+フォルダの中の隠しフォルダ `.explorer_plus` に入るので、**OneDrive などで同期すると、別の PC の explorer_plus でも同じものが出ます**。フォルダを人に渡すと、データも一緒に渡ります。
+
+```js
+ep.onFolder(async (folder) => {
+  const data = await ep.folderData.get(folder);        // 無ければ undefined
+  // …
+  await ep.folderData.set(folder, { layout: [] });      // JSON にできる値。1MB まで
+});
+await ep.folderData.delete(folder);
+```
+
+- 引数の `folder` は、`onFolder` で届いたフォルダ（`{ id, path }` があればよい）。フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入ります
+- 書けないフォルダ（`C:\` の直下など）では、代わりにこのビューの保存場所に置きます（`get` で同じように読めます）
+- 別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます
 
 ### メニュー
 

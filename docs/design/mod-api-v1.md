@@ -295,3 +295,17 @@ id が `builtin.` で始まる標準のビュー（ホーム）だけが使え�
 
 - 開発中の MOD（`source: "dev"`）：本体に登録した任意の場所のフォルダ。保存すると、その MOD を使っているタブのビューを作り直す
 - 作者向けの説明書：`work/app/mod-docs/index.html`（アプリに同梱）
+
+## 2026-10-15（2回目）の追加（ADR 0022）
+
+### フォルダの中に置くデータ（uses に `folderData`）
+
+| メソッド | 引数 | 返り値 |
+|---|---|---|
+| `folderData.get` | `{ folder: EntryRef }` | 保存した値。無ければ undefined |
+| `folderData.set` | `{ folder: EntryRef, value }`（JSON にできる値。1MB まで） | なし |
+| `folderData.delete` | `{ folder: EntryRef }` | なし |
+
+- 置き場所は `folder` の中の `.explorer_plus/view.<ビューの id>.json`（`.explorer_plus` は隠しフォルダ）。OneDrive などで同期すれば、別の PC でも同じものが出る
+- `folder` のファイルID が今のものと合わなければ（別のものに入れ替わった）失敗する。書けないフォルダでは、このビューの保存場所（キー `folderData:<ファイルID かパス>`）に置く
+- 本体は `.explorer_plus` と、隠し＋システムの項目（desktop.ini など）を、フォルダの一覧（entries）に入れない。ほかの隠し項目は `hidden: true` で入れる

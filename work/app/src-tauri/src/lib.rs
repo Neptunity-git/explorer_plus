@@ -2,6 +2,7 @@
 // エラーは "<code>: <説明>" の文字列で返す。code は MOD の API のエラーと同じ（not-found・denied・invalid・io など）。
 
 mod archive;
+mod folderdata;
 mod fsops;
 mod geo;
 mod icons;
@@ -86,7 +87,11 @@ pub fn run() {
             modinstall::dev_mod_create,
             modinstall::mod_pack,
             modinstall::pick_mod_zip,
-            modinstall::open_mod_docs,
+            modinstall::mod_docs_dir,
+            transfer::cursor_over_app,
+            folderdata::folder_data_read,
+            folderdata::folder_data_write,
+            folderdata::folder_data_delete,
             modinstall::open_devtools,
             transfer::open_with,
             geo::get_location,

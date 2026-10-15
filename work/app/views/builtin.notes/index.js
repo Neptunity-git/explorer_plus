@@ -3,7 +3,8 @@
 // - 子フォルダ：アイコン付きで平面に出てくる。好きな所へ動かせる。ダブルクリックでズームインして、そのフォルダのノートへ
 // - 描く：矢印・線（付箋やフォルダにつなぐと、動かしてもついてくる）・ペン・四角・丸。色も選べる
 // - 拡大・縮小：Ctrl+ホイール、上の [−] [＋]、Ctrl+0 で 100%
-// 保存はこのビューの保存場所（ep.storage）に、フォルダのファイルID ごと。名前変更・移動しても同じノートが出る。
+// 保存はそのフォルダの中（ep.folderData → .explorer_plus/view.builtin.notes.json。ADR 0022）。OneDrive などで同期すれば、
+// 別の PC でも同じノートが出る。名前変更・移動しても、フォルダについていく。
 import { createMdEditor } from "./md-editor.js";
 
 const ep = window.explorerPlus;
@@ -84,7 +85,9 @@ function say(text, error = false) {
 
 // ---------------------------------------------------------------- 保存・やり直し
 
+/** 今のフォルダの印（同じフォルダの読み直しかを見分ける）。以前はこの名前で、このビューの保存場所に置いていた */
 const keyOf = (f) => `canvas:${f.id || f.path.toLowerCase()}`;
+/** もっと前の形（1ページの文章）の保存場所のキー */
 const oldKeyOf = (f) => `note:${f.id || f.path.toLowerCase()}`;
 
 function changed() {
@@ -99,7 +102,7 @@ async function save() {
   if (!dirty || !key) return;
   dirty = false;
   try {
-    await ep.storage.set(key, { v: 1, cards: doc.cards, shapes: doc.shapes, cam });
+    await ep.folderData.set(folder, { v: 1, cards: doc.cards, shapes: doc.shapes, cam });
   } catch (err) {
     dirty = true;
     say(err.code === "too-large" ? "ノートが大きすぎて保存できません（1MB まで。ペンの線を減らしてください）" : `保存できませんでした：${err.message}`, true);
@@ -528,11 +531,14 @@ function renameFolderCard(c) {
 
 /** フォルダの中身から、子フォルダのカードを合わせる（増えたら空いている所に置き、消えたらカードも消す） */
 function syncFolderCards() {
-  const dirs = folder.entries.filter((e) => e.kind === "folder" && !e.hidden);
+  const dirs = folder.entries.filter((e) => e.kind === "folder");
   const keep = new Set();
   let added = false;
   for (const e of dirs) {
-    let c = doc.cards.find((x) => x.kind === "folder" && (e.id ? x.fid === e.id : x.path === e.path));
+    // ファイルID で探し、無ければ名前で探す（別の PC ではファイルID が違うので、同期したノートは名前で合わせる）
+    let c =
+      doc.cards.find((x) => x.kind === "folder" && !keep.has(x.id) && e.id && x.fid === e.id) ||
+      doc.cards.find((x) => x.kind === "folder" && !keep.has(x.id) && x.name === e.name && !dirs.some((d) => d.id && d.id === x.fid));
     if (!c) {
       const p = pendingPlace && pendingPlace.id === e.id ? pendingPlace : freeSlot();
       if (pendingPlace && pendingPlace.id === e.id) pendingPlace = null;
@@ -540,6 +546,7 @@ function syncFolderCards() {
       doc.cards.push(c);
       added = true;
     }
+    c.fid = e.id;
     c.path = e.path;
     c.name = e.name;
     keep.add(c.id);
@@ -897,12 +904,15 @@ document.addEventListener("pointerdown", (e) => {
 let prev = null;
 
 async function load(f) {
-  const saved = await ep.storage.get(keyOf(f)).catch(() => undefined);
+  const saved = await ep.folderData.get(f).catch(() => undefined);
   if (saved && Array.isArray(saved.cards)) return { doc: { cards: saved.cards, shapes: saved.shapes || [] }, cam: saved.cam || null };
+  // 以前はこのビューの保存場所に置いていた。あれば、フォルダの中へ移す
+  const local = await ep.storage.get(keyOf(f)).catch(() => undefined);
+  if (local && Array.isArray(local.cards)) return { doc: { cards: local.cards, shapes: local.shapes || [] }, cam: local.cam || null, migrated: keyOf(f) };
   // 以前の形（1ページの文章）のノートがあれば、付箋1枚にして引き継ぐ
   const old = await ep.storage.get(oldKeyOf(f)).catch(() => undefined);
   if (old && typeof old.text === "string" && old.text.trim()) {
-    return { doc: { cards: [{ id: uid(), kind: "text", x: 0, y: -260, w: 420, h: 220, text: old.text }], shapes: [] }, cam: null, migrated: true };
+    return { doc: { cards: [{ id: uid(), kind: "text", x: 0, y: -260, w: 420, h: 220, text: old.text }], shapes: [] }, cam: null, migrated: oldKeyOf(f) };
   }
   return { doc: { cards: [], shapes: [] }, cam: null };
 }
@@ -937,7 +947,8 @@ ep.onFolder(async (f) => {
   if (changedCards || loaded.migrated) {
     dirty = true;
     await save();
-    if (loaded.migrated) await ep.storage.delete(oldKeyOf(f)).catch(() => {});
+    // 移し終えたら、古い場所のものは消す（保存できなかったら残す）
+    if (loaded.migrated && !dirty) await ep.storage.delete(loaded.migrated).catch(() => {});
   }
   // 入る・出るのアニメーション
   const goingIn = from && f.parentPath && f.parentPath.toLowerCase() === from.path.toLowerCase();

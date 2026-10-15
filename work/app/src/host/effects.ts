@@ -16,7 +16,8 @@ export function blockBackground(): () => void {
 }
 
 /** 「はい」なら true。Enter で決定、Esc でやめる */
-export function confirmDialog(message: string, okLabel: string): Promise<boolean> {
+/** 確かめの画面。Enter（または confirmKey のキー）で決める、Esc でやめる */
+export function confirmDialog(message: string, okLabel: string, confirmKey?: string): Promise<boolean> {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
     backdrop.className = "dialog-backdrop";
@@ -50,6 +51,9 @@ export function confirmDialog(message: string, okLabel: string): Promise<boolean
       if (e.key === "Escape") {
         e.preventDefault();
         done(false);
+      } else if (confirmKey && e.key === confirmKey && !e.repeat) {
+        e.preventDefault();
+        done(true);
       }
     };
     document.addEventListener("keydown", onKey, true);

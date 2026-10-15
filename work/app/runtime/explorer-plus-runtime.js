@@ -222,6 +222,14 @@
     recent: Object.freeze({
       list: () => call("recent.list"),
     }),
+    // ↓ 2026-10-15 に追加（フォルダの中に置くデータ。ADR 0022）。uses に "folderData" が要る。
+    // フォルダについてのデータを、そのフォルダの中（.explorer_plus）に保存する。OneDrive などで同期すれば別の PC でも出る。
+    // folder は onFolder で届いたフォルダ（{ id, path } があればよい）
+    folderData: Object.freeze({
+      get: (folder) => call("folderData.get", { folder: toRef(folder) }),
+      set: (folder, value) => call("folderData.set", { folder: toRef(folder), value }).then(() => undefined),
+      delete: (folder) => call("folderData.delete", { folder: toRef(folder) }).then(() => undefined),
+    }),
     // ↓ 2026-10-15 に追加（MOD の管理。ADR 0020）。標準のビュー（ホーム）だけが使える。ほかの MOD が呼ぶと code "denied" で失敗する
     mods: Object.freeze({
       list: () => call("mods.list"),

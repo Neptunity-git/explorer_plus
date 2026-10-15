@@ -304,6 +304,20 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { x, y, ctrl, shift, cancel } };
     }
 
+    case "folderData.get":
+    case "folderData.delete": {
+      const folder = parseRef(params.folder);
+      if (!folder.ok) return { ok: false };
+      return { ok: true, params: { folder: folder.ref } };
+    }
+
+    case "folderData.set": {
+      // 値の中身（JSON にできるか・大きさ）は本体が checkStorageValue で確かめる
+      const folder = parseRef(params.folder);
+      if (!folder.ok || !("value" in params)) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, value: params.value } };
+    }
+
     case "mods.list":
     case "mods.install":
     case "mods.addDev":

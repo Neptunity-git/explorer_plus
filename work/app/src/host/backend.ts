@@ -63,7 +63,6 @@ export const backend = {
   devModAdd: () => call<string | null>("dev_mod_add"),
   devModCreate: (name: string) => call<string | null>("dev_mod_create", { name }),
   modPack: (id: string) => call<string>("mod_pack", { id }),
-  openModDocs: () => call<void>("open_mod_docs"),
   openDevtools: () => call<void>("open_devtools"),
   userModsDir: () => call<string>("user_mods_dir"),
   viewStorageLoad: (viewId: string) => call<string | null>("view_storage_load", { viewId }),
@@ -87,6 +86,14 @@ export const backend = {
   transferPaths: (paths: string[], dest: string, effect: "move" | "copy") => call<number>("transfer_paths", { paths, dest, effect }),
   /** 見張るフォルダを、まるごと置き換える。変わると "folder-changed" が届く */
   watchFolders: (paths: string[]) => call<void>("watch_folders", { paths }),
+  // ↓ フォルダの中に置くデータ（.explorer_plus/<name>.json。ADR 0022）。無ければ null
+  folderDataRead: (folder: EntryRef, name: string) => call<string | null>("folder_data_read", { folder, name }),
+  folderDataWrite: (folder: EntryRef, name: string, text: string) => call<void>("folder_data_write", { folder, name, text }),
+  folderDataDelete: (folder: EntryRef, name: string) => call<void>("folder_data_delete", { folder, name }),
+  /** マウスの下の窓が、このアプリの窓か（ドラッグ中、ほかの窓が重なっているときに外へ出たと分かるように） */
+  cursorOverApp: () => call<boolean>("cursor_over_app"),
+  /** 同梱の MOD 開発ガイドのフォルダ */
+  modDocsDir: () => call<string>("mod_docs_dir"),
   /** OneDrive の中のファイル・フォルダか */
   onedriveContains: (item: EntryRef) => call<boolean>("onedrive_contains", { item }),
   /** OneDrive の操作。Windows のメニューの項目を呼び、画面は OneDrive が出す */

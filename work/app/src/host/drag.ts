@@ -22,6 +22,8 @@ export interface DragHost {
   drop(items: EntryRef[], dest: string, effect: "move" | "copy"): Promise<void>;
   /** マウスが本体の外へ出た：Windows のドラッグに切り替えて、普通のエクスプローラなどへ落とせるようにする（ADR 0016） */
   dragOut(items: EntryRef[]): Promise<void>;
+  /** マウスの下の窓が、このアプリの窓か（ほかの窓が重なっていると、範囲の中でも「外」） */
+  cursorOverApp(): Promise<boolean>;
 }
 
 type Hit = { dest: string; label: string; box: Rect; tabId?: string };
@@ -47,6 +49,9 @@ export class DragController {
   private lastEffect: "move" | "copy" | null = null;
   /** 本体の外（普通のエクスプローラなど）から持ってきたドラッグか。外へ出し直すことはしない */
   private external = false;
+  /** マウスの下の窓を確かめている途中か・最後に確かめた時刻（確かめすぎないように） */
+  private checking = false;
+  private lastCheck = 0;
 
   constructor(private readonly host: DragHost) {}
 
@@ -125,6 +130,24 @@ export class DragController {
       this.cancel();
       void this.host.dragOut(items);
       return;
+    }
+    // Chrome などの窓がアプリの窓に重なっていると、マウスは範囲の中でも、実際はその窓の上にある。
+    // 少しおきに Windows に確かめ、ほかの窓の上なら、そこで Windows のドラッグに切り替える（ADR 0016）
+    if (!this.external && !this.checking && performance.now() - this.lastCheck > 120) {
+      this.lastCheck = performance.now();
+      this.checking = true;
+      const items = this.items;
+      const token = this.ghost;
+      void this.host.cursorOverApp().then(
+        (over) => {
+          this.checking = false;
+          if (!over && this.ghost === token) {
+            this.cancel();
+            void this.host.dragOut(items);
+          }
+        },
+        () => (this.checking = false),
+      );
     }
     const hit = this.hitTest(x, y);
     this.watchTab(hit);

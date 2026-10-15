@@ -145,6 +145,16 @@ declare global {
         keys(): Promise<string[]>;
       };
 
+      /**
+       * uses に "folderData" が要る（ADR 0022）。フォルダ（onFolder で届いたもの）についてのデータ（JSON にできる値。1MB まで）を、
+       * フォルダの中の隠しフォルダ .explorer_plus に保存する。OneDrive などで同期すれば、別の PC の explorer_plus でも同じものが出る。
+       * 書けないフォルダ（C:\ の直下など）では、代わりにこのビューの保存場所に置く。無ければ get は undefined
+       */
+      readonly folderData: {
+        get(folder: EntryRef): Promise<unknown>;
+        set(folder: EntryRef, value: unknown): Promise<void>;
+        delete(folder: EntryRef): Promise<void>;
+      };
       /** uses に "tree" が要る */
       getTree(opts?: { depth?: number }): Promise<TreeNode>;
       /** uses に "links" が要る。見つからなければ null */

@@ -128,6 +128,16 @@ export class ViewHost {
     return { id: this.folder.id, path: this.folder.path };
   }
 
+  /** フォルダの中のデータの名前（.explorer_plus/view.<ビューの id>.json） */
+  private folderDataName(): string {
+    return `view.${this.view.manifest.id}`;
+  }
+
+  /** フォルダに書けないときの、このビューの保存場所のキー */
+  private folderDataKey(f: EntryRef): string {
+    return `folderData:${f.id || f.path.toLowerCase()}`;
+  }
+
   private pushTimetable() {
     if (this.isReady && this.folder) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "timetable", data: timetableService.get(this.folderRef()) });
   }
@@ -289,6 +299,33 @@ export class ViewHost {
         return store.delete(p.key);
       case "storage.keys":
         return store.keys();
+      // フォルダの中に置くデータ（ADR 0022）。書けないフォルダ（C:\ の直下など）なら、このビューの保存場所に置く
+      case "folderData.get": {
+        const text = await backend.folderDataRead(p.folder, this.folderDataName()).catch(() => null);
+        if (text) {
+          try {
+            return JSON.parse(text);
+          } catch {
+            // 壊れていたら、無いことにする
+          }
+        }
+        return store.get(this.folderDataKey(p.folder));
+      }
+      case "folderData.set": {
+        const bad = checkStorageValue(p.value);
+        if (bad) throw new HostError(bad);
+        try {
+          await backend.folderDataWrite(p.folder, this.folderDataName(), JSON.stringify(p.value));
+          return store.delete(this.folderDataKey(p.folder));
+        } catch (e) {
+          // フォルダが無い・別のものに入れ替わった（ファイルID が違う）ときは、保存しない
+          if (e instanceof BackendError && (e.apiError.code === "not-found" || e.apiError.message.startsWith("id does not match"))) throw e;
+          return store.set(this.folderDataKey(p.folder), p.value);
+        }
+      }
+      case "folderData.delete":
+        await backend.folderDataDelete(p.folder, this.folderDataName()).catch(() => {});
+        return store.delete(this.folderDataKey(p.folder));
       case "getTree":
         return this.buildTree(p.depth);
       case "resolve": {

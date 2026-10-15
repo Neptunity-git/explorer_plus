@@ -47,3 +47,5 @@ input.rename {
 .tile-img { width: 96px; height: 96px; object-fit: contain; }
 .tile .name-cell { justify-content: center; max-width: 100%; }
 .tile .name-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; text-align: center; word-break: break-all; font-size: 12px; }
+/* 隠しファイル・フォルダは少し薄く（Win11 と同じ） */
+.item.is-hidden { opacity: 0.6; }

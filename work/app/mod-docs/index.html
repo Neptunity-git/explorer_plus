@@ -64,15 +64,16 @@
   <a class="sub" href="#s7">基本</a>
   <a class="sub" href="#s8">ファイルの操作</a>
   <a class="sub" href="#s9">保存</a>
-  <a class="sub" href="#s10">メニュー</a>
-  <a class="sub" href="#s11">クリップボード・ドラッグ</a>
-  <a class="sub" href="#s12">タグ・時間割・ほか</a>
-  <a class="sub" href="#s13">データの形</a>
-  <a class="sub" href="#s14">エラー</a>
-  <a href="#s15">見た目（TUI キット）</a>
-  <a href="#s16">安全の決まり</a>
-  <a href="#s17">配る</a>
-  <a href="#s18">ヒント</a>
+  <a class="sub" href="#s10">フォルダの中に保存（folderData）</a>
+  <a class="sub" href="#s11">メニュー</a>
+  <a class="sub" href="#s12">クリップボード・ドラッグ</a>
+  <a class="sub" href="#s13">タグ・時間割・ほか</a>
+  <a class="sub" href="#s14">データの形</a>
+  <a class="sub" href="#s15">エラー</a>
+  <a href="#s16">見た目（TUI キット）</a>
+  <a href="#s17">安全の決まり</a>
+  <a href="#s18">配る</a>
+  <a href="#s19">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -234,6 +235,11 @@
 <td>このアプリで最近開いたファイル</td>
 <td>軽い</td>
 </tr>
+<tr>
+<td><code>folderData</code></td>
+<td><code>folderData</code>：フォルダについてのデータを、そのフォルダの中に保存する（下の「フォルダの中に保存」）</td>
+<td>軽い</td>
+</tr>
 </tbody></table>
 <p>保存（<code>storage</code>）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。</p>
 <h2 id="s6">API</h2>
@@ -278,7 +284,22 @@ const keys = await ep.storage.keys();
 </code></pre>
 <blockquote><p>フォルダごとに何かを覚えるときは、キーに <code>folder.id</code>（ファイルID）を使うと、フォルダの名前を変えたり動かしたりしても同じものが出ます。ID の無いドライブ（FAT の USB メモリなど）では <code>id</code> が空なので、パスで代わりにします：<code>const key = `note:${folder.id || folder.path.toLowerCase()}`;</code></p>
 </blockquote>
-<h3 id="s10">メニュー</h3>
+<h3 id="s10">フォルダの中に保存（folderData）</h3>
+<p>「このフォルダについてのメモや配置」のように、フォルダと一緒に持ち歩きたいデータは、<code>folderData</code> でそのフォルダの中に保存できます（uses に <code>folderData</code>）。
+フォルダの中の隠しフォルダ <code>.explorer_plus</code> に入るので、<strong>OneDrive などで同期すると、別の PC の explorer_plus でも同じものが出ます</strong>。フォルダを人に渡すと、データも一緒に渡ります。</p>
+<pre><code class="language-js">ep.onFolder(async (folder) =&gt; {
+  const data = await ep.folderData.get(folder);        // 無ければ undefined
+  // …
+  await ep.folderData.set(folder, { layout: [] });      // JSON にできる値。1MB まで
+});
+await ep.folderData.delete(folder);
+</code></pre>
+<ul>
+<li>引数の <code>folder</code> は、<code>onFolder</code> で届いたフォルダ（<code>{ id, path }</code> があればよい）。フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入ります</li>
+<li>書けないフォルダ（<code>C:\</code> の直下など）では、代わりにこのビューの保存場所に置きます（<code>get</code> で同じように読めます）</li>
+<li>別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます</li>
+</ul>
+<h3 id="s11">メニュー</h3>
 <pre><code class="language-js">el.oncontextmenu = async (e) =&gt; {
   e.preventDefault();
   const { chosen } = await ep.showMenu({
@@ -290,7 +311,7 @@ const keys = await ep.storage.keys();
 };
 </code></pre>
 <p><code>items</code> を空にして <code>extra</code> だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。</p>
-<h3 id="s11">クリップボード・ドラッグ</h3>
+<h3 id="s12">クリップボード・ドラッグ</h3>
 <pre><code class="language-js">await ep.clipboard.copy([entry]);   // Windows のエクスプローラと同じ形式。エクスプローラにも貼り付けられる
 await ep.clipboard.cut([entry]);
 const { count } = await ep.clipboard.paste();   // 開いているフォルダへ
@@ -303,7 +324,7 @@ el.onpointermove = (e) =&gt; {
 ep.onDragTargets(() =&gt; ep.drag.targets(folderTargets()));   // ドラッグ中にこのタブへ切り替わったとき
 // folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）
 </code></pre>
-<h3 id="s12">タグ・時間割・ほか</h3>
+<h3 id="s13">タグ・時間割・ほか</h3>
 <pre><code class="language-js">// uses: [&quot;tags&quot;]
 const tags = await ep.tags.list();                    // [{ id, name, color: &quot;#rrggbb&quot; }]
 const tag = await ep.tags.create(&quot;提出物&quot;, &quot;#e5484d&quot;);
@@ -323,7 +344,7 @@ const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();
 </code></pre>
 <p>すべての関数と型は、ひな形に入っている <code>explorer-plus.d.ts</code> にあります。迷ったらそちらが正しいです。</p>
-<h3 id="s13">データの形</h3>
+<h3 id="s14">データの形</h3>
 <pre><code class="language-ts">type Entry = {
   id: string;          // ファイルID。名前変更・移動で変わらない（ID の無いドライブでは &quot;&quot;）
   name: string;        // &quot;report.docx&quot;
@@ -341,7 +362,7 @@ const recent = await ep.recent.list();
 type EntryRef = { id: string; path: string };   // 保存しておくときは、この2つだけ覚える
 </code></pre>
 <p><code>entries</code> の並びは、フォルダが先、次にファイル。それぞれ名前の自然な順（<code>file2</code> が <code>file10</code> より前）です。</p>
-<h3 id="s14">エラー</h3>
+<h3 id="s15">エラー</h3>
 <p>失敗した Promise は <code>Error</code> になり、<code>code</code> に次のどれかが入ります。</p>
 <table>
 <thead>
@@ -385,7 +406,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
   if (err.code !== &quot;denied&quot;) showMessage(`ごみ箱へ送れませんでした：${err.message}`);
 }
 </code></pre>
-<h2 id="s15">見た目（TUI キット）</h2>
+<h2 id="s16">見た目（TUI キット）</h2>
 <p>標準のビューと同じ見た目の部品を使えます（使わなくてもかまいません）。明るい・暗い画面にも自動で合います。</p>
 <pre><code class="language-js">// CSS：色の変数（--tui-fg・--tui-dim・--tui-line・--tui-accent・--tui-warn・--tui-bg）と部品のクラス
 document.head.append(Object.assign(document.createElement(&quot;link&quot;), { rel: &quot;stylesheet&quot;, href: &quot;/__runtime/tui.css&quot; }));
@@ -400,7 +421,7 @@ import { ask, pick, pickColor, confirm, button, PALETTE } from &quot;/__runtime/
 const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; });          // やめたら null
 </code></pre>
 <p>操作は<strong>マウス（左右のクリック）が主、キーボードは補助</strong>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
-<h2 id="s16">安全の決まり</h2>
+<h2 id="s17">安全の決まり</h2>
 <ul>
 <li><strong>通信できるのは自分の MOD のフォルダだけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。インターネット上のライブラリ・フォント・画像は読めません。使うものは MOD のフォルダに入れてください（ライブラリは1つのファイルにまとめると楽です）</li>
 <li>画像は、自分のフォルダ・アイコンと縮小画像の URL・<code>data:</code>・<code>blob:</code> が使えます。WebAssembly と Web Worker（<code>blob:</code>）も使えます</li>
@@ -410,7 +431,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ul>
 <blockquote class="warn"><p><strong>入れる人は、あなたの MOD を信頼して入れます。</strong> <code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</p>
 </blockquote>
-<h2 id="s17">配る</h2>
+<h2 id="s18">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -418,7 +439,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s18">ヒント</h2>
+<h2 id="s19">ヒント</h2>
 <ul>
 <li><strong>開発者ツール</strong>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールに出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
 <li><strong>大きなフォルダ</strong>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>

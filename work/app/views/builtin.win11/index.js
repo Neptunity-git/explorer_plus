@@ -99,8 +99,8 @@ function report(err) {
 }
 
 function sortedRows() {
-  // 隠しファイルは、Windows の既定と同じく表示しない
-  const visible = folder.entries.filter((e) => !e.hidden);
+  // 隠しファイルも出す（少し薄く。発案者の希望。Windows のシステムファイルと .explorer_plus は本体が一覧から外している）
+  const visible = folder.entries;
   if (sort.key === "name") return sort.dir === 1 ? visible : [...visible].reverse();
   const value = {
     modified: (e) => e.modified ?? 0,
@@ -139,7 +139,7 @@ function renderTiles() {
   grid.className = "tiles";
   rows.forEach((e, i) => {
     const tile = document.createElement("div");
-    tile.className = "tile item";
+    tile.className = `tile item${e.hidden ? " is-hidden" : ""}`;
     tile.dataset.index = String(i);
     tile.title = e.name;
     if (selected.has(e.path)) tile.classList.add("selected");
@@ -192,7 +192,7 @@ function render() {
   const body = table.createTBody();
   rows.forEach((e, i) => {
     const tr = body.insertRow();
-    tr.className = "item";
+    tr.className = `item${e.hidden ? " is-hidden" : ""}`;
     tr.dataset.index = String(i);
     if (selected.has(e.path)) tr.classList.add("selected");
     const name = tr.insertCell();

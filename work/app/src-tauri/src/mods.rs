@@ -70,7 +70,7 @@ fn valid_entry(entry: &str) -> bool {
 pub(crate) fn builtin_root(app: &AppHandle, name: &str) -> PathBuf {
     if cfg!(debug_assertions) {
         // 開発中は、ソースのフォルダを直接見る（保存すればすぐ反映される）
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join(name)
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().map(|p| p.join(name)).unwrap_or_default()
     } else {
         app.path().resource_dir().unwrap_or_default().join(name)
     }

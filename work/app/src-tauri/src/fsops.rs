@@ -120,6 +120,15 @@ pub fn read_dir(dir: &Path) -> Result<Vec<RawEntry>, String> {
     }
 }
 
+/// フォルダの一覧に出すか（ADR 0022）。隠し項目は出すが、次は出さない：
+/// - このアプリがフォルダの中に置くデータ（.explorer_plus）
+/// - 隠し＋システムの項目（desktop.ini など。Win11 でも「保護されたシステムファイル」として普段は見えない）
+pub(crate) fn listed(name: &str, attrs: u32) -> bool {
+    use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SYSTEM;
+    let protected = attrs & FILE_ATTRIBUTE_HIDDEN.0 != 0 && attrs & FILE_ATTRIBUTE_SYSTEM.0 != 0;
+    !protected && !name.eq_ignore_ascii_case(crate::folderdata::DATA_DIR)
+}
+
 fn read_dir_bulk(dir: &Path) -> Result<Vec<RawEntry>, String> {
     let f = open_for_attributes(dir, FILE_LIST_DIRECTORY).map_err(|e| e.to_string())?;
     let volume = handle_id_info(&f).map_err(|e| e.to_string())?.VolumeSerialNumber;
@@ -150,7 +159,7 @@ fn read_dir_bulk(dir: &Path) -> Result<Vec<RawEntry>, String> {
             ) as *const u16 };
             let name_u16 = unsafe { std::slice::from_raw_parts(name_ptr, name_len) };
             let name = std::ffi::OsString::from_wide(name_u16).to_string_lossy().into_owned();
-            if name != "." && name != ".." {
+            if name != "." && name != ".." && listed(&name, info.FileAttributes) {
                 let attrs = info.FileAttributes;
                 let is_dir = attrs & FILE_ATTRIBUTE_DIRECTORY.0 != 0;
                 out.push(RawEntry {
@@ -180,6 +189,9 @@ fn read_dir_fallback(dir: &Path) -> Result<Vec<RawEntry>, String> {
         let Ok(meta) = item.metadata() else { continue };
         let path = item.path();
         let is_dir = meta.is_dir();
+        if !listed(&item.file_name().to_string_lossy(), meta.file_attributes()) {
+            continue;
+        }
         out.push(RawEntry {
             id: file_id(&path).unwrap_or_default(),
             name: item.file_name().to_string_lossy().into_owned(),

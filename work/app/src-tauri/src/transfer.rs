@@ -241,6 +241,22 @@ pub async fn transfer_paths(window: tauri::WebviewWindow, paths: Vec<String>, de
     .map_err(|e| e.to_string())?
 }
 
+/// マウスの下にある窓が、このアプリの窓か（ADR 0016）。ドラッグ中、ほかのアプリの窓（Chrome など）がアプリの窓に
+/// 重なっていると、マウスはアプリの窓の範囲の中にあるので「外へ出た」と分からない。そのときに Windows のドラッグへ切り替えるために使う
+#[tauri::command]
+pub fn cursor_over_app(window: tauri::WebviewWindow) -> bool {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetCursorPos, WindowFromPoint, GA_ROOT};
+    let Some(own) = owner_hwnd(&window) else { return true };
+    let mut pt = POINT::default();
+    unsafe {
+        if GetCursorPos(&mut pt).is_err() {
+            return true;
+        }
+        GetAncestor(WindowFromPoint(pt), GA_ROOT) == own
+    }
+}
+
 /// ドラッグの「持ち主」側の約束事。ボタンを離したら落とす・Esc で取りやめる
 #[windows::core::implement(IDropSource)]
 struct DragSource;

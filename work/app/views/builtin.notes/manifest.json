@@ -1,12 +1,13 @@
 {
   "id": "builtin.notes",
   "name": "ノート",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "apiVersion": 1,
   "entry": "index.js",
   "uses": [
     "entries",
-    "icons"
+    "icons",
+    "folderData"
   ],
   "location": "folder",
   "description": "フォルダごとに1枚の平面。付箋（Markdown）・子フォルダ・矢印や線を自由に置ける（ADR 0019）"

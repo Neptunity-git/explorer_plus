@@ -201,6 +201,7 @@ export class App {
     keepAlive: (pane) => {
       for (const t of this.tabs) t.pane.classList.toggle("drag-keep", t.pane === pane);
     },
+    cursorOverApp: () => backend.cursorOverApp(),
     dragOut: async (items) => {
       try {
         // マウスが本体の外へ出た。ここから先は Windows のドラッグ（落とされるまで戻らない）
@@ -319,6 +320,13 @@ export class App {
     document.addEventListener("pointermove", (e) => this.drag.active && this.drag.move(e.clientX, e.clientY, e.ctrlKey, e.shiftKey));
     document.addEventListener("pointerup", (e) => this.drag.active && void this.drag.end(e.clientX, e.clientY, e.ctrlKey, e.shiftKey, false));
     void listen<string>("folder-changed", (e) => this.onFolderChanged(e.payload));
+    // アプリの窓に戻ってきたら、時間割を読み直す（別の PC で書き換えて、OneDrive などの同期で届いたとき。ADR 0022）
+    let lastRefresh = 0;
+    window.addEventListener("focus", () => {
+      if (Date.now() - lastRefresh < 5000) return;
+      lastRefresh = Date.now();
+      void timetableService.refresh();
+    });
     // 開発中の MOD のフォルダが保存されたら、その MOD を読み直す（ホットリロード。ADR 0020）
     void listen<string>("mod-changed", (e) => this.mods.devChanged(e.payload));
 
@@ -717,6 +725,8 @@ export class App {
       tab.forward = [];
     }
     tab.setFolder(folder);
+    // 別の PC で作った時間割（フォルダの中のファイル）があれば見つける（ADR 0022）
+    void timetableService.discover({ id: folder.id, path: folder.path });
     if (tab === this.active) this.updateChrome();
     this.syncWatch();
   }
@@ -805,7 +815,8 @@ export class App {
   async trash(tab: Tab, refs: EntryRef[], from?: Rect): Promise<number> {
     const names = refs.map((r) => r.path.split("\\").pop() ?? r.path);
     const message = refs.length === 1 ? `「${names[0]}」をごみ箱へ送りますか？` : `${refs.length} 個の項目をごみ箱へ送りますか？`;
-    if (!(await confirmDialog(message, "ごみ箱へ送る"))) {
+    // もう一度 Delete を押しても「ごみ箱へ送る」になる（Delete を2回で消せる）
+    if (!(await confirmDialog(message, "ごみ箱へ送る", "Delete"))) {
       throw new BackendError({ code: "denied", message: "cancelled by user" });
     }
     playTrash(from);
