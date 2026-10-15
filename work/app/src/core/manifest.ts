@@ -1,5 +1,6 @@
 import { USES, SUPPORTED_API_VERSIONS, type Manifest, type Use } from "../api/types";
 import { checkSettings } from "./settings";
+import { checkNetwork } from "./network";
 
 export type ManifestResult =
   | { ok: true; manifest: Manifest }
@@ -166,6 +167,7 @@ export function validateManifest(
   const description = checkDescription(raw.description, errors);
   const location = checkLocation(raw.location, errors);
   const settings = checkSettings(raw.settings, errors);
+  const network = checkNetwork(raw.network, errors);
 
   if (errors.length > 0) {
     return { ok: false, errors };
@@ -187,6 +189,9 @@ export function validateManifest(
   }
   if (settings !== undefined && settings.length > 0) {
     manifest.settings = settings;
+  }
+  if (network !== undefined && network.length > 0) {
+    manifest.network = network;
   }
 
   return { ok: true, manifest };

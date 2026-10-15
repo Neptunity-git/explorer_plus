@@ -82,8 +82,9 @@
   <a class="sub" href="#s25">エラー</a>
   <a href="#s26">見た目（TUI キット）</a>
   <a href="#s27">安全の決まり</a>
-  <a href="#s28">配る</a>
-  <a href="#s29">ヒント</a>
+  <a href="#s28">通信（network）</a>
+  <a href="#s29">配る</a>
+  <a href="#s30">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -173,6 +174,11 @@
 <td><code>settings</code></td>
 <td></td>
 <td>設定の項目（30 個まで）。書くと本体が設定の画面を作る（下の「設定」）</td>
+</tr>
+<tr>
+<td><code>network</code></td>
+<td></td>
+<td>通信する先（https の origin、10 個まで）。入れるときに利用者に見せる（下の「通信」）</td>
 </tr>
 <tr>
 <td><code>description</code></td>
@@ -584,7 +590,8 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 <p>操作は<strong>マウス（左右のクリック）が主、キーボードは補助</strong>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
 <h2 id="s27">安全の決まり</h2>
 <ul>
-<li><strong>通信できるのは自分の MOD のフォルダだけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。インターネット上のライブラリ・フォント・画像は読めません。使うものは MOD のフォルダに入れてください（ライブラリは1つのファイルにまとめると楽です）</li>
+<li><strong>通信できるのは、自分の MOD のフォルダと、manifest の <code>network</code> に書いた先だけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。
+<strong>スクリプトは、通信先からは読み込めません</strong>（コードは MOD のフォルダに入れてください。ライブラリは1つのファイルにまとめると楽です）</li>
 <li>画像は、自分のフォルダ・アイコンと縮小画像の URL・<code>data:</code>・<code>blob:</code> が使えます。WebAssembly と Web Worker（<code>blob:</code>）も使えます</li>
 <li>ファイルの変更・削除は、必ず本体の API に頼みます。本体は、渡された項目のファイルID が今の場所と合うかを確かめてから行います</li>
 <li>F5・Ctrl+R はページの読み直しではなく、本体の「読み直す」になります。Ctrl・Alt を押したキーは、本体のショートカット（Ctrl+T など）にも届きます</li>
@@ -592,7 +599,20 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ul>
 <blockquote class="warn"><p><strong>入れる人は、あなたの MOD を信頼して入れます。</strong> <code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</p>
 </blockquote>
-<h2 id="s28">配る</h2>
+<h2 id="s28">通信（network）</h2>
+<p>地図のタイル・天気・辞書など、インターネットのデータを使うときは、通信する先を manifest に書きます。</p>
+<pre><code class="language-json">&quot;network&quot;: [&quot;https://api.example.com&quot;, &quot;https://*.tiles.example.org&quot;]
+</code></pre>
+<ul>
+<li>書けるのは <strong>https の origin だけ</strong>（<code>https://名前</code> と、必要ならポート）。パス・IP アドレス・<code>localhost</code> などは書けません。10 個まで</li>
+<li>書いた先には、<code>fetch</code>・画像・音や動画・フォント・スタイルシートで通信できます。<strong>スクリプトは読み込めません</strong></li>
+<li>入れる人には、入れる前の確かめの画面で通信先を見せます。ファイルの中身を読める MOD（<code>fileContent</code>・<code>search</code>）が通信もする場合は、
+「ファイルの中身が外へ送られることがあります」と強く注意が出ます。必要な先だけを書いてください</li>
+<li>MOD の画面は隔離されているので、通信には「どこのページからか（Origin・Referer）」が付きません（Origin は <code>null</code>）。
+これを求めるサービス（例：OpenStreetMap の公式のタイル）は使えないことがあります。<code>fetch</code> で読むデータは、相手が CORS で許している必要があります</li>
+<li>版を上げて通信先を増やすと、更新の確かめの画面に「新しく増えた」と出ます</li>
+</ul>
+<h2 id="s29">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -600,7 +620,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s29">ヒント</h2>
+<h2 id="s30">ヒント</h2>
 <ul>
 <li><strong>開発者ツール</strong>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールに出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
 <li><strong>大きなフォルダ</strong>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>

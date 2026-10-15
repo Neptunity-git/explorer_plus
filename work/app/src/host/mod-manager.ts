@@ -41,6 +41,8 @@ export type ModInfo = {
   uses: Use[];
   location: "folder" | "none";
   dir: string;
+  /** 通信する先（ADR 0026） */
+  network: string[];
 };
 
 /** 本体（App）から借りるもの */
@@ -79,6 +81,7 @@ export class ModManager {
       uses: [...v.manifest.uses],
       location: v.manifest.location ?? "folder",
       dir: v.dir,
+      network: [...(v.manifest.network ?? [])],
     }));
     return { mods, problems: this.host.problems() };
   }
@@ -111,6 +114,24 @@ export class ModManager {
       return null;
     }
     const m = r.manifest;
+    // 通信（ADR 0026）：通信先と、読める情報によって強さを変えた注意
+    const net = m.network ?? [];
+    const before = this.list().mods.find((x) => x.id === m.id && x.source === "user")?.network ?? [];
+    const added = inspected.installedVersion ? net.filter((o) => !before.includes(o)) : net;
+    const readsContent = m.uses.some((u) => u === "fileContent" || u === "search");
+    const readsNames = m.uses.length > 0;
+    const netLines =
+      net.length === 0
+        ? ["このビューは、インターネットに通信しません。"]
+        : [
+            "このビューが通信する先：",
+            ...net.map((o) => `・${o}${inspected.installedVersion && added.includes(o) ? "（新しく増えた）" : ""}`),
+            readsContent
+              ? "⚠ このビューはファイルの中身を読め、インターネットにも通信できます。ファイルの中身が外へ送られることがあります。信頼できる作者の MOD だけを入れてください。"
+              : readsNames
+                ? "⚠ フォルダの中身の名前などが、上の通信先へ送られることがあります。"
+                : "",
+          ].filter(Boolean);
     const lines = [
       inspected.installedVersion ? `「${m.name}」を ${inspected.installedVersion} → ${m.version} に更新しますか？` : `「${m.name}」${m.version} を入れますか？`,
       ...(m.description ? [m.description] : []),
@@ -118,7 +139,9 @@ export class ModManager {
       m.uses.length ? "このビューが使う情報：" : "このビューは、フォルダの情報を使いません。",
       ...m.uses.map((u) => `・${USE_LABELS[u]}`),
       "",
-      "MOD は、ファイルの変更・削除やネットへの通信を自分ではできません（頼まれたときに本体が確かめます）。",
+      ...netLines,
+      "",
+      "MOD は、ファイルの変更・削除を自分ではできません（頼まれたときに本体が確かめます）。",
       `ファイル ${inspected.files} 個・${formatSize(inspected.bytes)}　id：${m.id}`,
     ];
     if (!(await confirmDialog(lines.join("\n"), inspected.installedVersion ? "更新する" : "入れる"))) {

@@ -57,6 +57,8 @@ export type Manifest = {
   location?: "folder" | "none";
   /** 設定の項目（ADR 0024）。書くと、本体が「このビューの設定」の画面を作る。30 個まで */
   settings?: SettingDef[];
+  /** 通信する先（https の origin。10 個まで。ADR 0026）。入れるときに利用者に見せる。データ・画像・音や動画・フォント・見た目の部品だけ（スクリプトは不可） */
+  network?: string[];
 };
 
 // ---- MOD の設定（ADR 0024） ----

@@ -27,6 +27,47 @@ pub struct ModRegistry(RwLock<HashMap<String, ModDir>>);
 struct ModDir {
     dir: PathBuf,
     entry: String,
+    /** manifest の network に書いた通信先（検査を通ったものだけ。ADR 0026） */
+    network: Vec<String>,
+}
+
+/// MOD が通信してよい先として書ける形か（ADR 0026）：https の origin（"https://example.com"・"https://*.example.com"・ポート付き）だけ。
+/// パス・IP アドレス・localhost などの PC の中の名前は不可。CSP はここで作るので、TypeScript の検査とは別に、ここでも確かめる
+pub fn valid_origin(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("https://") else { return false };
+    if s.len() > 200 || rest.is_empty() || rest.contains(|c: char| "/?#@[] \\".contains(c) || c.is_whitespace() || c.is_ascii_uppercase()) {
+        return false;
+    }
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (rest, None),
+    };
+    if let Some(p) = port {
+        if p.is_empty() || p.len() > 5 || !p.chars().all(|c| c.is_ascii_digit()) || p.parse::<u32>().map_or(true, |n| n == 0 || n > 65535) {
+            return false;
+        }
+    }
+    let host = host.strip_prefix("*.").unwrap_or(host);
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    let ok_label = |l: &&str| !l.is_empty() && l.len() <= 63 && !l.starts_with('-') && !l.ends_with('-') && l.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !labels.iter().all(ok_label) {
+        return false;
+    }
+    // 最後（.com など）は英字だけ（IP アドレスを拒む）。PC の中・家の中の名前も拒む
+    let tld = labels[labels.len() - 1];
+    tld.chars().all(|c| c.is_ascii_lowercase()) && !["localhost", "local", "internal", "lan", "home", "test", "invalid"].contains(&tld)
+}
+
+/// manifest の文字から、network の通信先（検査を通ったもの、10 個まで）を取り出す
+fn network_of(manifest_text: &str) -> Vec<String> {
+    let v: serde_json::Value = serde_json::from_str(manifest_text).unwrap_or_default();
+    v.get("network")
+        .and_then(|n| n.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_str()).filter(|s| valid_origin(s)).take(10).map(String::from).collect())
+        .unwrap_or_default()
 }
 
 #[derive(Serialize)]
@@ -128,7 +169,8 @@ fn scan_dirs(dirs: Vec<PathBuf>, source: &str, registry: &mut HashMap<String, Mo
                 } else if registry.contains_key(&id) {
                     src.error = Some(format!("id: \"{}\" is already used by another MOD", id));
                 } else {
-                    registry.insert(id, ModDir { dir: dir.clone(), entry });
+                    let network = network_of(src.manifest_text.as_deref().unwrap_or(""));
+                    registry.insert(id, ModDir { dir: dir.clone(), entry, network });
                 }
             }
         }
@@ -187,20 +229,22 @@ fn content_type(path: &Path) -> &'static str {
 }
 
 /// MOD のページに付ける CSP。origin は "http://mod.localhost" の形
-pub fn frame_csp(origin: &str, id: &str) -> String {
+pub fn frame_csp(origin: &str, id: &str, network: &[String]) -> String {
     let base = format!("{}/{}/", origin, id);
     let runtime = format!("{}/{}/", origin, RUNTIME_PREFIX);
     let icons = origin.replacen("://mod.", "://icon.", 1);
     // files.url で渡したファイル（画像・動画・音楽など。ADR 0023）。URL は推測できない印つきで、本体が確かめた項目にだけ発行する
     let files = origin.replacen("://mod.", "://epfile.", 1);
+    // manifest の network に書いた通信先（ADR 0026）。データ・画像・音や動画・フォント・見た目の部品だけ。スクリプトは読み込ませない
+    let net: String = network.iter().filter(|o| valid_origin(o)).map(|o| format!(" {}", o)).collect();
     format!(
         "default-src 'none'; \
          script-src {base} {runtime} 'wasm-unsafe-eval'; \
-         style-src {base} {runtime} 'unsafe-inline'; \
-         img-src {base} {icons} {files} data: blob:; \
-         font-src {base} {files} data:; \
-         connect-src {base} {files}; \
-         media-src {base} {files} data: blob:; \
+         style-src {base} {runtime} 'unsafe-inline'{net}; \
+         img-src {base} {icons} {files} data: blob:{net}; \
+         font-src {base} {files} data:{net}; \
+         connect-src {base} {files}{net}; \
+         media-src {base} {files} data: blob:{net}; \
          worker-src blob:"
     )
 }
@@ -301,7 +345,7 @@ pub fn handle(app: &AppHandle, request: &Request<Vec<u8>>) -> Response<Vec<u8>> 
     let Some(m) = registry.0.read().unwrap().get(first).cloned() else {
         return status(StatusCode::NOT_FOUND);
     };
-    let csp = frame_csp(MOD_ORIGIN, first);
+    let csp = frame_csp(MOD_ORIGIN, first, &m.network);
     if rest == FRAME_FILE {
         return Response::builder()
             .header("Content-Type", "text/html; charset=utf-8")
@@ -426,7 +470,7 @@ mod tests {
 
     #[test]
     fn csp_limits_to_own_folder() {
-        let csp = frame_csp("http://mod.localhost", "neo.view");
+        let csp = frame_csp("http://mod.localhost", "neo.view", &[]);
         assert!(csp.starts_with("default-src 'none';"));
         assert!(csp.contains("script-src http://mod.localhost/neo.view/ http://mod.localhost/__runtime/ "));
         // 通信は自分のフォルダと、本体が発行したファイルの URL（files.url。ADR 0023）だけ
@@ -439,6 +483,36 @@ mod tests {
         assert!(!csp.split(';').find(|d| d.trim_start().starts_with("script-src")).unwrap().contains("epfile"));
         assert!(!csp.contains("ipc.localhost"));
         assert!(!csp.contains("*"));
+    }
+
+    #[test]
+    fn network_origins() {
+        assert!(valid_origin("https://tile.openstreetmap.org"));
+        assert!(valid_origin("https://*.tile.openstreetmap.org"));
+        assert!(valid_origin("https://api.example.com:8443"));
+        assert!(!valid_origin("http://example.com"), "https だけ");
+        assert!(!valid_origin("https://example.com/path"));
+        assert!(!valid_origin("https://Example.com"));
+        assert!(!valid_origin("https://192.168.0.1"));
+        assert!(!valid_origin("https://[::1]"));
+        assert!(!valid_origin("https://localhost"));
+        assert!(!valid_origin("https://printer.local"));
+        assert!(!valid_origin("https://mod.localhost"));
+        assert!(!valid_origin("https://*"));
+        assert!(!valid_origin("https://*.com"));
+        assert!(!valid_origin("https://a.com:0"));
+        assert!(!valid_origin("https://user@a.com"));
+        assert_eq!(network_of(r#"{"network":["https://a.com","http://b.com",3,"https://c.org"]}"#), vec!["https://a.com", "https://c.org"]);
+    }
+
+    #[test]
+    fn csp_adds_network_but_not_to_scripts() {
+        let csp = frame_csp("http://mod.localhost", "neo.map", &["https://tile.openstreetmap.org".into(), "javascript:".into()]);
+        assert!(csp.contains("img-src http://mod.localhost/neo.map/ http://icon.localhost http://epfile.localhost data: blob: https://tile.openstreetmap.org;"));
+        assert!(csp.contains("connect-src http://mod.localhost/neo.map/ http://epfile.localhost https://tile.openstreetmap.org;"));
+        let script = csp.split(';').find(|d| d.trim_start().starts_with("script-src")).unwrap();
+        assert!(!script.contains("openstreetmap"), "スクリプトは通信先から読み込ませない");
+        assert!(!csp.contains("javascript:"), "検査を通らないものは入れない");
     }
 
     #[test]

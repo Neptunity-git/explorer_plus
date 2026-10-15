@@ -363,3 +363,11 @@ uses の宣言は要らない。
 - `createFiles` の許可：標準のビュー以外は、MOD ごとに最初に使うとき本体が確かめの画面を出す（表示中のタブのビューだけ）。許可はアプリのデータ `grants` に覚え、MOD を外すと消す
 - コレクションはアプリ全体で1つ（アプリのデータ `collections`）。200 個まで、1つに 10000 項目まで。知らせ `collections`（data は一覧）
 
+## 2026-10-15（6回目）の追加：通信（ADR 0026）
+
+- manifest の `network`：https の origin（`https://name`・`https://*.name`・ポート付き）を 10 個まで。パス・IP アドレス・`localhost`・`.local` などは不可。
+  検査は TypeScript（`src/core/network.ts`）と Rust（`mods.rs` の `valid_origin`）の両方で行い、CSP は Rust が作る
+- CSP：`style-src`・`img-src`・`font-src`・`connect-src`・`media-src` に通信先を足す。`script-src` には足さない
+- 入れるときの確かめの画面に通信先を出す。`fileContent`・`search` を使う MOD なら「ファイルの中身が外へ送られることがある」、ほかの uses があれば「名前などが送られることがある」と注意を出す。更新で増えた先には「新しく増えた」
+- ホームの MOD の一覧に「通信あり」
+

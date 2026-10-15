@@ -189,6 +189,7 @@ async function renderMods() {
     r.append(
       Object.assign(document.createElement("span"), { textContent: `${m.name} ${m.version}` }),
       Object.assign(document.createElement("span"), { className: `mod-source ${m.source}`, textContent: SOURCE_LABEL[m.source] || m.source }),
+      ...(m.network && m.network.length ? [Object.assign(document.createElement("span"), { className: "mod-source", textContent: "通信あり", title: m.network.join("\n") })] : []),
       Object.assign(document.createElement("span"), { className: "tui-grow tui-dim", textContent: m.description || m.id }),
       actions,
     );
