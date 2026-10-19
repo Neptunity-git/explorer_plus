@@ -86,8 +86,8 @@ class Tab implements TabActions {
       this.label.textContent = view.manifest.name;
       this.button.title = view.manifest.name;
     }
-    // ホーム・タグなど、場所と関係ないビューのタブには ▸ を出さない（切り替える先が無いため）
-    this.button.append(...(isFolderView(view) ? [views] : []), this.label, this.modBadge, this.badge, close);
+    // ホーム・タグなど場所と関係ないビューのタブにも ▸ を出す（ここから、ほかのビューを開けるように。ADR 0034）
+    this.button.append(views, this.label, this.modBadge, this.badge, close);
     this.modBadge.hidden = true;
     // タブを右クリック：このビューの設定・タブを閉じる（ADR 0024）
     this.button.oncontextmenu = (e) => {
@@ -672,13 +672,22 @@ export class App {
   async chooseView(tab: Tab, anchor: HTMLElement) {
     const r = anchor.getBoundingClientRect();
     await showMenu(r.left, r.bottom + 2, [
-      // 選べるのは、フォルダを見るビューだけ（ホーム・タグは場所と関係ないので、ここでは選ばない）
-      ...this.views.filter(isFolderView).map((v) => ({
-        label: `${v.manifest.id === tab.view.manifest.id ? "● " : "　 "}${v.manifest.name}`,
-        run: () => void this.changeView(tab, v),
-      })),
+      // フォルダを見るビューを上に、ホーム・タグなど場所と関係ないビューを区切りの下に並べる（ADR 0034）
+      ...this.viewMenuLines(tab, true),
+      "separator",
+      ...this.viewMenuLines(tab, false),
       ...(tab.view.manifest.settings ? (["separator", { label: "このビューの設定…", run: () => void this.openSettings(tab) }] as MenuLine[]) : []),
     ]);
+  }
+
+  /** ▸ のメニューの行：フォルダを見るビュー（folder が true）か、場所と関係ないビュー（false）。今のビューに ● */
+  private viewMenuLines(tab: Tab, folder: boolean): MenuLine[] {
+    return this.views
+      .filter((v) => isFolderView(v) === folder)
+      .map((v) => ({
+        label: `${v.manifest.id === tab.view.manifest.id ? "● " : "　 "}${v.manifest.name}`,
+        run: () => void this.changeView(tab, v),
+      }));
   }
 
   // ---- MOD が本体の画面を使う（ADR 0024） ----
@@ -725,9 +734,7 @@ export class App {
       { id: "@newtab", label: "新しいタブ", hint: "Ctrl+T", run: () => void this.openHome() },
       { id: "@newwindow", label: "新しいウィンドウ", hint: "Ctrl+N", run: () => void this.openWindow() },
       ...(t?.view.manifest.settings ? [{ id: "@settings", label: "このビューの設定…", hint: t.view.manifest.name, run: () => void this.openSettings(t) }] : []),
-      ...(t?.folderView
-        ? this.views.filter((v) => isFolderView(v) && v.manifest.id !== t.view.manifest.id).map((v) => ({ id: `@view:${v.manifest.id}`, label: `ビューを「${v.manifest.name}」に変える`, run: () => void this.changeView(t, v) }))
-        : []),
+      ...(t ? this.views.filter((v) => v.manifest.id !== t.view.manifest.id).map((v) => ({ id: `@view:${v.manifest.id}`, label: `ビューを「${v.manifest.name}」に変える`, run: () => void this.changeView(t, v) })) : []),
     ];
     const mod = (t?.host.commands ?? []).map((c) => ({ ...c, id: `mod:${c.id}`, hint: c.hint ?? t!.view.manifest.name }));
     const chosen = await chooseDialog("コマンド", [...mod, ...own]);
@@ -745,8 +752,11 @@ export class App {
     const shown = this.active;
     const next = await this.openTab(view, path, i < 0 ? undefined : i);
     if (shown && shown !== tab) this.activate(shown, false);
-    next.back = tab.back;
-    next.forward = tab.forward;
+    // 戻る・進むの履歴はフォルダのもの。フォルダを見るビューどうしのときだけ引き継ぐ
+    if (tab.folderView && next.folderView) {
+      next.back = tab.back;
+      next.forward = tab.forward;
+    }
     this.tabs = this.tabs.filter((t) => t !== tab);
     tab.destroy();
     this.updateChrome();
