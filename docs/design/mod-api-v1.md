@@ -409,3 +409,18 @@ uses の宣言は要らない。
 - `getTree` の params に省略可能な `from`（`{ id, path }`）。そのフォルダを根にして返す。省略すると今までどおり今のフォルダから
 - `from` のフォルダが無ければ `not-found`、ID が今のものと完全に合わなければ `not-found`（空の ID は、ID の無いドライブのフォルダにだけ通る。本体から渡された場所しか読めないように）
 - 深さ 1〜5、1回にフォルダ 500 個まで、は同じ。要る `uses` も `tree` のまま
+
+## 2026-10-22 の追加：ほかのビューの右クリックのメニューに出す（ADR 0036）
+
+- manifest の `menu`：`[{ id（1〜64文字、重なりなし）, label（1〜60文字）, for?（"file"・"folder"・"background" の空でない並び。省略は3つとも）,
+  ext?（小文字・点なしの拡張子 [a-z0-9]{1,16} の空でない並び。for を書くなら "file" が要る）, multiple?（boolean）, run?（"open"・"background"） }]` を 20 個まで
+- 本体は、右クリックのメニューに「MOD の名前 ›」を出し、横のメニューに当てはまる項目を並べる。出すのは
+  ファイル・フォルダを選んで右クリック（選んだものが全部 for・ext・multiple に合うとき）と、フォルダを見るビューの空いている所（extra が無いとき）。
+  今のタブのビュー自身の項目は出さない
+- 知らせ `menu`（data は `{ id, items: Entry[], folder: { id, path } | null }`）・`ep.onMenu(cb)`（受け取り口を作る前に届いた分も渡す）
+- run が `"open"`：MOD のビューを今のタブの右に新しいタブで開き（フォルダは今のタブのもの）、準備ができてフォルダを送った後に `menu` を送る
+- run が `"background"`：大きさ 0 の見えない iframe で動かす。`ready` の返事に `background: true`（ビューのときは false）
+  - `menu.done`（params なし、uses 不要）で本体が止める。ほかに、API の呼びかけも返事待ちも無いまま 30 秒、または始めて 10 分で止める
+  - `navigate`・`navigateUp`・`showMenu`・`drag.*`・`clipboard.paste`・name の無い `createFolder` は `denied`。`ui.status`・`ui.tab` は何もしない
+  - `ui.toast`・`ui.confirm` などは、表示中のタブでなくても出せる。`open` のフォルダは新しいタブで開く。ほかは右クリックしたタブに頼む
+  - MOD ごとに1つ。動いている間に選ばれたら、同じものに `menu` を送る。MOD の一覧を読み直したら止める

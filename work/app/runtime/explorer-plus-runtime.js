@@ -20,6 +20,9 @@
   const dragTargetListeners = new Set();
   const logsListeners = new Set();
   const folderDataListeners = new Set();
+  const menuListeners = new Set();
+  // 受け取り口（onMenu）ができる前に届いた知らせ menu。見えない所で動かすときは、MOD のプログラムより先に届くことがある
+  const pendingMenu = [];
   let lastFolder = null;
   let lastTimetable = null; // { data: Timetable | null }（null も「時間割なし」として覚えるため、包んで持つ）
   let theme = "light";
@@ -112,6 +115,9 @@
         for (const cb of folderDataListeners) safely(cb, m.data);
       } else if (m.event === "logs") {
         for (const cb of logsListeners) safely(cb, m.data);
+      } else if (m.event === "menu") {
+        if (menuListeners.size === 0) pendingMenu.push(m.data);
+        for (const cb of menuListeners) safely(cb, m.data);
       }
     }
   });
@@ -271,6 +277,18 @@
     /** opts: { x, y, items: Entry[], extra?: [{ id, label }] }。x・y はこのページの中の座標（MouseEvent の clientX・clientY） */
     showMenu: (opts) =>
       call("showMenu", Object.assign({ x: opts.x, y: opts.y, items: (opts.items || []).map(toRef) }, opts.extra ? { extra: opts.extra } : {})),
+    // ↓ 2026-10-22 に追加（ADR 0036）。manifest の menu の項目が、右クリックのメニュー（ほかのビューのものも）で選ばれた
+    /** cb({ id, items: Entry[], folder: { id, path } | null })。受け取り口を作る前に届いていた分も渡す */
+    onMenu(cb) {
+      menuListeners.add(cb);
+      const queued = pendingMenu.splice(0);
+      if (queued.length > 0) queueMicrotask(() => queued.forEach((data) => menuListeners.has(cb) && safely(cb, data)));
+      return () => menuListeners.delete(cb);
+    },
+    menu: Object.freeze({
+      /** 見えない所で動いているとき（ep.ready() の background が true）、終わったことを伝える。本体が止める */
+      done: () => call("menu.done").then(() => undefined),
+    }),
     /** 本体からの頼みごと（{ action: "rename", entry }）を受け取る */
     onAction(cb) {
       actionListeners.add(cb);

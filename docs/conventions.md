@@ -39,7 +39,7 @@ python3 -m orchestrator resolve /mnt/c/Users/neo_m/projects-NEO/explorer_plus <�
 
 ## teamNeo のお知らせ
 
-`/mnt/c/Users/neo_m/projects-NEO/teamNeo/docs/changes.md` を確認済みの日付：2026-10-13（プロジェクトの作成日。それ以前のお知らせは反映済み）
+`/mnt/c/Users/neo_m/projects-NEO/teamNeo/docs/changes.md` を確認済みの日付：2026-10-22
 
 ## このプロジェクト固有の規約
 

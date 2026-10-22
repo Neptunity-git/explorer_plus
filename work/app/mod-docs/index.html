@@ -76,17 +76,18 @@
   <a class="sub" href="#s19">設定（settings）</a>
   <a class="sub" href="#s20">コマンド（commands）</a>
   <a class="sub" href="#s21">メニュー</a>
-  <a class="sub" href="#s22">クリップボード・ドラッグ</a>
-  <a class="sub" href="#s23">タグ・時間割・ほか</a>
-  <a class="sub" href="#s24">データの形</a>
-  <a class="sub" href="#s25">エラー</a>
-  <a href="#s26">見た目（TUI キット）</a>
-  <a href="#s27">安全の決まり</a>
-  <a href="#s28">通信（network）</a>
-  <a class="sub" href="#s29">本体に通信してもらう（ep.net）</a>
-  <a class="sub" href="#s30">API キー（secret）</a>
-  <a href="#s31">配る</a>
-  <a href="#s32">ヒント</a>
+  <a class="sub" href="#s22">ほかのビューの右クリックに出す（menu）</a>
+  <a class="sub" href="#s23">クリップボード・ドラッグ</a>
+  <a class="sub" href="#s24">タグ・時間割・ほか</a>
+  <a class="sub" href="#s25">データの形</a>
+  <a class="sub" href="#s26">エラー</a>
+  <a href="#s27">見た目（TUI キット）</a>
+  <a href="#s28">安全の決まり</a>
+  <a href="#s29">通信（network）</a>
+  <a class="sub" href="#s30">本体に通信してもらう（ep.net）</a>
+  <a class="sub" href="#s31">API キー（secret）</a>
+  <a href="#s32">配る</a>
+  <a href="#s33">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -181,6 +182,11 @@
 <td><code>network</code></td>
 <td></td>
 <td>通信する先（https の origin、10 個まで）。入れるときに利用者に見せる（下の「通信」）</td>
+</tr>
+<tr>
+<td><code>menu</code></td>
+<td></td>
+<td>右クリックのメニューに出す項目（20 個まで）。ほかのビューを使っているときにも出る（下の「ほかのビューの右クリックに出す」）</td>
 </tr>
 <tr>
 <td><code>description</code></td>
@@ -481,7 +487,82 @@ ep.onCommand((id) =&gt; {
 };
 </code></pre>
 <p><code>items</code> を空にして <code>extra</code> だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。</p>
-<h3 id="s22">クリップボード・ドラッグ</h3>
+<h3 id="s22">ほかのビューの右クリックに出す（menu）</h3>
+<p>manifest に <code>menu</code> を書くと、利用者がほかのビュー（Win11 風など）を使っているときも、右クリックのメニューに
+「MOD の名前 ›」が出ます。マウスを乗せると、横に項目が並びます。</p>
+<pre><code class="language-json">&quot;menu&quot;: [
+  { &quot;id&quot;: &quot;tree&quot;, &quot;label&quot;: &quot;ツリーで開く&quot;, &quot;for&quot;: [&quot;folder&quot;, &quot;background&quot;] },
+  { &quot;id&quot;: &quot;hash&quot;, &quot;label&quot;: &quot;SHA-256 を計算&quot;, &quot;for&quot;: [&quot;file&quot;], &quot;ext&quot;: [&quot;zip&quot;, &quot;iso&quot;], &quot;multiple&quot;: false, &quot;run&quot;: &quot;background&quot; }
+]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>必須</th>
+<th>決まり</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td>○</td>
+<td>1〜64文字。MOD の中で重ならない</td>
+</tr>
+<tr>
+<td><code>label</code></td>
+<td>○</td>
+<td>1〜60文字</td>
+</tr>
+<tr>
+<td><code>for</code></td>
+<td></td>
+<td>出す場所。<code>&quot;file&quot;</code>・<code>&quot;folder&quot;</code>（それを選んで右クリック。選んだものが全部当てはまるときだけ）、<code>&quot;background&quot;</code>（空いている所を右クリック）。省略は3つとも</td>
+</tr>
+<tr>
+<td><code>ext</code></td>
+<td></td>
+<td>ファイルの拡張子（小文字・点なし）。選んだファイルが全部これのどれかのときだけ出す。<code>for</code> を書くなら <code>&quot;file&quot;</code> が要る</td>
+</tr>
+<tr>
+<td><code>multiple</code></td>
+<td></td>
+<td><code>false</code> なら、1つだけ選んでいるときだけ出す</td>
+</tr>
+<tr>
+<td><code>run</code></td>
+<td></td>
+<td><code>&quot;open&quot;</code>（省略時）：この MOD のビューを新しいタブで開いて渡す。<code>&quot;background&quot;</code>：画面を出さずに、見えない所で動かして渡す</td>
+</tr>
+</tbody></table>
+<p>選ばれると <code>onMenu</code> に届きます。<code>folder</code> は右クリックしたタブのフォルダ、<code>items</code> は選んでいたもの（空いている所なら <code>[]</code>）です。
+この MOD 自身のビューを表示しているときは出ません（自分のビューでは <code>showMenu</code> の <code>extra</code> を使います）。</p>
+<pre><code class="language-js">ep.onMenu(async ({ id, items, folder }) =&gt; {
+  if (id === &quot;tree&quot; &amp;&amp; items[0]) await ep.navigate(items[0].path);  // &quot;open&quot;：開くのは今のタブのフォルダなので、選んだフォルダへ移る
+});
+</code></pre>
+<p><code>run: &quot;background&quot;</code> のときは、<code>ep.ready()</code> の <code>background</code> が <code>true</code> になります。画面は見えないので作らず、
+処理が終わったら <code>ep.menu.done()</code> を呼んでください。</p>
+<pre><code class="language-js">const ctx = await ep.ready();
+if (ctx.background) {
+  ep.onMenu(async ({ id, items }) =&gt; {
+    const bytes = await ep.files.readBytes(items[0], { length: 16 * 1024 * 1024 });  // uses に &quot;fileContent&quot;
+    const hash = await crypto.subtle.digest(&quot;SHA-256&quot;, bytes);
+    await ep.ui.toast(`SHA-256: ${[...new Uint8Array(hash)].map((b) =&gt; b.toString(16).padStart(2, &quot;0&quot;)).join(&quot;&quot;)}`);
+    await ep.menu.done();
+  });
+} else {
+  drawView();  // いつものビュー
+}
+</code></pre>
+<p>見えない所で動いているときの決まり：</p>
+<ul>
+<li>使える API はビューのときと同じ（<code>uses</code> の宣言どおり）。お知らせ・確かめの画面も出せます</li>
+<li>タブに関わるもの（<code>navigate</code>・<code>navigateUp</code>・<code>showMenu</code>・ドラッグ・<code>clipboard.paste</code>・名前を渡さない <code>createFolder</code>）は <code>&quot;denied&quot;</code> で失敗します。<code>ui.status</code>・<code>ui.tab</code> は何も起きません</li>
+<li><code>ep.open</code> でフォルダを開くと、新しいタブで開きます</li>
+<li><code>menu.done()</code> を呼ぶか、API を 30 秒呼ばない（返事待ちのものも無い）か、始めて 10 分たつと、本体が止めます</li>
+<li>動いている間にもう一度選ばれたら、同じ MOD にもう一度 <code>onMenu</code> が届きます（MOD ごとに1つだけ動きます）</li>
+</ul>
+<h3 id="s23">クリップボード・ドラッグ</h3>
 <pre><code class="language-js">await ep.clipboard.copy([entry]);   // Windows のエクスプローラと同じ形式。エクスプローラにも貼り付けられる
 await ep.clipboard.cut([entry]);
 const { count } = await ep.clipboard.paste();   // 開いているフォルダへ
@@ -494,7 +575,7 @@ el.onpointermove = (e) =&gt; {
 ep.onDragTargets(() =&gt; ep.drag.targets(folderTargets()));   // ドラッグ中にこのタブへ切り替わったとき
 // folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）
 </code></pre>
-<h3 id="s23">タグ・時間割・ほか</h3>
+<h3 id="s24">タグ・時間割・ほか</h3>
 <pre><code class="language-js">// uses: [&quot;tags&quot;]
 const tags = await ep.tags.list();                    // [{ id, name, color: &quot;#rrggbb&quot; }]
 const tag = await ep.tags.create(&quot;提出物&quot;, &quot;#e5484d&quot;);
@@ -515,7 +596,7 @@ const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();
 </code></pre>
 <p>すべての関数と型は、ひな形に入っている <code>explorer-plus.d.ts</code> にあります。迷ったらそちらが正しいです。</p>
-<h3 id="s24">データの形</h3>
+<h3 id="s25">データの形</h3>
 <pre><code class="language-ts">type Entry = {
   id: string;          // ファイルID。名前変更・移動で変わらない（ID の無いドライブでは &quot;&quot;）
   name: string;        // &quot;report.docx&quot;
@@ -533,7 +614,7 @@ const recent = await ep.recent.list();
 type EntryRef = { id: string; path: string };   // 保存しておくときは、この2つだけ覚える
 </code></pre>
 <p><code>entries</code> の並びは、フォルダが先、次にファイル。それぞれ名前の自然な順（<code>file2</code> が <code>file10</code> より前）です。</p>
-<h3 id="s25">エラー</h3>
+<h3 id="s26">エラー</h3>
 <p>失敗した Promise は <code>Error</code> になり、<code>code</code> に次のどれかが入ります。</p>
 <table>
 <thead>
@@ -581,7 +662,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
   if (err.code !== &quot;denied&quot;) showMessage(`ごみ箱へ送れませんでした：${err.message}`);
 }
 </code></pre>
-<h2 id="s26">見た目（TUI キット）</h2>
+<h2 id="s27">見た目（TUI キット）</h2>
 <p>標準のビューと同じ見た目の部品を使えます（使わなくてもかまいません）。明るい・暗い画面にも自動で合います。</p>
 <pre><code class="language-js">// CSS：色の変数（--tui-fg・--tui-dim・--tui-line・--tui-accent・--tui-warn・--tui-bg）と部品のクラス
 document.head.append(Object.assign(document.createElement(&quot;link&quot;), { rel: &quot;stylesheet&quot;, href: &quot;/__runtime/tui.css&quot; }));
@@ -596,7 +677,7 @@ import { ask, pick, pickColor, confirm, button, PALETTE } from &quot;/__runtime/
 const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; });          // やめたら null
 </code></pre>
 <p>操作は<strong>マウス（左右のクリック）が主、キーボードは補助</strong>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
-<h2 id="s27">安全の決まり</h2>
+<h2 id="s28">安全の決まり</h2>
 <ul>
 <li><strong>通信できるのは、自分の MOD のフォルダと、manifest の <code>network</code> に書いた先だけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。
 <strong>スクリプトは、通信先からは読み込めません</strong>（コードは MOD のフォルダに入れてください。ライブラリは1つのファイルにまとめると楽です）</li>
@@ -607,7 +688,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ul>
 <blockquote class="warn"><p><strong>入れる人は、あなたの MOD を信頼して入れます。</strong> <code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</p>
 </blockquote>
-<h2 id="s28">通信（network）</h2>
+<h2 id="s29">通信（network）</h2>
 <p>地図のタイル・天気・辞書など、インターネットのデータを使うときは、通信する先を manifest に書きます。</p>
 <pre><code class="language-json">&quot;network&quot;: [&quot;https://api.example.com&quot;, &quot;https://*.tiles.example.org&quot;]
 </code></pre>
@@ -620,7 +701,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 これを求めるサービス（例：OpenStreetMap の公式のタイル）や、ブラウザからの読み込みを許していない（CORS の無い）API は、下の <strong><code>ep.net</code></strong> を使ってください</li>
 <li>版を上げて通信先を増やすと、更新の確かめの画面に「新しく増えた」と出ます</li>
 </ul>
-<h3 id="s29">本体に通信してもらう（ep.net）</h3>
+<h3 id="s30">本体に通信してもらう（ep.net）</h3>
 <p><code>ep.net.fetch</code> は <code>fetch</code> に似た形で、<strong>本体が MOD の代わりに通信</strong>します。ブラウザの決まり（CORS）を受けず、
 「explorer_plus の、この MOD から」と名乗って（User-Agent）通信します。宛先は、同じく <code>network</code> に書いた先だけです。</p>
 <pre><code class="language-js">const r = await ep.net.fetch(&quot;https://api.example.com/v1/search?q=&quot; + encodeURIComponent(word));
@@ -639,7 +720,7 @@ img.src = await ep.net.url(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`);
 <li>宛先の名前が、PC の中や家の中の住所（<code>127.0.0.1</code>・<code>192.168.x.x</code> など）を指していたら通信しません（<code>network</code>）</li>
 <li>4xx・5xx も、エラーではなく結果として返ります（<code>r.ok</code> が false）。つながらないときは <code>network</code> のエラー</li>
 </ul>
-<h3 id="s30">API キー（secret）</h3>
+<h3 id="s31">API キー（secret）</h3>
 <p>天気・翻訳などの API キーは、MOD に書き込まないでください（zip を開けば誰でも読めます）。
 代わりに、設定に <code>type: &quot;secret&quot;</code> の項目を書くと、<strong>利用者が自分のキーを入れ、本体が Windows の資格情報マネージャーに預けます</strong>。
 本体が通信するときだけキーを付けるので、MOD からはキーが見えません。</p>
@@ -660,7 +741,7 @@ const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=toky
 <li>キーがまだ無いときは <code>not-found</code>、<code>send</code> の無い項目や secret でない項目を指すと <code>not-declared</code></li>
 <li>入れる人には、確かめの画面で「本体が預かり、○○だけに送ります」と見せます。MOD を外すと、預けたキーも消します</li>
 </ul>
-<h2 id="s31">配る</h2>
+<h2 id="s32">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -668,7 +749,7 @@ const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=toky
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s32">ヒント</h2>
+<h2 id="s33">ヒント</h2>
 <ul>
 <li><strong>ウィンドウが複数あるとき</strong>：同じフォルダを、同じビューで2つのウィンドウに開いていることがあります。<code>folderData</code> を使うビューは、
 <code>ep.onFolderData(() =&gt; …)</code> で「ほかのウィンドウが書き換えた」を受け取り、<code>folderData.get</code> で読み直すと食い違いません（<code>storage</code>・設定は本体が合わせます）</li>

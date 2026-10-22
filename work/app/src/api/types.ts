@@ -59,7 +59,28 @@ export type Manifest = {
   settings?: SettingDef[];
   /** 通信する先（https の origin。10 個まで。ADR 0026）。入れるときに利用者に見せる。データ・画像・音や動画・フォント・見た目の部品だけ（スクリプトは不可） */
   network?: string[];
+  /** 右クリックのメニューに出す項目（ADR 0036）。ほかのビューのメニューにも「MOD の名前 ▸」として出る。20 個まで */
+  menu?: ModMenuItem[];
 };
+
+// ---- ほかのビューの右クリックのメニューに出す項目（ADR 0036） ----
+
+/** file・folder：それを選んで右クリック。background：空いている所を右クリック（今のフォルダを渡す） */
+export type ModMenuTarget = "file" | "folder" | "background";
+export type ModMenuItem = {
+  id: string;
+  label: string;
+  /** 出す場所（省略は3つとも。重なりなし、宣言どおりの順） */
+  for?: ModMenuTarget[];
+  /** ファイルの拡張子（小文字・点なし）。書くと、選んだファイルが全部これのどれかのときだけ出す */
+  ext?: string[];
+  /** false なら、1つだけ選んでいるときだけ出す（省略は true） */
+  multiple?: boolean;
+  /** open（省略時）：MOD のビューを新しいタブで開いて渡す。background：見えない所で動かして渡す */
+  run?: "open" | "background";
+};
+/** 知らせ "menu" の中身。folder は右クリックしたときのタブのフォルダ（無ければ null） */
+export type ModMenuEvent = { id: string; items: Entry[]; folder: EntryRef | null };
 
 // ---- MOD の設定（ADR 0024） ----
 
@@ -305,6 +326,8 @@ export type ViewContext = {
   viewId: string;
   tabId: string;
   theme: "light" | "dark";
+  /** 見えない所で動いているか（manifest の menu の run が "background"。ADR 0036） */
+  background: boolean;
 };
 
 /** MOD が右クリックのメニューに足す項目。選ばれると、showMenu の返り値の chosen に id が入る */
@@ -417,7 +440,9 @@ export type CallMethod =
   | "logs.list"
   | "logs.sources"
   | "logs.clear"
-  | "mods.openSettings";
+  | "mods.openSettings"
+  // ↓ 2026-10-22 に追加（ADR 0036）。見えない所で動いている MOD が、終わったことを伝える
+  | "menu.done";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -535,6 +560,8 @@ export type CallParams = {
   "logs.clear": { source: string };
   /** その MOD の設定の画面を出す */
   "mods.openSettings": { id: string };
+  /** 見えない所で動いているとき、本体に止めてもらう（ビューのときは何も起きない） */
+  "menu.done": Record<string, never>;
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -621,6 +648,7 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "logs.sources": null,
   "logs.clear": null,
   "mods.openSettings": null,
+  "menu.done": null,
 };
 
 export type NetMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -667,7 +695,9 @@ export type EventMessage =
   // 開いているフォルダの、このビューのデータ（folderData）を、ほかのウィンドウが書き換えた（ADR 0030）
   | { ep: 1; kind: "event"; event: "folderData"; data: { path: string } }
   // ログが1件増えた（標準のビューだけに届く。ADR 0029）
-  | { ep: 1; kind: "event"; event: "logs"; data: LogEntry };
+  | { ep: 1; kind: "event"; event: "logs"; data: LogEntry }
+  // 右クリックのメニューで、manifest の menu の項目が選ばれた（ADR 0036）
+  | { ep: 1; kind: "event"; event: "menu"; data: ModMenuEvent };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 /** MOD の console.log・エラー（ランタイムが自動で送る。ADR 0029） */

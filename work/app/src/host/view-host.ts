@@ -9,6 +9,7 @@ import {
   type KeyMessage,
   type Manifest,
   type MenuItem,
+  type ModMenuEvent,
   type Rect,
   type TreeNode,
   type Use,
@@ -82,6 +83,11 @@ export interface TabActions {
   toast(text: string): void;
   setStatus(text: string | null): void;
   setTabLabel(p: { title?: string | null; badge?: string | null }): void;
+  // ↓ 右クリックのメニューから見えない所で動かすとき（ADR 0036）
+  /** 見えない所で動いているか（ready の返事で MOD に伝える） */
+  readonly background?: boolean;
+  /** MOD が menu.done を呼んだ */
+  menuDone?(): void;
 }
 
 /** 並べ替えのためだけに Entry を作るときの uses（余計な情報を付けない） */
@@ -202,6 +208,25 @@ export class ViewHost {
     await grantService.grant(this.view.manifest.id, what);
   }
 
+  /** まだ届けていない知らせ menu（準備ができる前に選ばれた分。ADR 0036） */
+  private pendingMenu: ModMenuEvent[] = [];
+  /** MOD から最後にメッセージが届いた時刻と、返事をしていない呼びかけの数（見えない所で動かすとき、止めどきを決める） */
+  private lastActivity = Date.now();
+  private inflight = 0;
+
+  /** 何もしていない時間（ミリ秒）。返事を待っている呼びかけがあれば 0 */
+  idleFor(): number {
+    return this.inflight > 0 ? 0 : Date.now() - this.lastActivity;
+  }
+
+  /** 右クリックのメニューで、manifest の menu の項目が選ばれた（ADR 0036）。items は MOD の uses に合わせた形にして渡す */
+  sendMenu(id: string, items: RawEntry[], folder: EntryRef | null) {
+    const data: ModMenuEvent = { id, items: items.map((r) => toEntry(r, this.uses)), folder };
+    this.lastActivity = Date.now();
+    if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "menu", data });
+    else this.pendingMenu.push(data);
+  }
+
   /** コマンドの一覧で、このビューのコマンドが選ばれた */
   runCommand(id: string) {
     if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "command", data: { id } });
@@ -313,6 +338,7 @@ export class ViewHost {
       return;
     }
     const msg = parsed.message;
+    this.lastActivity = Date.now();
     if (msg.kind === "key") {
       this.tab.shortcut(msg);
       return;
@@ -355,13 +381,19 @@ export class ViewHost {
   }
 
   private reply(id: number, work: Promise<unknown>) {
-    work.then(
-      (value) => this.post({ ep: PROTOCOL_VERSION, kind: "result", id, ok: true, value }),
-      (e) => {
-        const error = e instanceof HostError || e instanceof BackendError ? e.apiError : toApiError(e);
-        this.post({ ep: PROTOCOL_VERSION, kind: "result", id, ok: false, error });
-      },
-    );
+    this.inflight++;
+    work
+      .then(
+        (value) => this.post({ ep: PROTOCOL_VERSION, kind: "result", id, ok: true, value }),
+        (e) => {
+          const error = e instanceof HostError || e instanceof BackendError ? e.apiError : toApiError(e);
+          this.post({ ep: PROTOCOL_VERSION, kind: "result", id, ok: false, error });
+        },
+      )
+      .finally(() => {
+        this.inflight--;
+        this.lastActivity = Date.now();
+      });
   }
 
   /** iframe の中の座標を、本体の画面の座標に直す */
@@ -385,9 +417,11 @@ export class ViewHost {
           setTimeout(() => {
             this.pushFolder();
             if (this.uses.has("timetable")) this.pushTimetable();
+            // 準備ができる前に選ばれたメニューの項目は、フォルダの後に届ける（ADR 0036）
+            for (const data of this.pendingMenu.splice(0)) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "menu", data });
           }, 0);
         }
-        return { apiVersion: this.view.manifest.apiVersion, viewId: this.view.manifest.id, tabId: this.tab.tabId, theme: this.tab.theme() };
+        return { apiVersion: this.view.manifest.apiVersion, viewId: this.view.manifest.id, tabId: this.tab.tabId, theme: this.tab.theme(), background: this.tab.background === true };
       case "open":
         return this.tab.open({ id: p.id, path: p.path }, this.toWindowRect(p.from), p.newTab === true);
       case "navigate":
@@ -638,6 +672,10 @@ export class ViewHost {
         return logService.sources();
       case "logs.clear":
         return logService.clear(p.source);
+      // ↓ 右クリックのメニューから見えない所で動かしたとき（ADR 0036）。返事を送ってから止める
+      case "menu.done":
+        if (this.tab.menuDone) setTimeout(() => this.tab.menuDone?.(), 0);
+        return;
     }
   }
 

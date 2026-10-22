@@ -339,6 +339,11 @@ if (typeof settings.initialDepth === "number") initialDepth = settings.initialDe
 ep.onSettings((values) => {
   if (typeof values.initialDepth === "number") initialDepth = values.initialDepth;
 });
+// ほかのビューの右クリック「樹形図 › 樹形図で開く」（manifest の menu。ADR 0036）。
+// 開くのは右クリックしたタブのフォルダなので、フォルダを選んでいたらそこへ移る（空いている所なら、そのまま）
+ep.onMenu(({ id, items }) => {
+  if (id === "open" && items[0]?.kind === "folder") void ep.navigate(items[0].path);
+});
 showFiles = (await ep.storage.get("showFiles")) === true;
 const saved = await ep.storage.get("open");
 if (saved && typeof saved === "object") openMemory = /** @type {Record<string, string[]>} */ (saved);

@@ -60,6 +60,7 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `location` | | `"folder"`（フォルダを見るビュー。省略時）か `"none"`（フォルダと関係ないビュー。例：タグの一覧） |
 | `settings` | | 設定の項目（30 個まで）。書くと本体が設定の画面を作る（下の「設定」） |
 | `network` | | 通信する先（https の origin、10 個まで）。入れるときに利用者に見せる（下の「通信」） |
+| `menu` | | 右クリックのメニューに出す項目（20 個まで）。ほかのビューを使っているときにも出る（下の「ほかのビューの右クリックに出す」） |
 | `description` | | 200文字まで。入れるときの確かめの画面に出る |
 
 ### 使う情報（uses）
@@ -330,6 +331,61 @@ el.oncontextmenu = async (e) => {
 ```
 
 `items` を空にして `extra` だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。
+
+### ほかのビューの右クリックに出す（menu）
+
+manifest に `menu` を書くと、利用者がほかのビュー（Win11 風など）を使っているときも、右クリックのメニューに
+「MOD の名前 ›」が出ます。マウスを乗せると、横に項目が並びます。
+
+```json
+"menu": [
+  { "id": "tree", "label": "ツリーで開く", "for": ["folder", "background"] },
+  { "id": "hash", "label": "SHA-256 を計算", "for": ["file"], "ext": ["zip", "iso"], "multiple": false, "run": "background" }
+]
+```
+
+| 項目 | 必須 | 決まり |
+|---|---|---|
+| `id` | ○ | 1〜64文字。MOD の中で重ならない |
+| `label` | ○ | 1〜60文字 |
+| `for` | | 出す場所。`"file"`・`"folder"`（それを選んで右クリック。選んだものが全部当てはまるときだけ）、`"background"`（空いている所を右クリック）。省略は3つとも |
+| `ext` | | ファイルの拡張子（小文字・点なし）。選んだファイルが全部これのどれかのときだけ出す。`for` を書くなら `"file"` が要る |
+| `multiple` | | `false` なら、1つだけ選んでいるときだけ出す |
+| `run` | | `"open"`（省略時）：この MOD のビューを新しいタブで開いて渡す。`"background"`：画面を出さずに、見えない所で動かして渡す |
+
+選ばれると `onMenu` に届きます。`folder` は右クリックしたタブのフォルダ、`items` は選んでいたもの（空いている所なら `[]`）です。
+この MOD 自身のビューを表示しているときは出ません（自分のビューでは `showMenu` の `extra` を使います）。
+
+```js
+ep.onMenu(async ({ id, items, folder }) => {
+  if (id === "tree" && items[0]) await ep.navigate(items[0].path);  // "open"：開くのは今のタブのフォルダなので、選んだフォルダへ移る
+});
+```
+
+`run: "background"` のときは、`ep.ready()` の `background` が `true` になります。画面は見えないので作らず、
+処理が終わったら `ep.menu.done()` を呼んでください。
+
+```js
+const ctx = await ep.ready();
+if (ctx.background) {
+  ep.onMenu(async ({ id, items }) => {
+    const bytes = await ep.files.readBytes(items[0], { length: 16 * 1024 * 1024 });  // uses に "fileContent"
+    const hash = await crypto.subtle.digest("SHA-256", bytes);
+    await ep.ui.toast(`SHA-256: ${[...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("")}`);
+    await ep.menu.done();
+  });
+} else {
+  drawView();  // いつものビュー
+}
+```
+
+見えない所で動いているときの決まり：
+
+- 使える API はビューのときと同じ（`uses` の宣言どおり）。お知らせ・確かめの画面も出せます
+- タブに関わるもの（`navigate`・`navigateUp`・`showMenu`・ドラッグ・`clipboard.paste`・名前を渡さない `createFolder`）は `"denied"` で失敗します。`ui.status`・`ui.tab` は何も起きません
+- `ep.open` でフォルダを開くと、新しいタブで開きます
+- `menu.done()` を呼ぶか、API を 30 秒呼ばない（返事待ちのものも無い）か、始めて 10 分たつと、本体が止めます
+- 動いている間にもう一度選ばれたら、同じ MOD にもう一度 `onMenu` が届きます（MOD ごとに1つだけ動きます）
 
 ### クリップボード・ドラッグ
 

@@ -1,6 +1,9 @@
 // 本体の画面：タブ、アドレスバー、ビューの切り替え、左の欄（クイックアクセス・よく使う場所）、状態の表示。
 // ファイルの中身の見せ方はビュー（MOD）に任せ、ここは「どのフォルダを、どのビューで」を管理する。
-import type { EntryRef, KeyMessage, MenuItem, Rect, ViewInfo } from "../api/types";
+import type { EntryRef, KeyMessage, MenuItem, ModMenuItem, Rect, ViewInfo } from "../api/types";
+import { RESOLVE_MAX_REFS } from "../api/types";
+import { matchMenuItems, type MenuSelection } from "../core/mod-menu";
+import { MenuRun } from "./menu-run";
 import { uniqueName } from "../core/names";
 import { parseCommandLine, splitPath } from "../core/paths";
 import { backend, BackendError, ICON_ORIGIN, type OneDriveAction, type Place, type RawEntry, type RawFolder } from "./backend";
@@ -212,6 +215,8 @@ export class App {
     if (views.length === 0) return;
     this.views = views;
     this.problems = problems;
+    // 見えない所で動いている MOD は、外した・版が変わったかもしれないので止める（ADR 0036）
+    for (const r of [...this.runners.values()]) r.end();
     const reload = new Set(reloadDirs.map(folderKey));
     for (const tab of [...this.tabs]) {
       const next = views.find((v) => v.manifest.id === tab.view.manifest.id);
@@ -348,7 +353,7 @@ export class App {
     quickAccess.onChange(() => void this.renderQuickAccess());
     const body = el("div", "body");
     body.append(this.sidebar, this.content);
-    root.append(tabsRow, this.navRow, body, this.status);
+    root.append(tabsRow, this.navRow, body, this.status, this.runnerBox);
 
     // ブラウザ本来の右クリックのメニュー（戻る・印刷・開発者ツールなど）は出さない。アドレスバーなどの入力欄だけは残す
     document.addEventListener("contextmenu", (e) => {
@@ -1094,10 +1099,69 @@ export class App {
     this.toast(`展開しました：${path.split("\\").pop()}`);
   }
 
+  // ---- ほかのビューの右クリックのメニューに出す MOD の項目（ADR 0036） ----
+
+  /** 見えない所で動いている MOD（MOD ごとに1つ）と、その iframe を置く見えない箱 */
+  private readonly runners = new Map<string, MenuRun>();
+  private readonly runnerBox = el("div", "menu-runners");
+
+  /** 選んでいるものの、フォルダかどうかと名前（今のフォルダに無いものは ID から探す）。分からないものがあれば null */
+  private async knownEntries(items: EntryRef[], raws: (RawEntry | undefined)[]): Promise<RawEntry[] | null> {
+    const missing = items.filter((_, i) => !raws[i]);
+    if (missing.length > RESOLVE_MAX_REFS) return null;
+    const found = missing.length > 0 ? await backend.resolve(missing).catch(() => null) : [];
+    if (!found) return null;
+    let k = 0;
+    const all = raws.map((r) => r ?? found[k++] ?? null);
+    return all.every((r) => r !== null) ? (all as RawEntry[]) : null;
+  }
+
+  /** 「MOD の名前 ▸ 項目」の行。今のタブのビュー自身の項目は出さない（自分のビューでは extra で足せる） */
+  private modMenuLines(tab: Tab, sel: MenuSelection, items: RawEntry[]): MenuLine[] {
+    const lines: MenuLine[] = [];
+    for (const v of this.views) {
+      if (!v.manifest.menu || v.manifest.id === tab.view.manifest.id) continue;
+      const found = matchMenuItems(v.manifest.menu, sel);
+      if (found.length === 0) continue;
+      lines.push({
+        label: v.manifest.name,
+        submenu: found.map((m) => ({
+          label: m.label,
+          run: () => void this.runModMenu(tab, v, m, items).catch((e) => this.toast(`「${v.manifest.name}」を動かせませんでした：${errorText(e)}`)),
+        })),
+      });
+    }
+    return lines;
+  }
+
+  /** MOD の項目が選ばれた：run に合わせて、新しいタブで開くか、見えない所で動かして、知らせ menu を渡す */
+  private async runModMenu(tab: Tab, view: LoadedView, item: ModMenuItem, items: RawEntry[]) {
+    const folder = tab.folderView && tab.folder ? { id: tab.folder.id, path: tab.folder.path } : null;
+    if (item.run === "background") {
+      const id = view.manifest.id;
+      let run = this.runners.get(id);
+      if (!run) {
+        run = new MenuRun(this.runnerBox, view, tab, tab.folderView ? tab.folder : null, (r) => this.runners.get(id) === r && this.runners.delete(id));
+        this.runners.set(id, run);
+      }
+      run.host.sendMenu(item.id, items, folder);
+      return;
+    }
+    // 開くのは今のタブのフォルダ（選んだフォルダで開きたい MOD は、知らせを受けて navigate する）
+    const next = await this.openTab(view, isFolderView(view) ? folder?.path : undefined, this.tabs.indexOf(tab) + 1);
+    next.host.sendMenu(item.id, items, folder);
+  }
+
   /** 右クリックのメニュー（ADR 0009 判断2）。MOD が足した項目が選ばれたら、その id を返す */
   async showMenu(tab: Tab, x: number, y: number, items: EntryRef[], extra: MenuItem[]): Promise<string | null> {
     let chosen: string | null = null;
     const raws = items.map((r) => tab.folder?.entries.find((e) => e.path === r.path));
+    // ほかの MOD の項目（ADR 0036）。空いている所は、ビューが自分の項目だけを出したいとき（extra がある）には足さない
+    let modLines: MenuLine[] = [];
+    if (items.length > 0) {
+      const known = await this.knownEntries(items, raws);
+      if (known) modLines = this.modMenuLines(tab, { kind: "items", items: known }, known);
+    } else if (tab.folderView && extra.length === 0) modLines = this.modMenuLines(tab, { kind: "background" }, []);
     const run = (work: () => Promise<unknown>) => () =>
       void work().catch((e) => {
         if (!(e instanceof BackendError && e.apiError.code === "denied")) this.toast(`できませんでした：${errorText(e)}`);
@@ -1144,6 +1208,8 @@ export class App {
         { label: "タグ…", run: run(() => tagPicker(items)) },
         { label: "時間割のコマに結びつける…", disabled: !single || !allFolders, run: run(() => slotPicker(items[0], (m) => this.toast(m))) },
         "separator",
+        ...modLines,
+        "separator",
         { label: "ごみ箱へ送る", shortcut: "Delete", run: run(() => this.trash(tab, items)) },
       );
     } else if (tab.folderView && extra.length === 0) {
@@ -1152,6 +1218,11 @@ export class App {
         { label: "新しいフォルダー", shortcut: "Ctrl+Shift+N", disabled: !tab.folder, run: run(() => this.createFolder(tab)) },
         { label: "最新の情報に更新", shortcut: "F5", run: () => this.refresh() },
         { label: "パスのコピー", disabled: !tab.folder, run: copyPaths(tab.folder ? [tab.folder.path] : []) },
+        "separator",
+        // タブの ▸ と同じ中身（ADR 0034・0036）
+        { label: "ビューを変える", submenu: [...this.viewMenuLines(tab, true), "separator", ...this.viewMenuLines(tab, false)] },
+        "separator",
+        ...modLines,
       );
     }
     if (extra.length > 0) {

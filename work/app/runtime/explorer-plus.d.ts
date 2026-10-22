@@ -212,6 +212,16 @@ declare global {
       viewId: string;
       tabId: string;
       theme: "light" | "dark";
+      /** 見えない所で動いているか（manifest の menu の run が "background" の項目が選ばれた。2026-10-22 に追加） */
+      background: boolean;
+    }
+
+    /** manifest の menu の項目が選ばれた（2026-10-22 に追加）。folder は右クリックしたタブのフォルダ */
+    interface MenuEvent {
+      id: string;
+      /** 選んでいたもの（空いている所の右クリックなら []） */
+      items: Entry[];
+      folder: EntryRef | null;
     }
 
     /** 画面上の位置。DOMRect をそのまま渡してよい */
@@ -390,6 +400,10 @@ declare global {
       /** コマンドの一覧（Ctrl+Shift+P）に出すコマンド（50 個まで。呼ぶたびに置き換える） */
       readonly commands: { set(list: ChoiceItem[]): Promise<void> };
       onCommand(cb: (id: string) => void): () => void;
+      /** manifest の menu の項目が、右クリックのメニュー（ほかのビューのものも）で選ばれた。onMenu を呼ぶ前に届いた分も渡す */
+      onMenu(cb: (event: MenuEvent) => void): () => void;
+      /** 見えない所で動いているとき、終わったことを伝える（本体が止める）。ビューのときは何も起きない */
+      readonly menu: { done(): Promise<void> };
       /** uses に "tree" が要る。depth は 1〜5、from を渡すとそのフォルダから下（省略すると今のフォルダから） */
       getTree(opts?: { depth?: number; from?: EntryRef }): Promise<TreeNode>;
       /** uses に "links" が要る。見つからなければ null */

@@ -84,6 +84,7 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
     case "ready":
     case "navigateUp":
     case "storage.keys":
+    case "menu.done":
       return { ok: true, params: {} };
 
     case "open": {

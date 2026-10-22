@@ -1,6 +1,7 @@
 import { USES, SUPPORTED_API_VERSIONS, type Manifest, type Use } from "../api/types";
 import { checkSettings } from "./settings";
 import { checkNetwork } from "./network";
+import { checkMenu } from "./mod-menu";
 
 export type ManifestResult =
   | { ok: true; manifest: Manifest }
@@ -168,6 +169,7 @@ export function validateManifest(
   const location = checkLocation(raw.location, errors);
   const network = checkNetwork(raw.network, errors);
   const settings = checkSettings(raw.settings, errors, network ?? []);
+  const menu = checkMenu(raw.menu, errors);
 
   if (errors.length > 0) {
     return { ok: false, errors };
@@ -192,6 +194,9 @@ export function validateManifest(
   }
   if (network !== undefined && network.length > 0) {
     manifest.network = network;
+  }
+  if (menu !== undefined && menu.length > 0) {
+    manifest.menu = menu;
   }
 
   return { ok: true, manifest };

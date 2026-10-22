@@ -110,6 +110,9 @@ button { font: inherit; color: inherit; }
 .menu-item:disabled { opacity: 0.4; }
 .menu-label { flex: 1; }
 .menu-key { color: var(--muted); font-size: 12px; }
+.menu-arrow { color: var(--muted); font-size: 16px; line-height: 1; margin-right: -4px; }
+/* 右クリックのメニューから見えない所で動かす MOD（ADR 0036）。大きさ 0 で隠す（display: none にはしない） */
+.menu-runners { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .menu-sep { height: 1px; margin: 4px 8px; background: var(--border); }
 .tab-view { font-size: 11px; color: var(--accent); white-space: nowrap; }
 .tab-view:empty { display: none; }
