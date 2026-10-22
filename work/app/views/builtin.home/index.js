@@ -101,6 +101,8 @@ document.body.innerHTML = `
       <span class="tui-grow"></span>
       <button class="tui-button pick-btn" id="log-level" value="info" title="出す重さ">すべて</button>
       <button class="tui-button" id="log-copy">コピー</button>
+      <button class="tui-button" id="log-file" title="見ているログを、読みやすい文字のファイル（.txt）にして開く">ファイルで開く</button>
+      <button class="tui-button" id="log-folder" title="ログのファイルが入っているフォルダを開く">ログのフォルダ</button>
       <button class="tui-button" id="log-clear">消す</button>
     </div>
     <div class="tui-scroll" id="log"></div>
@@ -373,6 +375,9 @@ document.getElementById("log-clear").onclick = async () => {
   shown = [];
   renderLog();
 };
+// 出す重さで絞っているときは、絞ったものだけをファイルにする（「コピー」と同じ）
+document.getElementById("log-file").onclick = () => ep.logs.openFile(source, $level.value).catch((e) => ep.ui.toast(`ファイルにできませんでした：${e?.message ?? e}`));
+document.getElementById("log-folder").onclick = () => ep.logs.openFolder().catch((e) => ep.ui.toast(`フォルダを開けませんでした：${e?.message ?? e}`));
 document.getElementById("log-copy").onclick = () => {
   const text = shown.filter(visible).map((e) => `${timeOf(e.t)} ${LEVEL_LABEL[e.level]} ${e.text}`).join("\n");
   // ビューの画面は隔離されているので、navigator.clipboard は使えないことがある。そのときは選んでコピーする

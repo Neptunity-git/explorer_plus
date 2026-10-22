@@ -21,6 +21,29 @@ export function toLine(e: LogEntry): string {
   return JSON.stringify({ t: e.t, level: e.level, text: e.text });
 }
 
+/** 重さの順（大きいほど重い） */
+export const LEVEL_RANK: Record<LogLevel, number> = { info: 0, warn: 1, error: 2 };
+
+const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+
+/** 書き出すファイルの時刻（この PC の時刻で、日付つき）：2026-10-22 12:34:56.789 */
+export function formatTime(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+
+/**
+ * 人が読む・人に渡すための文字のファイルの中身（minLevel 以上の重さだけ）。1件が `時刻 [重さ] 本文`。
+ * 本文が何行かあるときは、2行目からを字下げして、件の始まりが見分けられるようにする。
+ * 改行は \r\n（メモ帳でもそのまま読める）
+ */
+export function toText(entries: LogEntry[], minLevel: LogLevel = "info"): string {
+  return entries
+    .filter((e) => LEVEL_RANK[e.level] >= LEVEL_RANK[minLevel])
+    .map((e) => `${formatTime(e.t)} [${e.level}] ${e.text.replace(/\r?\n/g, "\r\n    ")}\r\n`)
+    .join("");
+}
+
 /** ファイルの1行を読む。壊れた行は null */
 export function fromLine(line: string, source: string): LogEntry | null {
   try {

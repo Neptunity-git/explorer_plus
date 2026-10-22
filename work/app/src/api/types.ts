@@ -440,6 +440,9 @@ export type CallMethod =
   | "logs.list"
   | "logs.sources"
   | "logs.clear"
+  // ↓ 2026-10-22 に追加（ADR 0038）。標準のビューだけが使える
+  | "logs.openFile"
+  | "logs.openFolder"
   | "mods.openSettings"
   // ↓ 2026-10-22 に追加（ADR 0036）。見えない所で動いている MOD が、終わったことを伝える
   | "menu.done";
@@ -558,6 +561,10 @@ export type CallParams = {
   /** ログがある出どころ（本体と、ログが残っている MOD） */
   "logs.sources": Record<string, never>;
   "logs.clear": { source: string };
+  /** その出どころのログを、人が読む文字のファイル（logs/app.txt・logs/mod.<id>.txt）に書き出し、PC の既定のアプリで開く。level 以上の重さだけ（省くと全部） */
+  "logs.openFile": { source: string; level?: LogLevel };
+  /** ログのフォルダを、アプリの新しいタブで開く（元の logs/*.log と、書き出した *.txt が入っている） */
+  "logs.openFolder": Record<string, never>;
   /** その MOD の設定の画面を出す */
   "mods.openSettings": { id: string };
   /** 見えない所で動いているとき、本体に止めてもらう（ビューのときは何も起きない） */
@@ -647,6 +654,8 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "logs.list": null,
   "logs.sources": null,
   "logs.clear": null,
+  "logs.openFile": null,
+  "logs.openFolder": null,
   "mods.openSettings": null,
   "menu.done": null,
 };

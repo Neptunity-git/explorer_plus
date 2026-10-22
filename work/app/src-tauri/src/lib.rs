@@ -93,6 +93,8 @@ pub fn run() {
             logs::log_tail,
             logs::log_sources,
             logs::log_clear,
+            logs::log_dir,
+            logs::log_export,
             netproxy::net_url,
             secrets::secret_set,
             secrets::secret_status,

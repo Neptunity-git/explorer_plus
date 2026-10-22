@@ -1,7 +1,7 @@
 // ログ（ADR 0029）。本体のログ（"app"）と MOD ごとのログを、画面に出すために覚えておき、Rust に頼んでファイルにも残す。
 // ファイルへは少しまとめて書く。初めて見るときに、ファイルに残っている分を読み込む（アプリを起動し直しても見られる）。
 import { invoke } from "@tauri-apps/api/core";
-import { APP_LOG, LogLimiter, LogRing, clip, fromLine, toLine, type LogEntry, type LogLevel } from "../core/logs";
+import { APP_LOG, LogLimiter, LogRing, clip, fromLine, toLine, toText, type LogEntry, type LogLevel } from "../core/logs";
 import { broadcast } from "./sync";
 
 const FLUSH_MS = 1000;
@@ -84,6 +84,18 @@ class LogService {
   async sources(): Promise<string[]> {
     const fromFile = await invoke<string[]>("log_sources").catch(() => [] as string[]);
     return [...new Set([...fromFile, ...this.rings.keys()])].filter((s) => s !== APP_LOG).sort();
+  }
+
+  /** ログのフォルダのパス（無ければ作る） */
+  dir(): Promise<string> {
+    return invoke<string>("log_dir");
+  }
+
+  /** その出どころのログを、人が読む文字のファイルに書き出して、そのパスを返す（ADR 0038） */
+  async exportText(source: string, level: LogLevel = "info"): Promise<string> {
+    // 覚えている分（ファイルから読んだ分と、書き込み待ちの分）
+    const entries = await this.list(source);
+    return invoke<string>("log_export", { source, text: toText(entries, level) });
   }
 
   async clear(source: string) {

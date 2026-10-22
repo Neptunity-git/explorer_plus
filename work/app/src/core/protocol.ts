@@ -512,7 +512,14 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { source } };
     }
     case "logs.sources":
+    case "logs.openFolder":
       return { ok: true, params: {} };
+    case "logs.openFile": {
+      const { source, level } = params;
+      if (!isNonEmptyString(source) || source.length > 64) return { ok: false };
+      if (level !== undefined && level !== "info" && level !== "warn" && level !== "error") return { ok: false };
+      return { ok: true, params: { source, ...(level !== undefined ? { level } : {}) } };
+    }
 
     case "mods.list":
     case "mods.install":

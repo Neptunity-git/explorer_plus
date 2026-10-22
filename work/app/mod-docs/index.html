@@ -754,7 +754,8 @@ const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=toky
 <li><strong>ウィンドウが複数あるとき</strong>：同じフォルダを、同じビューで2つのウィンドウに開いていることがあります。<code>folderData</code> を使うビューは、
 <code>ep.onFolderData(() =&gt; …)</code> で「ほかのウィンドウが書き換えた」を受け取り、<code>folderData.get</code> で読み直すと食い違いません（<code>storage</code>・設定は本体が合わせます）</li>
 <li><strong>ログ</strong>：MOD の <code>console.log</code>・<code>console.warn</code>・<code>console.error</code> と、受け止めなかったエラーは、ホームの「ログ」の欄に、MOD ごとに出ます（MOD の行の「ログ」でも開けます）。
-その MOD が本体に頼んだこと（通信・ファイルを作る・名前の変更など）と、断られた理由（<code>not-declared</code> など）も出ます。ファイルにも残るので、アプリを起動し直しても見られます</li>
+その MOD が本体に頼んだこと（通信・ファイルを作る・名前の変更など）と、断られた理由（<code>not-declared</code> など）も出ます。ファイルにも残るので、アプリを起動し直しても見られます。
+ファイルとして欲しいとき（人や AI に渡す、検索する）は、ホームのログの欄の「ファイルで開く」で、読みやすい文字のファイル（<code>.txt</code>）にしてメモ帳などで開けます。「ログのフォルダ」で、ログのファイルが入っているフォルダ（<code>logs</code>）を開けます</li>
 <li><strong>開発者ツール</strong>：ホームの「MOD」の欄の「開発者ツール」で開けます。MOD のエラーや <code>console.log</code> は、そこのコンソールにも出ます（上の「top」を自分の MOD の <code>__frame.html</code> に切り替えると、MOD の中で式を試せます）</li>
 <li><strong>大きなフォルダ</strong>：<code>entries</code> が数千になることがあります。全部を DOM にせず、見えている所だけ描くと軽くなります</li>
 <li><strong>ライブラリ</strong>：Three.js などは、npm で入れて esbuild などで1つのファイルにまとめ、MOD のフォルダに置きます。<code>entry</code> を <code>dist/main.js</code> にしても大丈夫です</li>

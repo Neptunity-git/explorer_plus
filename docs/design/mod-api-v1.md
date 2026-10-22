@@ -410,6 +410,15 @@ uses の宣言は要らない。
 - `from` のフォルダが無ければ `not-found`、ID が今のものと完全に合わなければ `not-found`（空の ID は、ID の無いドライブのフォルダにだけ通る。本体から渡された場所しか読めないように）
 - 深さ 1〜5、1回にフォルダ 500 個まで、は同じ。要る `uses` も `tree` のまま
 
+## 2026-10-22 の追加：ログをファイルとして使う（ADR 0038）
+
+- 標準のビューだけが使える（ほかの MOD が呼ぶと `denied`）：
+  - `logs.openFile({ source, level? })`（`ep.logs.openFile(source, level)`）：その出どころのログを、人が読む文字のファイル `logs/app.txt`・`logs/mod.<id>.txt` に書き出して、PC の既定のアプリで開く。
+    1件が `2026-10-22 12:34:56.789 [warn] 本文`（本文の2行目からは字下げ。改行は `\r\n`）。level（"info"・"warn"・"error"）以上の重さだけ。省くと全部。画面に覚えている分（1000 件まで）が対象。書き出しのたびに置き換える
+  - `logs.openFolder()`（`ep.logs.openFolder()`）：`logs` フォルダを、アプリの新しいタブで開く
+- どちらも `uses` は要らない。`logs.clear` は、書き出した `.txt` も消す
+- 保存形式（`logs/*.log` の1行1件の JSON）は変えない
+
 ## 2026-10-22 の追加：ほかのビューの右クリックのメニューに出す（ADR 0036）
 
 - manifest の `menu`：`[{ id（1〜64文字、重なりなし）, label（1〜60文字）, for?（"file"・"folder"・"background" の空でない並び。省略は3つとも）,

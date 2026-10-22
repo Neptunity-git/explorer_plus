@@ -3,6 +3,7 @@
 //   logs/mod.<id>.log     … MOD ごと（console.log・エラー・その MOD が本体に頼んだこと）
 // 1行が1件（JSON の文字列。中身の形は TypeScript の src/core/logs.ts が決める）。
 // 大きくなりすぎないよう、1MB を超えたら古いもの（.old.log）に入れ替える。
+// 人が読む・人に渡すためのファイルは、ホームの「ファイルで開く」が logs/app.txt・logs/mod.<id>.txt に書き出す（ADR 0038）。
 
 use crate::mods::{data_root, valid_id};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -32,6 +33,12 @@ fn file_name(source: &str) -> Result<String, String> {
     }
 }
 
+/// "mod.x.log" の拡張子 .log を ext に替えた名前（"mod.x.old.log"・"mod.x.txt" など）。
+/// id に ".log" が入っていても（"my.logger" など）、後ろの拡張子だけを替える
+fn with_ext(name: &str, ext: &str) -> String {
+    format!("{}{}", name.strip_suffix(".log").unwrap_or(name), ext)
+}
+
 fn logs_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_root(app)?.join("logs"))
 }
@@ -42,7 +49,7 @@ fn append_to(dir: &std::path::Path, source: &str, lines: &[String]) -> Result<()
     let path = dir.join(&name);
     let _g = WRITE_LOCK.lock().unwrap();
     if std::fs::metadata(&path).map(|m| m.len() > FILE_MAX).unwrap_or(false) {
-        let _ = std::fs::rename(&path, dir.join(name.replace(".log", ".old.log")));
+        let _ = std::fs::rename(&path, dir.join(with_ext(&name, ".old.log")));
     }
     let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path).map_err(io_err)?;
     let mut buf = String::new();
@@ -109,15 +116,46 @@ pub fn log_sources(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
-/// ログを消す（古いものも）
+/// ログを消す（古いものも、書き出した読みやすい文字のファイルも）
 #[tauri::command]
 pub fn log_clear(app: AppHandle, source: String) -> Result<(), String> {
     let dir = logs_dir(&app)?;
-    let name = file_name(&source)?;
+    clear_in(&dir, &source)
+}
+
+fn clear_in(dir: &std::path::Path, source: &str) -> Result<(), String> {
+    let name = file_name(source)?;
     let _g = WRITE_LOCK.lock().unwrap();
     let _ = std::fs::remove_file(dir.join(&name));
-    let _ = std::fs::remove_file(dir.join(name.replace(".log", ".old.log")));
+    let _ = std::fs::remove_file(dir.join(with_ext(&name, ".old.log")));
+    let _ = std::fs::remove_file(dir.join(with_ext(&name, ".txt")));
     Ok(())
+}
+
+/// ログのフォルダ（「ログのフォルダ」を開くのに使う。まだ無ければ作る）
+#[tauri::command]
+pub fn log_dir(app: AppHandle) -> Result<String, String> {
+    let dir = logs_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(io_err)?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// 人が読む文字のファイルを書き出し（前に書き出したものは置き換える）、そのパスを返す。
+/// text の形は TypeScript の src/core/logs.ts（toText）が決める
+fn export_to(dir: &std::path::Path, source: &str, text: &str) -> Result<PathBuf, String> {
+    let path = dir.join(with_ext(&file_name(source)?, ".txt"));
+    std::fs::create_dir_all(dir).map_err(io_err)?;
+    let _g = WRITE_LOCK.lock().unwrap();
+    std::fs::write(&path, text).map_err(io_err)?;
+    Ok(path)
+}
+
+#[tauri::command]
+pub async fn log_export(app: AppHandle, source: String, text: String) -> Result<String, String> {
+    let dir = logs_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || export_to(&dir, &source, &text).map(|p| p.to_string_lossy().into_owned()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -145,6 +183,27 @@ mod tests {
         assert_eq!(tail_of(&d, "app", 10).unwrap(), vec!["a", "bc", "d"]);
         assert_eq!(tail_of(&d, "app", 2).unwrap(), vec!["bc", "d"]);
         assert!(tail_of(&d, "my.view", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn with_ext_only_changes_the_end() {
+        assert_eq!(with_ext("app.log", ".txt"), "app.txt");
+        assert_eq!(with_ext("mod.my.logger.log", ".old.log"), "mod.my.logger.old.log");
+        assert_eq!(with_ext("mod.my.logger.log", ".txt"), "mod.my.logger.txt");
+    }
+
+    #[test]
+    fn export_replaces_and_clear_removes_all() {
+        let d = dir("export");
+        append_to(&d, "my.logger", &["a".into()]).unwrap();
+        let p = export_to(&d, "my.logger", "one\r\n").unwrap();
+        assert_eq!(p, d.join("mod.my.logger.txt"));
+        export_to(&d, "my.logger", "two\r\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "two\r\n");
+        assert!(export_to(&d, "../x", "no").is_err());
+        clear_in(&d, "my.logger").unwrap();
+        assert!(!p.exists());
+        assert!(!d.join("mod.my.logger.log").exists());
     }
 
     #[test]

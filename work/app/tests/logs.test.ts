@@ -1,6 +1,6 @@
 // ログ（ADR 0029）：1件の形・覚えておく数・出しすぎの抑え・操作の説明・メッセージの検査
 import { describe, expect, it } from "vitest";
-import { LogLimiter, LogRing, clip, describeCommand, describeModCall, fromLine, quietFailure, toLine, urlForLog } from "../src/core/logs";
+import { LogLimiter, LogRing, clip, describeCommand, describeModCall, formatTime, fromLine, quietFailure, toLine, toText, urlForLog } from "../src/core/logs";
 import { parseModMessage } from "../src/core/protocol";
 import { METHOD_REQUIRES } from "../src/api/types";
 
@@ -16,6 +16,30 @@ describe("1件の形", () => {
   it("長すぎる文は切る", () => {
     expect(clip("x".repeat(10), 4)).toBe("xxxx…（6 文字省略）");
     expect(clip("abc", 4)).toBe("abc");
+  });
+});
+
+describe("文字のファイル（ADR 0038）", () => {
+  const at = (h: number, m: number, s: number, ms: number) => new Date(2026, 9, 22, h, m, s, ms).getTime();
+  const log = (t: number, level: "info" | "warn" | "error", text: string) => ({ t, level, source: "my.view", text });
+
+  it("時刻は、この PC の時刻で、日付つき", () => {
+    expect(formatTime(at(9, 5, 3, 7))).toBe("2026-10-22 09:05:03.007");
+  });
+
+  it("1件が1行。本文が何行かあるときは、2行目からを字下げする", () => {
+    const text = toText([log(at(1, 2, 3, 4), "info", "hello"), log(at(1, 2, 4, 0), "error", "boom\nat a.js:1\r\nat b.js:2")]);
+    expect(text).toBe(
+      "2026-10-22 01:02:03.004 [info] hello\r\n" + "2026-10-22 01:02:04.000 [error] boom\r\n    at a.js:1\r\n    at b.js:2\r\n",
+    );
+  });
+
+  it("出す重さで絞れる。何も無ければ空", () => {
+    const list = [log(1, "info", "a"), log(2, "warn", "b"), log(3, "error", "c")];
+    expect(toText(list, "warn").split("\r\n").filter(Boolean)).toHaveLength(2);
+    expect(toText(list, "error")).toContain("[error] c");
+    expect(toText(list, "error")).not.toContain("[warn]");
+    expect(toText([])).toBe("");
   });
 });
 
@@ -91,5 +115,17 @@ describe("メッセージ", () => {
     expect(call("logs.sources", {}).ok).toBe(true);
     expect(call("mods.openSettings", { id: "my.view" }).ok).toBe(true);
     expect(METHOD_REQUIRES["logs.list"]).toBeNull();
+  });
+
+  it("logs.openFile・logs.openFolder（ADR 0038）", () => {
+    const call = (method: string, params: Record<string, unknown>) => parseModMessage({ ep: 1, kind: "call", id: 1, method, params });
+    const ok = call("logs.openFile", { source: "my.view", level: "warn" });
+    expect(ok.ok && ok.message).toMatchObject({ params: { source: "my.view", level: "warn" } });
+    expect(call("logs.openFile", { source: "app" }).ok).toBe(true);
+    expect(call("logs.openFile", {}).ok).toBe(false);
+    expect(call("logs.openFile", { source: "app", level: "debug" }).ok).toBe(false);
+    expect(call("logs.openFolder", {}).ok).toBe(true);
+    expect(METHOD_REQUIRES["logs.openFile"]).toBeNull();
+    expect(METHOD_REQUIRES["logs.openFolder"]).toBeNull();
   });
 });

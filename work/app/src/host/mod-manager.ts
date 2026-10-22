@@ -6,6 +6,7 @@ import { formatSize } from "../core/format";
 import { backend, BackendError } from "./backend";
 import { confirmDialog } from "./effects";
 import { grantService } from "./collection-service";
+import { logService } from "./log-service";
 import { broadcast } from "./sync";
 import type { ModProblem } from "./mods";
 import type { LoadedView } from "./view-host";
@@ -246,6 +247,11 @@ export class ModManager {
   /** MOD 開発ガイドのフォルダを、アプリの新しいタブで開く（guide.md・index.html が入っている） */
   async openDocs(): Promise<void> {
     this.host.openFolder(await backend.modDocsDir());
+  }
+
+  /** ログのフォルダを、アプリの新しいタブで開く（ADR 0038） */
+  async openLogsFolder(): Promise<void> {
+    this.host.openFolder(await logService.dir());
   }
 
   openDevtools(): Promise<void> {

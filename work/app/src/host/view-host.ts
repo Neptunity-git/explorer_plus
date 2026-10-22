@@ -672,6 +672,13 @@ export class ViewHost {
         return logService.sources();
       case "logs.clear":
         return logService.clear(p.source);
+      case "logs.openFile": {
+        const path = await logService.exportText(p.source, p.level);
+        const [id] = await backend.fileIds([path]);
+        return backend.openEntry({ id, path });
+      }
+      case "logs.openFolder":
+        return this.tab.mods.openLogsFolder();
       // ↓ 右クリックのメニューから見えない所で動かしたとき（ADR 0036）。返事を送ってから止める
       case "menu.done":
         if (this.tab.menuDone) setTimeout(() => this.tab.menuDone?.(), 0);

@@ -469,6 +469,9 @@
       list: (source) => call("logs.list", { source }),
       sources: () => call("logs.sources"),
       clear: (source) => call("logs.clear", { source }).then(() => undefined),
+      // ↓ 2026-10-22 に追加（ADR 0038）
+      openFile: (source, level) => call("logs.openFile", { source, ...(level ? { level } : {}) }).then(() => undefined),
+      openFolder: () => call("logs.openFolder").then(() => undefined),
     }),
     onLogs(cb) {
       logsListeners.add(cb);
