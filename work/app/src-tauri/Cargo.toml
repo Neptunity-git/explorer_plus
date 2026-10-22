@@ -1,6 +1,6 @@
 [package]
 name = "explorer-plus"
-version = "0.7.0"
+version = "0.7.1"
 description = "explorer_plus"
 authors = ["Neo-Neptunity"]
 edition = "2024"
