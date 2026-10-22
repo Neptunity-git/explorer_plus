@@ -1,5 +1,9 @@
 # explorer_plus について（Claude Code 用の前提情報）
 
+> **外部の貢献者の方へ**：このリポジトリは公開されています。teamNeo（下に出てくる `/mnt/c/.../teamNeo`）は
+> 作者の手元にしかないので、そのパスが存在しない環境では、以下の手順 0〜3 と Qwen・ADR・direct-work の決まりは
+> 飛ばして、[README.md](README.md) と [CONTRIBUTING.md](CONTRIBUTING.md) に従ってください。
+
 このプロジェクトは `/mnt/c/Users/neo_m/projects-NEO/teamNeo` にある「一人開発チーム」システムの
 一部です。あなた（Claude）は設計・タスク分解・Qwen（ローカル実装担当）の管理・
 結果の確認を担当します。作業を始める前に、以下を読んでください：
