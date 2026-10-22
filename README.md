@@ -51,6 +51,9 @@ npm run build         # 型の検査（tsc）と画面のビルド
 MOD は、`manifest.json` と `index.js` を入れたフォルダ1つです。ビルドは要りません。
 
 - 説明書：[work/app/mod-docs/guide.md](work/app/mod-docs/guide.md)（アプリのホーム →「MOD 開発ガイド」でも開けます）
+- 初めての人向けの手引き：[work/app/mod-docs/beginner.md](work/app/mod-docs/beginner.md)（IDE をほとんど使ったことがない人が、AI に手伝ってもらって最初の MOD を作るまで。よくある質問つき）
+- 作った MOD を公開して共有する手引き：[work/app/mod-docs/share.md](work/app/mod-docs/share.md)（GitHub が初めての人向け。ブラウザだけでできます）
+- みんなの MOD の一覧：[explorer_plus-mods](https://github.com/Neptunity-git/explorer_plus-mods)（探す・載せる）
 - ひな形：[work/app/mod-template/](work/app/mod-template/)（アプリのホーム →「ひな形から作る」でも作れます）
 - 実例：[work/mods/neo.tree/](work/mods/neo.tree/)
 

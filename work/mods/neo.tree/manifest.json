@@ -6,7 +6,7 @@
   "entry": "index.js",
   "uses": ["entries", "icons", "tree"],
   "location": "folder",
-  "description": "今のフォルダを根にして、下の階層を左から右へ枝分かれする図で見せる。枝は開いたところだけ読む（ADR 0032）",
+  "description": "今のフォルダを根にして、下の階層を左から右へ枝分かれする図で見せる。枝は開いたところだけ読む。右クリックのメニューから、ほかのビューからも開ける（アプリ 0.7.0 以上）",
   "menu": [{ "id": "open", "label": "樹形図で開く", "for": ["folder", "background"], "multiple": false }],
   "settings": [
     {
