@@ -88,6 +88,7 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `system` | `system.drives`・`info`：ドライブと空き容量・強調色・言語 | 軽い |
 | `createFiles` | `files.create`・`createShortcut`：新しいファイル・フォルダ・ショートカットを作る（上書きしない。最初に許可を聞く） | 軽い |
 | `collections` | `collections.*`：コレクション（ファイルを場所と関係なく集めたもの）を見る・作る・変える | 軽い |
+| `pointerLock` | 標準の `requestPointerLock()` が使えるようになる（呼び出しは増えません。下の「ポインターロック」） | 軽い |
 
 保存（`storage`）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。
 
@@ -403,6 +404,36 @@ ep.onDragTargets(() => ep.drag.targets(folderTargets()));   // ドラッグ中�
 // folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）
 ```
 
+### ポインターロック（pointerLock）
+
+マウスのポインターを画面に固定して消し、**動いた量だけ**を受け取る機能です。視点を回すビュー（一人称の 3D など）や、画面の端で止まらないつまみに使います。
+`ep.…` の呼び出しはありません。manifest の `uses` に `"pointerLock"` を書くと、ブラウザ標準の `requestPointerLock()` が使えるようになります（書かないと、`pointerlockerror` で断られます）。
+
+```js
+// uses: ["pointerLock"]
+canvas.addEventListener("click", async () => {
+  if (document.pointerLockElement) return;
+  try {
+    await canvas.requestPointerLock({ unadjustedMovement: true });   // マウスの加速を切った生の動き
+  } catch (e) {
+    if (e.name === "NotSupportedError") await canvas.requestPointerLock();   // 使えない環境ではふつうのロック
+  }
+});
+document.addEventListener("mousemove", (e) => {
+  if (document.pointerLockElement === canvas) camera.turn(e.movementX, e.movementY);   // clientX・clientY は止まる
+});
+document.addEventListener("pointerlockchange", () => { /* ロックした・外れた。外れたら一時停止の画面を出す、など */ });
+```
+
+- ロックを頼めるのは、**クリックなど利用者の操作の中**だけです。Esc で外れた直後は、もう一度クリックが要ります
+- **Esc でいつでも外れます**（ブラウザの決まり。MOD からは止められません）
+- 本体が、次のときにロックを**自動で外します**（`pointerlockchange` が届きます）。ロック中は、ポインターが消えて本体の画面を押せないためです
+  - このタブが隠れたとき（ほかのタブへ切り替えたとき）、ページが隠れたとき、ほかの場所にフォーカスが移ったとき
+  - 本体が確かめ・入力・選択・メニューの画面を出すとき（`ui.confirm`・`ui.ask`・`ui.choose`・`showMenu`・`trash`・ファイルを作る許可など）
+- **ロック中は、本体のショートカットが効きません**（Ctrl+W でタブが閉じる、など。Ctrl を押しながら W で走る、のような遊び方をしても安全です）。ロックが外れると、また効きます
+- ロックできるのは同時に1つの iframe です。ほかのタブのビューがロックしているときは断られます
+- 右クリックのメニューから裏で動かす MOD（`run: "background"`）では使えません
+
 ### タグ・時間割・ほか
 
 ```js
@@ -499,7 +530,7 @@ const name = await ask({ label: "名前", okLabel: "作る" });          // や�
   **スクリプトは、通信先からは読み込めません**（コードは MOD のフォルダに入れてください。ライブラリは1つのファイルにまとめると楽です）
 - 画像は、自分のフォルダ・アイコンと縮小画像の URL・`data:`・`blob:` が使えます。WebAssembly と Web Worker（`blob:`）も使えます
 - ファイルの変更・削除は、必ず本体の API に頼みます。本体は、渡された項目のファイルID が今の場所と合うかを確かめてから行います
-- F5・Ctrl+R はページの読み直しではなく、本体の「読み直す」になります。Ctrl・Alt を押したキーは、本体のショートカット（Ctrl+T など）にも届きます
+- F5・Ctrl+R はページの読み直しではなく、本体の「読み直す」になります。Ctrl・Alt を押したキーは、本体のショートカット（Ctrl+T など）にも届きます（ポインターロック中は届きません）
 - MOD の管理（`ep.mods`）など、標準のビューだけが使える機能があります。MOD から呼ぶと `denied` になります
 
 > **入れる人は、あなたの MOD を信頼して入れます。** `uses` は必要なものだけにし、何をするビューかを `description` に正直に書いてください。

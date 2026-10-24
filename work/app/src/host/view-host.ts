@@ -17,6 +17,7 @@ import {
 } from "../api/types";
 import { sortEntries } from "../core/entries";
 import { parseModMessage } from "../core/protocol";
+import { OPENS_HOST_UI, sandboxFor } from "../core/pointer-lock";
 import { validateFileName } from "../core/names";
 import { checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
@@ -120,8 +121,9 @@ export class ViewHost {
   ) {
     this.uses = new Set(view.manifest.uses);
     this.iframe = document.createElement("iframe");
-    // allow-same-origin を付けない：MOD は出どころ null になり、本体や Tauri の機能に触れられない（ADR 0007 判断6）
-    this.iframe.setAttribute("sandbox", "allow-scripts");
+    // allow-same-origin を付けない：MOD は出どころ null になり、本体や Tauri の機能に触れられない（ADR 0007 判断6）。
+    // uses に pointerLock を宣言した MOD だけ、allow-pointer-lock を足す（ADR 0039）
+    this.iframe.setAttribute("sandbox", sandboxFor(view.manifest.uses, tab.background === true));
     this.iframe.className = "view-frame";
     // title にすると WebView2 ではビューの上のどこでもツールチップが出てしまうので、読み上げ用の名前だけ付ける
     this.iframe.setAttribute("aria-label", view.manifest.name);
@@ -282,6 +284,14 @@ export class ViewHost {
     if (this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "dragTargets", data: null });
   }
 
+  /**
+   * ポインターロックを外してもらう（タブが隠れるとき、本体が確かめやメニューの画面を出すとき。ADR 0039）。
+   * ロック中はポインターが消えて動かせないので、本体の画面に手が届かなくなる。宣言しているビューだけに送る
+   */
+  releasePointer() {
+    if (this.isReady && this.uses.has("pointerLock")) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "releasePointer", data: null });
+  }
+
   /** ビューの中の落とせる場所（iframe の中の座標）を、本体の画面の座標に直す */
   private toWindowTargets(targets: { id: string; path: string; x: number; y: number; width: number; height: number }[]): WindowTarget[] {
     const box = this.iframe.getBoundingClientRect();
@@ -358,6 +368,7 @@ export class ViewHost {
       this.reply(msg.id, this.track(msg, Promise.reject(new HostError(denied))));
       return;
     }
+    if (OPENS_HOST_UI.has(msg.method)) this.releasePointer();
     this.reply(msg.id, this.track(msg, this.dispatch(msg)));
   }
 

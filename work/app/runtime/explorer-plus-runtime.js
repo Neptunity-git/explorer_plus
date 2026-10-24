@@ -118,6 +118,8 @@
       } else if (m.event === "menu") {
         if (menuListeners.size === 0) pendingMenu.push(m.data);
         for (const cb of menuListeners) safely(cb, m.data);
+      } else if (m.event === "releasePointer") {
+        releasePointer();
       }
     }
   });
@@ -167,6 +169,16 @@
     if (!e.target.closest || !e.target.closest("input, textarea, [contenteditable='true']")) e.preventDefault();
   });
 
+  // ---- ポインターロック（uses に "pointerLock"。ADR 0039） ----
+  // ロックは MOD が標準の requestPointerLock() で自分でする。ロック中はポインターが消えて動かせないので、本体の画面
+  // （確かめ・メニュー・ほかのタブ）に手が届かなくなる。そうなる前に、自分で外す（Esc でも、いつでも外れる）
+  const releasePointer = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
+  };
+  // 本体の別の場所にフォーカスが移った・ページが隠れた
+  window.addEventListener("blur", releasePointer);
+  document.addEventListener("visibilitychange", () => document.hidden && releasePointer());
+
   // Ctrl・Alt を押しながらのキーと F5 は、本体のショートカット（タブを開く、読み直す、など）のために本体へも伝える。
   // F5・Ctrl+R はブラウザの「ページの再読み込み」なので止める（止めないと、アプリ全体が読み込み直される）
   window.addEventListener(
@@ -177,6 +189,9 @@
       // WebView2 自身のショートカット（印刷・ページ内検索・ページの保存など）は止める。MOD 自身のキーの処理はそのまま動く
       if (BROWSER_KEY(e)) e.preventDefault();
       if (!e.ctrlKey && !e.altKey && e.key !== "F5") return;
+      // ポインターロック中は、本体のショートカットを効かせない。Ctrl を押しながら W で走る、のような遊び方で、
+      // タブが閉じたりしないように（ADR 0039）。上の「ブラウザ自身のショートカットを止める」は、ロック中も効かせたまま
+      if (document.pointerLockElement) return;
       parent.postMessage({ ep: 1, kind: "key", key: reload ? "F5" : e.key, ctrl: reload ? false : e.ctrlKey, shift: e.shiftKey, alt: e.altKey }, "*");
     },
     true,

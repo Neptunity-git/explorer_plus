@@ -798,6 +798,8 @@ export class App {
       const on = t === tab;
       t.button.classList.toggle("active", on);
       t.pane.classList.toggle("active", on);
+      // 隠れるタブのビューがポインターをロックしたままだと、マウスが動かせなくなる（ADR 0039）
+      if (!on) t.host.releasePointer();
     }
     this.endEditAddress();
     this.updateChrome();

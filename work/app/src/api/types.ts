@@ -41,6 +41,9 @@ export const USES = [
   "createFiles",
   /** コレクション（仮想ディレクトリ）：ファイルを場所と関係なく集める */
   "collections",
+  // ↓ 2026-10-24 に追加（ポインターロック。ADR 0039）
+  /** マウスのポインターを固定して、動いた量だけ受け取る（標準の requestPointerLock()。呼び出しは無く、iframe の sandbox に allow-pointer-lock を足す） */
+  "pointerLock",
 ] as const;
 export type Use = (typeof USES)[number];
 
@@ -706,7 +709,10 @@ export type EventMessage =
   // ログが1件増えた（標準のビューだけに届く。ADR 0029）
   | { ep: 1; kind: "event"; event: "logs"; data: LogEntry }
   // 右クリックのメニューで、manifest の menu の項目が選ばれた（ADR 0036）
-  | { ep: 1; kind: "event"; event: "menu"; data: ModMenuEvent };
+  | { ep: 1; kind: "event"; event: "menu"; data: ModMenuEvent }
+  // ポインターロックを外してほしい：このビューのタブが隠れた・本体が確かめやメニューの画面を出す（uses に pointerLock があるビューだけ。ADR 0039）。
+  // ランタイムが受けて exitPointerLock() を呼ぶ。MOD は標準の pointerlockchange で、外れたことを知れる
+  | { ep: 1; kind: "event"; event: "releasePointer"; data: null };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 /** MOD の console.log・エラー（ランタイムが自動で送る。ADR 0029） */

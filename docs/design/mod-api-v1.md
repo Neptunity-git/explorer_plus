@@ -433,3 +433,17 @@ uses の宣言は要らない。
   - `navigate`・`navigateUp`・`showMenu`・`drag.*`・`clipboard.paste`・name の無い `createFolder` は `denied`。`ui.status`・`ui.tab` は何もしない
   - `ui.toast`・`ui.confirm` などは、表示中のタブでなくても出せる。`open` のフォルダは新しいタブで開く。ほかは右クリックしたタブに頼む
   - MOD ごとに1つ。動いている間に選ばれたら、同じものに `menu` を送る。MOD の一覧を読み直したら止める
+
+## 2026-10-24 の追加：ポインターロック（ADR 0039）
+
+- `uses` に `pointerLock`。呼び出し（method）は増えない。宣言した MOD の iframe にだけ、sandbox の `allow-pointer-lock` を足す
+  （`sandbox="allow-scripts allow-pointer-lock"`。`allow-same-origin` は付けないまま。判断は `src/core/pointer-lock.ts` の `sandboxFor`）。
+  MOD は、ブラウザ標準の `element.requestPointerLock()`・`pointerlockchange`・`movementX/Y` を、そのまま使う
+- 見えない所で動かす MOD（`run: "background"`）には、宣言していても足さない
+- 知らせ `releasePointer`（data は null。uses に `pointerLock` があるビューだけに届く）：ロックを外してほしい。ランタイムが受けて `document.exitPointerLock()` を呼ぶ（MOD には見えない。MOD は `pointerlockchange` で知る）
+  - 本体が送るとき：そのビューのタブが隠れたとき（`activate`）、そのビューが `ui.confirm`・`ui.ask`・`ui.choose`・`showMenu`・`trash`・`collections.delete`・`files.create`・`files.createShortcut`・`clipboard.paste`
+    を呼んだとき（`OPENS_HOST_UI`。本体が確かめやメニューの画面を出すため。ロック中はポインターが消えて押せない）
+- ランタイムが自分で外すとき：ウィンドウの `blur`、ページが `hidden` になったとき
+- ロック中（`document.pointerLockElement` がある間）、ランタイムは Ctrl・Alt つきのキーと F5 を本体へ**伝えない**（Ctrl+W でタブが閉じるなどを防ぐ）。
+  WebView2 自身のショートカット（印刷・ページ内検索など）を止める処理と、F5・Ctrl+R の読み直しを止める処理は、ロック中も変わらず効く
+- 検査は TypeScript だけ（`uses` の名前は Rust では検査していない）

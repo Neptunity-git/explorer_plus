@@ -32,6 +32,7 @@ const USE_LABELS: Record<Use, string> = {
   system: "PC の情報（ドライブと空き容量・強調色・言語）",
   createFiles: "新しいファイル・フォルダ・ショートカットを作る（使う前に許可を聞きます。書き換え・削除はできません）",
   collections: "コレクション（ファイルを集めたもの）を見る・作る・変える",
+  pointerLock: "マウスのポインターを画面に固定して、動きだけを受け取る（視点の操作など。Esc でいつでも戻せます）",
 };
 
 export type ModInfo = {

@@ -1,0 +1,10 @@
+{
+  "id": "neo.pointer-lock-demo",
+  "name": "ポインターロックの確認",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["pointerLock"],
+  "location": "none",
+  "description": "マウスのポインターを固定して、動いた量だけ読む確認用（ADR 0039）"
+}
