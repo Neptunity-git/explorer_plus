@@ -21,6 +21,8 @@
   const logsListeners = new Set();
   const folderDataListeners = new Set();
   const menuListeners = new Set();
+  const folderLogListeners = new Set();
+  const identityListeners = new Set();
   // 受け取り口（onMenu）ができる前に届いた知らせ menu。見えない所で動かすときは、MOD のプログラムより先に届くことがある
   const pendingMenu = [];
   let lastFolder = null;
@@ -120,6 +122,10 @@
         for (const cb of menuListeners) safely(cb, m.data);
       } else if (m.event === "releasePointer") {
         releasePointer();
+      } else if (m.event === "folderLog") {
+        for (const cb of folderLogListeners) safely(cb, m.data);
+      } else if (m.event === "identity") {
+        for (const cb of identityListeners) safely(cb, m.data);
       }
     }
   });
@@ -372,6 +378,28 @@
     onFolderData(cb) {
       folderDataListeners.add(cb);
       return () => folderDataListeners.delete(cb);
+    },
+    // ↓ 2026-10-27 に追加（共有フォルダの記録。ADR 0040）。uses に "folderLog" が要る。
+    // フォルダの中に、この PC・この MOD の記録を1件ずつ書き足す（書き換え・削除はできない）。読むと、全員の分が届く（本体が署名を確かめたものだけ）
+    folderLog: Object.freeze({
+      /** 1件足す。返り値は { id, author, t, data } */
+      append: (folder, data) => call("folderLog.append", { folder: toRef(folder), data }),
+      /** 全員の記録を読む。{ records, cursor, more, rejected, me }。opts.since に前回の cursor を渡すと、続きから */
+      read: (folder, opts) => call("folderLog.read", Object.assign({ folder: toRef(folder) }, opts && opts.since !== undefined ? { since: opts.since } : {})),
+    }),
+    /** 開いているフォルダの、この MOD の記録が増えた（ほかの PC から同期で届いたときも）。folderLog.read に前回の cursor を渡して読み直す */
+    onFolderLog(cb) {
+      folderLogListeners.add(cb);
+      return () => folderLogListeners.delete(cb);
+    },
+    // uses に "identity"（ADR 0040）：この MOD 用の匿名の ID と、本体で決めた表示名・アイコン。最初に使うとき、本体が許可を聞く
+    identity: Object.freeze({
+      get: () => call("identity.get"),
+    }),
+    /** 本体で表示名・アイコンが変わった（identity.get を許可したあと） */
+    onIdentity(cb) {
+      identityListeners.add(cb);
+      return () => identityListeners.delete(cb);
     },
     // ↓ 2026-10-15 に追加（読み取りの API。ADR 0023）
     // uses に "fileContent"：ファイルの中身。readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分ける

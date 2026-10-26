@@ -14,7 +14,7 @@ export function sandboxFor(uses: readonly Use[], background: boolean): string {
 
 /**
  * 本体が確かめ・メニューなどの画面を出す呼びかけ。ロック中はポインターが消えて押せないので、先にロックを外してもらう
- * （clipboard.paste は、名前が重なったときに Windows の画面が出る）
+ * （clipboard.paste は、名前が重なったときに Windows の画面が出る。identity.get は、初めてのとき許可と表示名の画面が出る）
  */
 export const OPENS_HOST_UI: ReadonlySet<string> = new Set([
   "ui.confirm",
@@ -26,4 +26,5 @@ export const OPENS_HOST_UI: ReadonlySet<string> = new Set([
   "files.create",
   "files.createShortcut",
   "clipboard.paste",
+  "identity.get",
 ]);

@@ -25,7 +25,8 @@
 - ビュー：Win11 風（詳細・大アイコン）、ホーム、ノート（フォルダごとの1枚の平面に付箋・矢印・図形を置く）、タグ、時間割
 - 時間割と位置情報で「今のフォルダ」へ一発で移動
 - 7-Zip が入っていれば、右クリックから圧縮・展開
-- MOD：ビューを追加する仕組み。zip で配れて、保存するとすぐ反映される（ホットリロード）。同梱の MOD に樹形図ビュー（[work/mods/neo.tree](work/mods/neo.tree)）があります
+- MOD：ビューを追加する仕組み。zip で配れて、保存するとすぐ反映される（ホットリロード）。同梱の MOD に樹形図ビュー（[work/mods/neo.tree](work/mods/neo.tree)）があります。
+  OneDrive などの共有フォルダに、何人かで書き込む MOD も、サーバーなしで作れます（PC ごとの追記だけの記録と署名。[ADR 0040](docs/decisions/0040-folder-log-and-identity.md)）
 
 これからの予定（3D のボクセルビュー、共有相手のベン図など）は [docs/proposal.md](docs/proposal.md) にあります。
 

@@ -447,3 +447,34 @@ uses の宣言は要らない。
 - ロック中（`document.pointerLockElement` がある間）、ランタイムは Ctrl・Alt つきのキーと F5 を本体へ**伝えない**（Ctrl+W でタブが閉じるなどを防ぐ）。
   WebView2 自身のショートカット（印刷・ページ内検索など）を止める処理と、F5・Ctrl+R の読み直しを止める処理は、ロック中も変わらず効く
 - 検査は TypeScript だけ（`uses` の名前は Rust では検査していない）
+
+## 2026-10-27 の追加：共有フォルダの記録と、MOD ごとの ID（ADR 0040）
+
+- `uses` に `folderLog`・`identity`
+- `folderLog.append`（params `{ folder: EntryRef, data: unknown }`）→ `FolderLogRecord`（`{ id, author, t, data }`）。
+  data は JSON にできる値で、JSON にして 64KB まで（`checkFolderLogData`。超えると `too-large`）。本体が JSON の文字列にして Rust へ渡し、Rust（`folderlog.rs`）が1行の形に整え直して書く
+- `folderLog.read`（params `{ folder: EntryRef, since?: string }`）→ `FolderLogRead`（`{ records, cursor, more, rejected, me }`）。
+  `since` は前回の `cursor`（4MB まで）。`cursor` の中身は約束しない（今は「`<書いた人の ID>/<年-月>.jsonl` → 読んだバイト数」の JSON）
+- `identity.get`（params なし）→ `Identity`（`{ id, name, icon }`）。MOD ごとに最初に許可を聞く（`grants` に `"identity"`。`createFiles` と同じ仕組み）。
+  初めて許可したとき表示名が無ければ、本体が表示名の画面を出す。どちらの画面も表示中のタブだけ（ほかは `denied`）。`OPENS_HOST_UI` に入れた（ポインターロックを外す）
+- 知らせ `folderLog`（data `{ path }`。uses に `folderLog` があるビューだけ）：開いているフォルダのこの MOD の記録の印（ファイルの数・大きさの合計・最新の更新時刻。`folder_log_stamp`）が変わった。
+  本体は、表示中のタブは 5 秒おき、裏のタブは 20 秒おき、アプリの窓に戻ってきたときに確かめる。フォルダを開いた直後の1回目は印を覚えるだけで、知らせない
+- 知らせ `identity`（data `Identity`）：本体の表示名・アイコンが変わった（許可したビューだけ）
+- どの MOD からかは、本体が知っている MOD の id を Rust に渡す（MOD に言わせない。`net.fetch` と同じ）
+
+**ファイルの形**（`<フォルダ>\.explorer_plus\log.<MOD の id>\<書いた人の ID>\<年-月>.jsonl`。年月は世界時）：
+
+```
+{"id":"<16 バイトの16進数>","t":<ミリ秒>,"data":<JSON>,"sig":"<64 バイトの16進数>"}
+```
+
+- 署名するのは、`explorer_plus/folderLog/v1` と改行（1バイト）のあとに、`,"sig":…` を除いて `}` で閉じた `{"id":…,"t":…,"data":…}` の UTF-8 のバイト列（Ed25519）
+- 書いた人の ID は公開鍵（32 バイト）の16進数（小文字 64 文字）。鍵は、PC ごとの秘密の値（資格情報マネージャーの `explorer_plus:@identity`。開発中のアプリは `explorer_plus-dev:@identity`）と MOD の id から、
+  `SHA-256("explorer_plus/identity/v1" ‖ 0 のバイト ‖ 秘密の値 ‖ MOD の id)` を種にして作る（`identity.rs`）
+- 読むときは、名前が ID の形のフォルダと、`YYYY-MM.jsonl` の形のファイルだけを見る。改行で終わっていない最後の行は読まない（`cursor` も進めない）。
+  書くときは、ファイルが改行で終わっていなければ、先に改行を足す。前回の `cursor` よりファイルが短ければ、初めから読み直す
+- 署名が合わない・形が壊れた行は返さず、`rejected` に数える。1回の `read` の中では、同じ `id` は1つにし、`(t, id)` の順に並べる
+- 1回の `read` で読むのは 2MB まで（`more`）。2MB 読んでも改行が無ければ、壊れた行として飛ばす
+- 同期の道具がファイルを握っていて開けない（共有違反・ロック違反）ときは、0.15 秒待って 5 回までやり直す
+- 表示名・アイコンは、アプリのデータ `profile`（`{ name, icon }`。名前 40 文字・アイコン 8 文字まで、制御文字と行の区切りを除く。`src/core/profile.ts`）。
+  コマンドの一覧の「自分の表示名とアイコン…」で変える

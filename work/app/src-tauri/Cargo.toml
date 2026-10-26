@@ -36,6 +36,9 @@ base64 = "0.22"
 encoding_rs = "0.8.42"
 ureq = "2"
 url = "2"
+# 共有フォルダの記録の署名（ADR 0040）。MOD ごとの鍵を、PC ごとの秘密の値から sha2 で作る
+ed25519-dalek = "2"
+sha2 = "0.10"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

@@ -70,25 +70,26 @@
   <a class="sub" href="#s13">PC の情報（system）</a>
   <a class="sub" href="#s14">変化の知らせ（onChanges）</a>
   <a class="sub" href="#s15">フォルダの中に保存（folderData）</a>
-  <a class="sub" href="#s16">新しく作る（createFiles）</a>
-  <a class="sub" href="#s17">コレクション（collections）</a>
-  <a class="sub" href="#s18">本体の画面を使う（ui）</a>
-  <a class="sub" href="#s19">設定（settings）</a>
-  <a class="sub" href="#s20">コマンド（commands）</a>
-  <a class="sub" href="#s21">メニュー</a>
-  <a class="sub" href="#s22">ほかのビューの右クリックに出す（menu）</a>
-  <a class="sub" href="#s23">クリップボード・ドラッグ</a>
-  <a class="sub" href="#s24">ポインターロック（pointerLock）</a>
-  <a class="sub" href="#s25">タグ・時間割・ほか</a>
-  <a class="sub" href="#s26">データの形</a>
-  <a class="sub" href="#s27">エラー</a>
-  <a href="#s28">見た目（TUI キット）</a>
-  <a href="#s29">安全の決まり</a>
-  <a href="#s30">通信（network）</a>
-  <a class="sub" href="#s31">本体に通信してもらう（ep.net）</a>
-  <a class="sub" href="#s32">API キー（secret）</a>
-  <a href="#s33">配る</a>
-  <a href="#s34">ヒント</a>
+  <a class="sub" href="#s16">共有フォルダで書き合う（folderLog・identity）</a>
+  <a class="sub" href="#s17">新しく作る（createFiles）</a>
+  <a class="sub" href="#s18">コレクション（collections）</a>
+  <a class="sub" href="#s19">本体の画面を使う（ui）</a>
+  <a class="sub" href="#s20">設定（settings）</a>
+  <a class="sub" href="#s21">コマンド（commands）</a>
+  <a class="sub" href="#s22">メニュー</a>
+  <a class="sub" href="#s23">ほかのビューの右クリックに出す（menu）</a>
+  <a class="sub" href="#s24">クリップボード・ドラッグ</a>
+  <a class="sub" href="#s25">ポインターロック（pointerLock）</a>
+  <a class="sub" href="#s26">タグ・時間割・ほか</a>
+  <a class="sub" href="#s27">データの形</a>
+  <a class="sub" href="#s28">エラー</a>
+  <a href="#s29">見た目（TUI キット）</a>
+  <a href="#s30">安全の決まり</a>
+  <a href="#s31">通信（network）</a>
+  <a class="sub" href="#s32">本体に通信してもらう（ep.net）</a>
+  <a class="sub" href="#s33">API キー（secret）</a>
+  <a href="#s34">配る</a>
+  <a href="#s35">ヒント</a>
 </nav>
 <main>
 <h1>MOD 開発ガイド</h1>
@@ -305,6 +306,16 @@
 <td>標準の <code>requestPointerLock()</code> が使えるようになる（呼び出しは増えません。下の「ポインターロック」）</td>
 <td>軽い</td>
 </tr>
+<tr>
+<td><code>folderLog</code></td>
+<td><code>folderLog.append</code>・<code>read</code>・<code>onFolderLog</code>：フォルダの中に記録を書き足し、全員の分を読む（下の「共有フォルダで書き合う」）</td>
+<td>軽い</td>
+</tr>
+<tr>
+<td><code>identity</code></td>
+<td><code>identity.get</code>・<code>onIdentity</code>：この MOD 用の匿名の ID と、本体で決めた表示名・アイコン（最初に許可を聞く）</td>
+<td>軽い</td>
+</tr>
 </tbody></table>
 <p>保存（<code>storage</code>）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。</p>
 <h2 id="s6">API</h2>
@@ -423,7 +434,64 @@ await ep.folderData.delete(folder);
 <li>書けないフォルダ（<code>C:\</code> の直下など）では、代わりにこのビューの保存場所に置きます（<code>get</code> で同じように読めます）</li>
 <li>別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます</li>
 </ul>
-<h3 id="s16">新しく作る（createFiles）</h3>
+<h3 id="s16">共有フォルダで書き合う（folderLog・identity）</h3>
+<p>OneDrive や NAS の共有フォルダを開いて、何人かで書き込む MOD（付箋ボード・掲示板・出欠表など）を、サーバーなしで作れます（uses に <code>folderLog</code>、名前を出すなら <code>identity</code> も）。</p>
+<pre><code class="language-js">// uses: [&quot;folderLog&quot;, &quot;identity&quot;]
+let world = null;            // 開いているフォルダ（ワールド）
+let notes = new Map();       // 記録の id → 記録
+let cursor;                  // どこまで読んだか（read の返り値。初めは undefined ＝ 初めから）
+
+ep.onFolder((folder) =&gt; {
+  if (world &amp;&amp; world.path === folder.path) return;      // 同じフォルダの読み直しなら、そのまま
+  world = folder;
+  notes = new Map();
+  cursor = undefined;
+  pull();
+});
+ep.onFolderLog(() =&gt; pull());                            // ほかの PC から同期で届いた（数秒おきに本体が確かめる）
+
+async function pull() {
+  const folder = world;
+  let r;
+  do {
+    r = await ep.folderLog.read(folder, { since: cursor });
+    if (folder !== world) return;                       // 読んでいるあいだに、ほかのフォルダへ移った
+    for (const rec of r.records) notes.set(rec.id, rec); // 同じ記録がもう一度来ても、id で1つにする
+    cursor = r.cursor;
+  } while (r.more);                                      // 一度に読めるのは 2MB まで。残りがあれば続けて読む
+  draw([...notes.values()].sort((a, b) =&gt; a.t - b.t));  // 同期は遅れて届くので、表示する前に t で並べ直す
+}
+
+// 書く（ボタンを押したときなど）。返り値は { id, author, t, data }。表示名は、見せたい MOD が data に入れる
+async function post(text) {
+  const me = await ep.identity.get();                    // { id, name, icon }。初めてのときだけ許可を聞く（名前がまだなら、決める画面も出る）
+  const rec = await ep.folderLog.append(world, { type: &quot;note&quot;, text, by: me.name, icon: me.icon });
+  notes.set(rec.id, rec);                                // 自分の分はすぐ出す（後で read にも来るが、id で重ならない）
+  draw([...notes.values()].sort((a, b) =&gt; a.t - b.t));
+}
+// 消す・直すも「記録を足す」で表す（書いた記録を書き換えることはできません）
+//   await ep.folderLog.append(world, { type: &quot;delete&quot;, target: noteId });
+</code></pre>
+<p><strong>しくみ</strong>：</p>
+<ul>
+<li>記録は <code>&lt;フォルダ&gt;\.explorer_plus\log.&lt;MOD の id&gt;\&lt;書いた人の ID&gt;\&lt;年-月&gt;.jsonl</code> に、1行1件で本体が書き足します。
+<strong>1つのファイルを書くのは1台の PC だけ</strong>なので、同期でぶつかりません（同じ人でも、PC が違えば別のファイル・別の ID です）</li>
+<li>1件ごとに、本体がその PC の鍵で<strong>署名</strong>します。<code>read</code> が返すのは、署名を確かめた記録だけです。ほかの人がファイルを書き換えた・他人の名前で書き足した行は、
+返さずに <code>rejected</code> に数えます。だから「他人の付箋に消した印を付ける」は、<code>author</code> を見れば見分けられます
+（<code>type: &quot;delete&quot;</code> は、<code>author</code> が元の付箋と同じときだけ効かせる、など）</li>
+<li><code>author</code>・<code>id</code>（<code>identity.get</code> の）は、<strong>PC ごと・MOD ごと</strong>の匿名の ID です。別の MOD には別の ID が見えます。表示名は利用者がコマンドの一覧（Ctrl+Shift+P）の「自分の表示名とアイコン…」で決めたもので、自己申告です</li>
+<li><code>data</code> は JSON にできる値で、<strong>64KB まで</strong>（超えると <code>too-large</code>）。<code>t</code> は書いた PC の時計の時刻です（PC の時計がずれていれば、ずれます）</li>
+</ul>
+<p><strong>気をつけること</strong>：</p>
+<ul>
+<li>書き換え・削除の API はありません。フォルダに書き込める人は、ほかの人の記録の<strong>ファイルを丸ごと消す</strong>ことはできます（偽物は作れませんが、消すのは防げません）</li>
+<li><code>onFolderLog</code> は、自分が足したときや、この PC のほかのタブが足したときにも届きます。<code>id</code> で重ならないようにしてください</li>
+<li>読める量は1回 2MB までです。何年分も貯まる MOD は、<code>cursor</code> と、読んだ記録（またはそれをまとめた今の状態）を<strong>一緒に</strong> <code>storage</code> に覚えておくと、開くたびに初めから読まずに済みます
+（<code>cursor</code> だけを覚えると、次に開いたとき、それより前の記録が読めません。<code>storage</code> の1つの値は 1MB までなので、大きくなったら月ごとなどに分けて覚えてください）</li>
+<li><code>identity.get</code> は、初めてのときだけ確かめの画面が出るので、表示中のタブで（ボタンを押したときなどに）呼んでください。断られたら <code>denied</code> です</li>
+<li>画像を貼りたいときは、今は <code>files.create</code>（uses に <code>createFiles</code>）でワールドのフォルダに画像を置き、その名前を <code>data</code> に入れてください</li>
+</ul>
+<h3 id="s17">新しく作る（createFiles）</h3>
 <pre><code class="language-js">const note = await ep.files.create(folder, &quot;メモ.txt&quot;, { text: &quot;こんにちは&quot; });
 const room = await ep.files.create(folder, &quot;新しい部屋&quot;, { kind: &quot;folder&quot; });
 const png = await ep.files.create(folder, &quot;スクリーンショット.png&quot;, { bytes: pngBytes });   // Uint8Array（16MB まで）
@@ -434,7 +502,7 @@ const link = await ep.files.createShortcut(folder, targetEntry);                
 <li>MOD ごとに、<strong>最初に使うとき本体が利用者に許可を聞きます</strong>（断られたら <code>denied</code>）。表示中のタブのビューから呼んでください。MOD を外すと許可も消えます</li>
 <li>Windows で使えない名前（<code>CON</code>・<code>?</code> を含む、など）は <code>invalid</code></li>
 </ul>
-<h3 id="s17">コレクション（collections）</h3>
+<h3 id="s18">コレクション（collections）</h3>
 <p>コレクションは、ファイル・フォルダを<strong>実際の場所と関係なく</strong>集めて名前を付けたもの（仮想ディレクトリ）です。アプリ全体で1つで、どの MOD からも同じものが見えます。
 中身はファイルID で覚えるので、名前を変えたり動かしたりしても外れません。</p>
 <pre><code class="language-js">const trip = await ep.collections.create(&quot;夏の旅行&quot;, { color: &quot;#57ab5a&quot; });
@@ -444,7 +512,7 @@ const all = await ep.collections.list();                              // [{ id, 
 ep.onCollections((list) =&gt; redraw(list));
 await ep.collections.delete(trip.id);   // 本体が確かめてから消す（中のファイルは消えない）
 </code></pre>
-<h3 id="s18">本体の画面を使う（ui）</h3>
+<h3 id="s19">本体の画面を使う（ui）</h3>
 <p>宣言は要りません。お知らせ・確かめ・入力・選択は、<strong>表示中のタブのビューだけ</strong>が出せます（裏のタブから急に画面が出ないように）。</p>
 <pre><code class="language-js">await ep.ui.toast(&quot;保存しました&quot;);                       // 画面の下に短く（200 文字まで）
 await ep.ui.status(&quot;3 枚を選択中&quot;);                      // 画面の下の状態の欄（null で消す）
@@ -454,7 +522,7 @@ const name = await ep.ui.ask({ label: &quot;新しい部屋の名前&quot;, valu
 const id = await ep.ui.choose([{ id: &quot;a&quot;, label: &quot;格子に並べる&quot; }, { id: &quot;b&quot;, label: &quot;渦に並べる&quot;, hint: &quot;たくさんのとき&quot; }]);
 </code></pre>
 <p>見た目は本体の確かめの画面と同じで、Esc でやめられます。</p>
-<h3 id="s19">設定（settings）</h3>
+<h3 id="s20">設定（settings）</h3>
 <p>manifest に項目を書くと、本体が設定の画面を作ります（タブの <code>▸</code>・タブの右クリック・コマンドの一覧から開く）。値は本体が覚えます。</p>
 <pre><code class="language-json">&quot;settings&quot;: [
   { &quot;key&quot;: &quot;spacing&quot;, &quot;label&quot;: &quot;間隔&quot;, &quot;type&quot;: &quot;number&quot;, &quot;default&quot;: 2, &quot;min&quot;: 1, &quot;max&quot;: 10, &quot;step&quot;: 1 },
@@ -471,7 +539,7 @@ ep.onSettings((next) =&gt; { s = next; redraw(); });
 <p>種類は <code>boolean</code>・<code>number</code>（<code>min</code>・<code>max</code>・<code>step</code>）・<code>text</code>（<code>maxLength</code>）・<code>choice</code>（<code>options</code>）・<code>color</code>（<code>#rrggbb</code>）・<code>secret</code>（下の「API キー」）。
 覚えている値が今の項目に合わなければ（版を上げて項目を変えた、など）、既定の値になります。
 利用者は、タブの右クリック・タブの <code>▸</code>・コマンドの一覧（Ctrl+Shift+P）・ホームの MOD の行の「設定」から、設定の画面を開けます。</p>
-<h3 id="s20">コマンド（commands）</h3>
+<h3 id="s21">コマンド（commands）</h3>
 <p>コマンドの一覧（<strong>Ctrl+Shift+P</strong>、またはタブの右クリック）に、このビューのコマンドを出せます。表示中のタブのビューのものが並びます。</p>
 <pre><code class="language-js">await ep.commands.set([
   { id: &quot;shuffle&quot;, label: &quot;並べ直す&quot; },
@@ -481,7 +549,7 @@ ep.onCommand((id) =&gt; {
   if (id === &quot;shuffle&quot;) shuffle();
 });
 </code></pre>
-<h3 id="s21">メニュー</h3>
+<h3 id="s22">メニュー</h3>
 <pre><code class="language-js">el.oncontextmenu = async (e) =&gt; {
   e.preventDefault();
   const { chosen } = await ep.showMenu({
@@ -493,7 +561,7 @@ ep.onCommand((id) =&gt; {
 };
 </code></pre>
 <p><code>items</code> を空にして <code>extra</code> だけ渡すと、このビューの項目だけのメニューになります。ブラウザ本来の右クリックのメニューは、ランタイムが止めています。</p>
-<h3 id="s22">ほかのビューの右クリックに出す（menu）</h3>
+<h3 id="s23">ほかのビューの右クリックに出す（menu）</h3>
 <p>manifest に <code>menu</code> を書くと、利用者がほかのビュー（Win11 風など）を使っているときも、右クリックのメニューに
 「MOD の名前 ›」が出ます。マウスを乗せると、横に項目が並びます。</p>
 <pre><code class="language-json">&quot;menu&quot;: [
@@ -568,7 +636,7 @@ if (ctx.background) {
 <li><code>menu.done()</code> を呼ぶか、API を 30 秒呼ばない（返事待ちのものも無い）か、始めて 10 分たつと、本体が止めます</li>
 <li>動いている間にもう一度選ばれたら、同じ MOD にもう一度 <code>onMenu</code> が届きます（MOD ごとに1つだけ動きます）</li>
 </ul>
-<h3 id="s23">クリップボード・ドラッグ</h3>
+<h3 id="s24">クリップボード・ドラッグ</h3>
 <pre><code class="language-js">await ep.clipboard.copy([entry]);   // Windows のエクスプローラと同じ形式。エクスプローラにも貼り付けられる
 await ep.clipboard.cut([entry]);
 const { count } = await ep.clipboard.paste();   // 開いているフォルダへ
@@ -581,7 +649,7 @@ el.onpointermove = (e) =&gt; {
 ep.onDragTargets(() =&gt; ep.drag.targets(folderTargets()));   // ドラッグ中にこのタブへ切り替わったとき
 // folderTargets() は [{ entry, rect: el.getBoundingClientRect() }, …]（このビューの中で、落とせるフォルダ）
 </code></pre>
-<h3 id="s24">ポインターロック（pointerLock）</h3>
+<h3 id="s25">ポインターロック（pointerLock）</h3>
 <p>マウスのポインターを画面に固定して消し、<strong>動いた量だけ</strong>を受け取る機能です。視点を回すビュー（一人称の 3D など）や、画面の端で止まらないつまみに使います。
 <code>ep.…</code> の呼び出しはありません。manifest の <code>uses</code> に <code>&quot;pointerLock&quot;</code> を書くと、ブラウザ標準の <code>requestPointerLock()</code> が使えるようになります（書かないと、<code>pointerlockerror</code> で断られます）。</p>
 <pre><code class="language-js">// uses: [&quot;pointerLock&quot;]
@@ -610,7 +678,7 @@ document.addEventListener(&quot;pointerlockchange&quot;, () =&gt; { /* ロック
 <li>ロックできるのは同時に1つの iframe です。ほかのタブのビューがロックしているときは断られます</li>
 <li>右クリックのメニューから裏で動かす MOD（<code>run: &quot;background&quot;</code>）では使えません</li>
 </ul>
-<h3 id="s25">タグ・時間割・ほか</h3>
+<h3 id="s26">タグ・時間割・ほか</h3>
 <pre><code class="language-js">// uses: [&quot;tags&quot;]
 const tags = await ep.tags.list();                    // [{ id, name, color: &quot;#rrggbb&quot; }]
 const tag = await ep.tags.create(&quot;提出物&quot;, &quot;#e5484d&quot;);
@@ -631,7 +699,7 @@ const pinned = await ep.quickAccess.list();
 const recent = await ep.recent.list();
 </code></pre>
 <p>すべての関数と型は、ひな形に入っている <code>explorer-plus.d.ts</code> にあります。迷ったらそちらが正しいです。</p>
-<h3 id="s26">データの形</h3>
+<h3 id="s27">データの形</h3>
 <pre><code class="language-ts">type Entry = {
   id: string;          // ファイルID。名前変更・移動で変わらない（ID の無いドライブでは &quot;&quot;）
   name: string;        // &quot;report.docx&quot;
@@ -649,7 +717,7 @@ const recent = await ep.recent.list();
 type EntryRef = { id: string; path: string };   // 保存しておくときは、この2つだけ覚える
 </code></pre>
 <p><code>entries</code> の並びは、フォルダが先、次にファイル。それぞれ名前の自然な順（<code>file2</code> が <code>file10</code> より前）です。</p>
-<h3 id="s27">エラー</h3>
+<h3 id="s28">エラー</h3>
 <p>失敗した Promise は <code>Error</code> になり、<code>code</code> に次のどれかが入ります。</p>
 <table>
 <thead>
@@ -672,7 +740,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
 </tr>
 <tr>
 <td><code>too-large</code></td>
-<td>保存の値が 1MB を超えた</td>
+<td>保存の値が 1MB を超えた（<code>folderLog</code> の1件は 64KB）</td>
 </tr>
 <tr>
 <td><code>invalid</code></td>
@@ -697,7 +765,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
   if (err.code !== &quot;denied&quot;) showMessage(`ごみ箱へ送れませんでした：${err.message}`);
 }
 </code></pre>
-<h2 id="s28">見た目（TUI キット）</h2>
+<h2 id="s29">見た目（TUI キット）</h2>
 <p>標準のビューと同じ見た目の部品を使えます（使わなくてもかまいません）。明るい・暗い画面にも自動で合います。</p>
 <pre><code class="language-js">// CSS：色の変数（--tui-fg・--tui-dim・--tui-line・--tui-accent・--tui-warn・--tui-bg）と部品のクラス
 document.head.append(Object.assign(document.createElement(&quot;link&quot;), { rel: &quot;stylesheet&quot;, href: &quot;/__runtime/tui.css&quot; }));
@@ -712,7 +780,7 @@ import { ask, pick, pickColor, confirm, button, PALETTE } from &quot;/__runtime/
 const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; });          // やめたら null
 </code></pre>
 <p>操作は<strong>マウス（左右のクリック）が主、キーボードは補助</strong>、がこのアプリの考え方です。ダブルクリックで開く・右クリックでメニュー、を基本にすると、ほかのビューと同じ手触りになります。</p>
-<h2 id="s29">安全の決まり</h2>
+<h2 id="s30">安全の決まり</h2>
 <ul>
 <li><strong>通信できるのは、自分の MOD のフォルダと、manifest の <code>network</code> に書いた先だけ</strong>です（CSP。本体が付けるので MOD からは変えられません）。
 <strong>スクリプトは、通信先からは読み込めません</strong>（コードは MOD のフォルダに入れてください。ライブラリは1つのファイルにまとめると楽です）</li>
@@ -723,7 +791,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 </ul>
 <blockquote class="warn"><p><strong>入れる人は、あなたの MOD を信頼して入れます。</strong> <code>uses</code> は必要なものだけにし、何をするビューかを <code>description</code> に正直に書いてください。</p>
 </blockquote>
-<h2 id="s30">通信（network）</h2>
+<h2 id="s31">通信（network）</h2>
 <p>地図のタイル・天気・辞書など、インターネットのデータを使うときは、通信する先を manifest に書きます。</p>
 <pre><code class="language-json">&quot;network&quot;: [&quot;https://api.example.com&quot;, &quot;https://*.tiles.example.org&quot;]
 </code></pre>
@@ -736,7 +804,7 @@ const name = await ask({ label: &quot;名前&quot;, okLabel: &quot;作る&quot; 
 これを求めるサービス（例：OpenStreetMap の公式のタイル）や、ブラウザからの読み込みを許していない（CORS の無い）API は、下の <strong><code>ep.net</code></strong> を使ってください</li>
 <li>版を上げて通信先を増やすと、更新の確かめの画面に「新しく増えた」と出ます</li>
 </ul>
-<h3 id="s31">本体に通信してもらう（ep.net）</h3>
+<h3 id="s32">本体に通信してもらう（ep.net）</h3>
 <p><code>ep.net.fetch</code> は <code>fetch</code> に似た形で、<strong>本体が MOD の代わりに通信</strong>します。ブラウザの決まり（CORS）を受けず、
 「explorer_plus の、この MOD から」と名乗って（User-Agent）通信します。宛先は、同じく <code>network</code> に書いた先だけです。</p>
 <pre><code class="language-js">const r = await ep.net.fetch(&quot;https://api.example.com/v1/search?q=&quot; + encodeURIComponent(word));
@@ -755,7 +823,7 @@ img.src = await ep.net.url(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`);
 <li>宛先の名前が、PC の中や家の中の住所（<code>127.0.0.1</code>・<code>192.168.x.x</code> など）を指していたら通信しません（<code>network</code>）</li>
 <li>4xx・5xx も、エラーではなく結果として返ります（<code>r.ok</code> が false）。つながらないときは <code>network</code> のエラー</li>
 </ul>
-<h3 id="s32">API キー（secret）</h3>
+<h3 id="s33">API キー（secret）</h3>
 <p>天気・翻訳などの API キーは、MOD に書き込まないでください（zip を開けば誰でも読めます）。
 代わりに、設定に <code>type: &quot;secret&quot;</code> の項目を書くと、<strong>利用者が自分のキーを入れ、本体が Windows の資格情報マネージャーに預けます</strong>。
 本体が通信するときだけキーを付けるので、MOD からはキーが見えません。</p>
@@ -776,7 +844,7 @@ const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=toky
 <li>キーがまだ無いときは <code>not-found</code>、<code>send</code> の無い項目や secret でない項目を指すと <code>not-declared</code></li>
 <li>入れる人には、確かめの画面で「本体が預かり、○○だけに送ります」と見せます。MOD を外すと、預けたキーも消します</li>
 </ul>
-<h2 id="s33">配る</h2>
+<h2 id="s34">配る</h2>
 <ol>
 <li><code>manifest.json</code> の <code>version</code> を上げる（初めてなら <code>1.0.0</code> など）</li>
 <li>ホームの「MOD」の欄で「zip にする」を押す。<code>node_modules</code>・<code>.git</code>・<code>.vscode</code>・zip と、作る人だけが使うファイル（<code>MOD開発ガイド.md</code>・<code>explorer-plus.d.ts</code>・<code>jsconfig.json</code>）は入りません</li>
@@ -784,7 +852,7 @@ const r = await ep.net.fetch(&quot;https://api.example.com/v1/forecast?city=toky
 </ol>
 <p>zip は、一番上に <code>manifest.json</code> があるか、一番上のフォルダ1つの中にある形にしてください（どちらでも入ります）。中のファイルは 2000 個・合わせて 50MB までです。</p>
 <p>同じ <code>id</code> の MOD を入れると「更新」になります。古いフォルダはごみ箱へ送られ、MOD が保存していたもの（<code>storage</code>）は引き継がれます。外しても保存したものは残るので、入れ直せば続きから使えます。</p>
-<h2 id="s34">ヒント</h2>
+<h2 id="s35">ヒント</h2>
 <ul>
 <li><strong>ウィンドウが複数あるとき</strong>：同じフォルダを、同じビューで2つのウィンドウに開いていることがあります。<code>folderData</code> を使うビューは、
 <code>ep.onFolderData(() =&gt; …)</code> で「ほかのウィンドウが書き換えた」を受け取り、<code>folderData.get</code> で読み直すと食い違いません（<code>storage</code>・設定は本体が合わせます）</li>

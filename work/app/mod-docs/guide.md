@@ -89,6 +89,8 @@ MOD のファイルは `http://mod.localhost/<MOD の id>/` から配られま�
 | `createFiles` | `files.create`・`createShortcut`：新しいファイル・フォルダ・ショートカットを作る（上書きしない。最初に許可を聞く） | 軽い |
 | `collections` | `collections.*`：コレクション（ファイルを場所と関係なく集めたもの）を見る・作る・変える | 軽い |
 | `pointerLock` | 標準の `requestPointerLock()` が使えるようになる（呼び出しは増えません。下の「ポインターロック」） | 軽い |
+| `folderLog` | `folderLog.append`・`read`・`onFolderLog`：フォルダの中に記録を書き足し、全員の分を読む（下の「共有フォルダで書き合う」） | 軽い |
+| `identity` | `identity.get`・`onIdentity`：この MOD 用の匿名の ID と、本体で決めた表示名・アイコン（最初に許可を聞く） | 軽い |
 
 保存（`storage`）、開く・移動・ごみ箱・名前の変更・メニュー・クリップボード・ドラッグは、宣言しなくても使えます。
 
@@ -236,6 +238,67 @@ await ep.folderData.delete(folder);
 - 引数の `folder` は、`onFolder` で届いたフォルダ（`{ id, path }` があればよい）。フォルダを移った直後に前のフォルダの分を保存しても、正しいフォルダに入ります
 - 書けないフォルダ（`C:\` の直下など）では、代わりにこのビューの保存場所に置きます（`get` で同じように読めます）
 - 別の PC ではファイルID が違います。データの中で子フォルダを覚えるときは、ファイルID だけでなく名前も覚えておくと、同期先でも見つけられます
+
+### 共有フォルダで書き合う（folderLog・identity）
+
+OneDrive や NAS の共有フォルダを開いて、何人かで書き込む MOD（付箋ボード・掲示板・出欠表など）を、サーバーなしで作れます（uses に `folderLog`、名前を出すなら `identity` も）。
+
+```js
+// uses: ["folderLog", "identity"]
+let world = null;            // 開いているフォルダ（ワールド）
+let notes = new Map();       // 記録の id → 記録
+let cursor;                  // どこまで読んだか（read の返り値。初めは undefined ＝ 初めから）
+
+ep.onFolder((folder) => {
+  if (world && world.path === folder.path) return;      // 同じフォルダの読み直しなら、そのまま
+  world = folder;
+  notes = new Map();
+  cursor = undefined;
+  pull();
+});
+ep.onFolderLog(() => pull());                            // ほかの PC から同期で届いた（数秒おきに本体が確かめる）
+
+async function pull() {
+  const folder = world;
+  let r;
+  do {
+    r = await ep.folderLog.read(folder, { since: cursor });
+    if (folder !== world) return;                       // 読んでいるあいだに、ほかのフォルダへ移った
+    for (const rec of r.records) notes.set(rec.id, rec); // 同じ記録がもう一度来ても、id で1つにする
+    cursor = r.cursor;
+  } while (r.more);                                      // 一度に読めるのは 2MB まで。残りがあれば続けて読む
+  draw([...notes.values()].sort((a, b) => a.t - b.t));  // 同期は遅れて届くので、表示する前に t で並べ直す
+}
+
+// 書く（ボタンを押したときなど）。返り値は { id, author, t, data }。表示名は、見せたい MOD が data に入れる
+async function post(text) {
+  const me = await ep.identity.get();                    // { id, name, icon }。初めてのときだけ許可を聞く（名前がまだなら、決める画面も出る）
+  const rec = await ep.folderLog.append(world, { type: "note", text, by: me.name, icon: me.icon });
+  notes.set(rec.id, rec);                                // 自分の分はすぐ出す（後で read にも来るが、id で重ならない）
+  draw([...notes.values()].sort((a, b) => a.t - b.t));
+}
+// 消す・直すも「記録を足す」で表す（書いた記録を書き換えることはできません）
+//   await ep.folderLog.append(world, { type: "delete", target: noteId });
+```
+
+**しくみ**：
+
+- 記録は `<フォルダ>\.explorer_plus\log.<MOD の id>\<書いた人の ID>\<年-月>.jsonl` に、1行1件で本体が書き足します。
+  **1つのファイルを書くのは1台の PC だけ**なので、同期でぶつかりません（同じ人でも、PC が違えば別のファイル・別の ID です）
+- 1件ごとに、本体がその PC の鍵で**署名**します。`read` が返すのは、署名を確かめた記録だけです。ほかの人がファイルを書き換えた・他人の名前で書き足した行は、
+  返さずに `rejected` に数えます。だから「他人の付箋に消した印を付ける」は、`author` を見れば見分けられます
+  （`type: "delete"` は、`author` が元の付箋と同じときだけ効かせる、など）
+- `author`・`id`（`identity.get` の）は、**PC ごと・MOD ごと**の匿名の ID です。別の MOD には別の ID が見えます。表示名は利用者がコマンドの一覧（Ctrl+Shift+P）の「自分の表示名とアイコン…」で決めたもので、自己申告です
+- `data` は JSON にできる値で、**64KB まで**（超えると `too-large`）。`t` は書いた PC の時計の時刻です（PC の時計がずれていれば、ずれます）
+
+**気をつけること**：
+
+- 書き換え・削除の API はありません。フォルダに書き込める人は、ほかの人の記録の**ファイルを丸ごと消す**ことはできます（偽物は作れませんが、消すのは防げません）
+- `onFolderLog` は、自分が足したときや、この PC のほかのタブが足したときにも届きます。`id` で重ならないようにしてください
+- 読める量は1回 2MB までです。何年分も貯まる MOD は、`cursor` と、読んだ記録（またはそれをまとめた今の状態）を**一緒に** `storage` に覚えておくと、開くたびに初めから読まずに済みます
+  （`cursor` だけを覚えると、次に開いたとき、それより前の記録が読めません。`storage` の1つの値は 1MB までなので、大きくなったら月ごとなどに分けて覚えてください）
+- `identity.get` は、初めてのときだけ確かめの画面が出るので、表示中のタブで（ボタンを押したときなどに）呼んでください。断られたら `denied` です
+- 画像を貼りたいときは、今は `files.create`（uses に `createFiles`）でワールドのフォルダに画像を置き、その名前を `data` に入れてください
 
 ### 新しく作る（createFiles）
 
@@ -490,7 +553,7 @@ type EntryRef = { id: string; path: string };   // 保存しておくときは�
 | `not-declared` | `uses` に宣言していない機能を呼んだ |
 | `denied` | ユーザーがやめた（ごみ箱の確認など）。または、MOD には使えない機能 |
 | `not-found` | ファイル・フォルダが無い |
-| `too-large` | 保存の値が 1MB を超えた |
+| `too-large` | 保存の値が 1MB を超えた（`folderLog` の1件は 64KB） |
 | `invalid` | 引数の形が違う・使えない名前 |
 | `exists` | 同じ名前がもうある |
 | `io` | 読み書きに失敗した |

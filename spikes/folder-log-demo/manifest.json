@@ -1,0 +1,9 @@
+{
+  "id": "neo.folder-log-demo",
+  "name": "共有フォルダの記録の確認",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "entry": "index.js",
+  "uses": ["folderLog", "identity"],
+  "description": "開いているフォルダに一言ずつ書き足し、全員の分を読む確認用（ADR 0040）"
+}

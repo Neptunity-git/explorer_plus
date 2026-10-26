@@ -8,6 +8,7 @@ import { onSync, windowLabel } from "./host/sync";
 import { collectionService, grantService } from "./host/collection-service";
 import { settingsService } from "./host/mod-ui";
 import { forgetStorage } from "./host/view-storage";
+import { profileService } from "./host/profile-service";
 
 /** ほかのウィンドウで保存されたら、このウィンドウでも読み直す（ADR 0030） */
 function watchOtherWindows() {
@@ -23,6 +24,7 @@ function watchOtherWindows() {
         settings: () => settingsService.reload(),
         collections: () => collectionService.reload(),
         grants: () => grantService.reload(),
+        profile: () => profileService.reload(),
       };
       void reload[m.name]?.().catch((e) => console.warn("reload failed", m.name, e));
     }

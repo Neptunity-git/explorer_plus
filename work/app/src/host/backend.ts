@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { describeCommand, quietFailure } from "../core/logs";
 import { logService } from "./log-service";
 import { broadcast } from "./sync";
-import { ERROR_CODES, type ApiError, type Drive, type EntryRef, type ErrorCode, type SearchQuery, type SearchStats, type SystemInfo, type TextRead } from "../api/types";
+import { ERROR_CODES, type ApiError, type Drive, type EntryRef, type ErrorCode, type FolderLogRead, type FolderLogRecord, type SearchQuery, type SearchStats, type SystemInfo, type TextRead } from "../api/types";
 
 export type RawEntry = {
   id: string;
@@ -20,7 +20,7 @@ export type Place = { kind: string; name: string; path: string };
 export type ModSource = { source: "builtin" | "user" | "dev"; dir: string; manifestText: string | null; error: string | null };
 export type Location = { latitude: number; longitude: number; accuracy: number };
 /** アプリ全体のデータの名前（Rust の mods.rs の APP_DATA_NAMES と同じ） */
-export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent" | "settings" | "collections" | "grants";
+export type AppDataName = "tags" | "timetables" | "quickaccess" | "recent" | "settings" | "collections" | "grants" | "profile";
 
 export class BackendError extends Error {
   constructor(readonly apiError: ApiError) {
@@ -108,6 +108,13 @@ export const backend = {
   folderDataRead: (folder: EntryRef, name: string) => call<string | null>("folder_data_read", { folder, name }),
   folderDataWrite: (folder: EntryRef, name: string, text: string) => call<void>("folder_data_write", { folder, name, text }),
   folderDataDelete: (folder: EntryRef, name: string) => call<void>("folder_data_delete", { folder, name }),
+  // ↓ 共有フォルダの記録（.explorer_plus/log.<id>/<書いた人の ID>/<年-月>.jsonl。ADR 0040）。どの MOD からかは、本体が知っている id を渡す
+  folderLogAppend: (viewId: string, folder: EntryRef, data: string) => call<FolderLogRecord>("folder_log_append", { viewId, folder, data }),
+  folderLogRead: (viewId: string, folder: EntryRef, since?: string) => call<FolderLogRead>("folder_log_read", { viewId, folder, since }),
+  /** 記録が増えたかを見分ける印（ファイルの数・大きさ・更新時刻。中身は読まない） */
+  folderLogStamp: (viewId: string, folder: EntryRef) => call<string>("folder_log_stamp", { viewId, folder }),
+  /** その MOD の、この PC での ID（公開鍵の16進数） */
+  identityId: (viewId: string) => call<string>("identity_id", { viewId }),
   /** マウスの下の窓が、このアプリの窓か（ドラッグ中、ほかの窓が重なっているときに外へ出たと分かるように） */
   cursorOverApp: () => call<boolean>("cursor_over_app"),
   /** 同梱の MOD 開発ガイドのフォルダ */

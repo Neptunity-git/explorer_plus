@@ -38,7 +38,21 @@ fn target(view_id: &str, key: &str) -> Result<String, String> {
 }
 
 pub fn read(view_id: &str, key: &str) -> Result<Option<String>, String> {
-    let name = wide(&target(view_id, key)?);
+    cred_read(&target(view_id, key)?)
+}
+
+fn write(view_id: &str, key: &str, value: &str) -> Result<(), String> {
+    cred_write(&target(view_id, key)?, view_id, value)
+}
+
+/// 本体だけが使う値（MOD の id と重ならない名前。@ は MOD の id に使えない）。例 "identity" → "explorer_plus:@identity"（ADR 0040）
+pub(crate) fn app_target(name: &str) -> String {
+    format!("{}:@{}", PREFIX, name)
+}
+
+/// 資格情報マネージャーから読む。無ければ None
+pub(crate) fn cred_read(target_name: &str) -> Result<Option<String>, String> {
+    let name = wide(target_name);
     let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
     // 無いときはエラー（ERROR_NOT_FOUND）で返ってくる
     if unsafe { CredReadW(PCWSTR(name.as_ptr()), CRED_TYPE_GENERIC, None, &mut cred) }.is_err() || cred.is_null() {
@@ -53,9 +67,9 @@ pub fn read(view_id: &str, key: &str) -> Result<Option<String>, String> {
     Ok(String::from_utf8(value).ok())
 }
 
-fn write(view_id: &str, key: &str, value: &str) -> Result<(), String> {
-    let mut name = wide(&target(view_id, key)?);
-    let mut user = wide(view_id);
+pub(crate) fn cred_write(target_name: &str, user_name: &str, value: &str) -> Result<(), String> {
+    let mut name = wide(target_name);
+    let mut user = wide(user_name);
     let mut blob = value.as_bytes().to_vec();
     let cred = CREDENTIALW {
         Flags: CRED_FLAGS(0),

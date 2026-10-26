@@ -22,6 +22,7 @@ import { chooseDialog, settingsDialog, settingsService } from "./mod-ui";
 import { loadViews } from "./mods";
 import { quickAccess, recentItems } from "./ref-list-service";
 import { timetableService } from "./timetable-service";
+import { profileService } from "./profile-service";
 import { ViewHost, type LoadedView, type TabActions } from "./view-host";
 
 const DEFAULT_VIEW_ID = "builtin.win11";
@@ -738,6 +739,7 @@ export class App {
     const own: { id: string; label: string; hint?: string; run: () => void }[] = [
       { id: "@newtab", label: "新しいタブ", hint: "Ctrl+T", run: () => void this.openHome() },
       { id: "@newwindow", label: "新しいウィンドウ", hint: "Ctrl+N", run: () => void this.openWindow() },
+      { id: "@profile", label: "自分の表示名とアイコン…", hint: "共有フォルダに書く MOD などに渡す", run: () => void profileService.edit() },
       ...(t?.view.manifest.settings ? [{ id: "@settings", label: "このビューの設定…", hint: t.view.manifest.name, run: () => void this.openSettings(t) }] : []),
       ...(t ? this.views.filter((v) => v.manifest.id !== t.view.manifest.id).map((v) => ({ id: `@view:${v.manifest.id}`, label: `ビューを「${v.manifest.name}」に変える`, run: () => void this.changeView(t, v) })) : []),
     ];

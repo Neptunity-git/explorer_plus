@@ -9,9 +9,11 @@ mod scan;
 mod secrets;
 mod sysinfo;
 mod folderdata;
+mod folderlog;
 mod fsops;
 mod geo;
 mod icons;
+mod identity;
 mod logs;
 mod modinstall;
 mod mods;
@@ -146,6 +148,10 @@ pub fn run() {
             folderdata::folder_data_read,
             folderdata::folder_data_write,
             folderdata::folder_data_delete,
+            folderlog::folder_log_append,
+            folderlog::folder_log_read,
+            folderlog::folder_log_stamp,
+            identity::identity_id,
             modinstall::open_devtools,
             transfer::open_with,
             geo::get_location,

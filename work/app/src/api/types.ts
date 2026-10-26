@@ -44,6 +44,11 @@ export const USES = [
   // ↓ 2026-10-24 に追加（ポインターロック。ADR 0039）
   /** マウスのポインターを固定して、動いた量だけ受け取る（標準の requestPointerLock()。呼び出しは無く、iframe の sandbox に allow-pointer-lock を足す） */
   "pointerLock",
+  // ↓ 2026-10-27 に追加（共有フォルダの記録と、MOD ごとの ID。ADR 0040）
+  /** フォルダの中に、PC ごとの追記だけの記録を書く・全員の分を読む（folderLog.append・read。本体が署名する） */
+  "folderLog",
+  /** MOD ごとの匿名の ID と、本体で決めた表示名・アイコン（identity.get。MOD ごとに最初に許可を聞く） */
+  "identity",
 ] as const;
 export type Use = (typeof USES)[number];
 
@@ -100,6 +105,13 @@ export type SettingDef =
 /** 秘密の値の付け方：origin（network に書いた、* の無いもの）に通信するときだけ、ヘッダ（prefix + 値）か URL の ?query= に入れる */
 export type SecretSend = { origin: string; header: string; prefix?: string } | { origin: string; query: string };
 export type SettingValues = Record<string, boolean | number | string>;
+
+/** 共有フォルダの記録の1件（ADR 0040）。id は本体が付けるランダムな 32 文字、author は書いた人の ID、t は本体の時計の時刻（ミリ秒） */
+export type FolderLogRecord = { id: string; author: string; t: number; data: unknown };
+/** folderLog.read の結果。cursor を次の since に渡すと続きから。more は「1回で読める量を超えたので、残りがある」 */
+export type FolderLogRead = { records: FolderLogRecord[]; cursor: string; more: boolean; rejected: number; me: string };
+/** MOD ごとの匿名の ID（64 文字の16進数）と、本体で決めた表示名・アイコン（決めていなければ null） */
+export type Identity = { id: string; name: string | null; icon: string | null };
 
 /** コレクション（仮想ディレクトリ。ADR 0025） */
 export type Collection = { id: string; name: string; color: string; count: number };
@@ -448,7 +460,11 @@ export type CallMethod =
   | "logs.openFolder"
   | "mods.openSettings"
   // ↓ 2026-10-22 に追加（ADR 0036）。見えない所で動いている MOD が、終わったことを伝える
-  | "menu.done";
+  | "menu.done"
+  // ↓ 2026-10-27 に追加（ADR 0040）
+  | "folderLog.append"
+  | "folderLog.read"
+  | "identity.get";
 
 /** method ごとの params の形 */
 export type CallParams = {
@@ -572,6 +588,12 @@ export type CallParams = {
   "mods.openSettings": { id: string };
   /** 見えない所で動いているとき、本体に止めてもらう（ビューのときは何も起きない） */
   "menu.done": Record<string, never>;
+  /** folder の中の、この PC・この MOD の記録の末尾に1件足す。data は JSON にできる値（64KB まで） */
+  "folderLog.append": { folder: EntryRef; data: unknown };
+  /** folder の中の、全員の記録を読む（署名を確かめたものだけ）。since は前回の cursor（省略すると初めから） */
+  "folderLog.read": { folder: EntryRef; since?: string };
+  /** 最初に使うとき、本体が許可を聞く。まだ表示名が無ければ、決める画面も出す */
+  "identity.get": Record<string, never>;
 };
 
 /** method を呼ぶのに要る uses。null なら宣言不要 */
@@ -661,6 +683,9 @@ export const METHOD_REQUIRES: Record<CallMethod, Use | null> = {
   "logs.openFolder": null,
   "mods.openSettings": null,
   "menu.done": null,
+  "folderLog.append": "folderLog",
+  "folderLog.read": "folderLog",
+  "identity.get": "identity",
 };
 
 export type NetMethod = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -712,7 +737,12 @@ export type EventMessage =
   | { ep: 1; kind: "event"; event: "menu"; data: ModMenuEvent }
   // ポインターロックを外してほしい：このビューのタブが隠れた・本体が確かめやメニューの画面を出す（uses に pointerLock があるビューだけ。ADR 0039）。
   // ランタイムが受けて exitPointerLock() を呼ぶ。MOD は標準の pointerlockchange で、外れたことを知れる
-  | { ep: 1; kind: "event"; event: "releasePointer"; data: null };
+  | { ep: 1; kind: "event"; event: "releasePointer"; data: null }
+  // 開いているフォルダの、この MOD の記録が増えた（ほかの PC から同期で届いた・この PC のほかのタブが足した・自分が足した）。
+  // folderLog.read に前回の cursor を渡して読み直す（uses に folderLog があるビューだけ。ADR 0040）
+  | { ep: 1; kind: "event"; event: "folderLog"; data: { path: string } }
+  // 本体の表示名・アイコンが変わった（identity.get を許可したビューだけ）
+  | { ep: 1; kind: "event"; event: "identity"; data: Identity };
 
 export type KeyMessage = { ep: 1; kind: "key"; key: string; ctrl: boolean; shift: boolean; alt: boolean };
 /** MOD の console.log・エラー（ランタイムが自動で送る。ADR 0029） */
@@ -750,3 +780,8 @@ export const QUICK_ACCESS_MAX_ITEMS = 100;
 /** クリップボード・ドラッグで一度に扱える項目の数と、ドラッグの落とせる場所の数の上限 */
 export const TRANSFER_MAX_ITEMS = 1000;
 export const DROP_TARGETS_MAX = 500;
+/** folderLog の1件の data の上限（JSON にしたときの UTF-8 のバイト数。Rust の folderlog.rs と同じ） */
+export const FOLDER_LOG_RECORD_MAX_BYTES = 64 * 1024;
+/** 表示名・アイコンの長さの上限（文字） */
+export const PROFILE_NAME_MAX = 40;
+export const PROFILE_ICON_MAX = 8;

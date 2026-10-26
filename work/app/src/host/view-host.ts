@@ -19,7 +19,7 @@ import { sortEntries } from "../core/entries";
 import { parseModMessage } from "../core/protocol";
 import { OPENS_HOST_UI, sandboxFor } from "../core/pointer-lock";
 import { validateFileName } from "../core/names";
-import { checkPermission, checkStorageValue } from "../core/permission";
+import { checkFolderLogData, checkPermission, checkStorageValue } from "../core/permission";
 import { onModsChange, type ModManager } from "./mod-manager";
 import { INFO_PROPERTY_NAMES, toFileInfo } from "../core/fileinfo";
 import { parseNetFrame } from "../core/network";
@@ -29,6 +29,7 @@ import { broadcast, onSync } from "./sync";
 import type { ChoiceItem, FileChange } from "../api/types";
 import { askDialog, chooseDialog, settingsService } from "./mod-ui";
 import { collectionService, grantService } from "./collection-service";
+import { profileService } from "./profile-service";
 
 /** バイト列を base64 に（Rust へ渡すため） */
 function bytesToBase64(bytes: Uint8Array): string {
@@ -98,6 +99,8 @@ const NO_EXTRAS: ReadonlySet<Use> = new Set();
 const TREE_MAX_FOLDERS = 500;
 /** フォルダの合計の大きさを、この間隔でまとめてビューに知らせる */
 const FOLDER_SIZE_FLUSH_MS = 250;
+/** 共有フォルダの記録が増えたかを確かめる間隔（表示中のタブ・裏のタブ。ADR 0040） */
+const FOLDER_LOG_CHECK_MS = { active: 5000, background: 20000 } as const;
 
 class HostError extends Error {
   constructor(readonly apiError: ApiError) {
@@ -170,6 +173,57 @@ export class ViewHost {
     if (this.uses.has("recent")) {
       this.unsubscribe.push(recentItems.onChange(() => this.isReady && this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "recent", data: null })));
     }
+    // 共有フォルダの記録（ADR 0040）：数秒おきと、アプリの窓に戻ってきたときに、増えたかを確かめる
+    if (this.uses.has("folderLog")) {
+      const onFocus = () => void this.checkFolderLog();
+      window.addEventListener("focus", onFocus);
+      this.unsubscribe.push(() => window.removeEventListener("focus", onFocus));
+      this.scheduleFolderLogCheck();
+    }
+    // 表示名・アイコンが変わったら、identity.get を許可したビューにだけ知らせる
+    if (this.uses.has("identity")) {
+      this.unsubscribe.push(
+        profileService.onChange(async (profile) => {
+          if (!this.isReady || !(await this.hasGrant("identity"))) return;
+          const id = await backend.identityId(this.view.manifest.id).catch(() => null);
+          if (id && this.isReady) this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "identity", data: { id, ...profile } });
+        }),
+      );
+    }
+  }
+
+  /** 記録の印（ファイルの数・大きさ・更新時刻）と、それがどのフォルダのものか。印が変わったら folderLog を知らせる */
+  private logStamp: { path: string; stamp: string } | null = null;
+  private logTimer: ReturnType<typeof setTimeout> | undefined;
+  private logChecking = false;
+  private destroyed = false;
+
+  private scheduleFolderLogCheck() {
+    clearTimeout(this.logTimer);
+    if (this.destroyed) return;
+    this.logTimer = setTimeout(
+      () => void this.checkFolderLog().finally(() => this.scheduleFolderLogCheck()),
+      this.tab.isActive() ? FOLDER_LOG_CHECK_MS.active : FOLDER_LOG_CHECK_MS.background,
+    );
+  }
+
+  private async checkFolderLog() {
+    if (!this.isReady || !this.folder || this.logChecking) return;
+    const folder = this.folderRef();
+    this.logChecking = true;
+    try {
+      const stamp = await backend.folderLogStamp(this.view.manifest.id, folder).catch(() => null);
+      // 確かめているあいだにフォルダを移った・読めなかった
+      if (stamp === null || this.folder?.path !== folder.path) return;
+      const before = this.logStamp;
+      this.logStamp = { path: folder.path, stamp };
+      // フォルダを開いた直後の1回目は、印を覚えるだけ（MOD は開いたときに自分で read する）
+      if (before && before.path === folder.path && before.stamp !== stamp) {
+        this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "folderLog", data: { path: folder.path } });
+      }
+    } finally {
+      this.logChecking = false;
+    }
   }
 
   /** 今のフォルダ（時間割はフォルダごと。ADR 0012） */
@@ -198,17 +252,19 @@ export class ViewHost {
    * MOD ごとの許可（ADR 0025）。最初に使うときだけ本体が聞き、覚えておく。標準のビューは聞かない。
    * 聞く画面は、表示中のタブのビューからだけ出せる
    */
-  private async ensureGrant(what: string, doing: string) {
-    if (this.view.source === "builtin" || (await grantService.has(this.view.manifest.id, what))) return;
-    const ok = await this.modal(() =>
-      confirmDialog(
-        `「${this.view.manifest.name}」が、${doing}。\n許可しますか？\n\n許可すると、このビューは新しいファイル・フォルダ・ショートカットを作れるようになります（今あるものを書き換えたり消したりはできません）。MOD を外すと許可も消えます。`,
-        "許可する",
-      ),
-    );
-    if (!ok) throw new HostError({ code: "denied", message: "the user did not allow creating files" });
+  private async ensureGrant(what: string, doing: string, detail: string): Promise<"granted" | "already"> {
+    if (await this.hasGrant(what)) return "already";
+    const ok = await this.modal(() => confirmDialog(`「${this.view.manifest.name}」が、${doing}。\n許可しますか？\n\n${detail}MOD を外すと許可も消えます。`, "許可する"));
+    if (!ok) throw new HostError({ code: "denied", message: `the user did not allow ${what}` });
     await grantService.grant(this.view.manifest.id, what);
+    return "granted";
   }
+
+  private async hasGrant(what: string): Promise<boolean> {
+    return this.view.source === "builtin" || (await grantService.has(this.view.manifest.id, what));
+  }
+
+  private static readonly CREATE_DETAIL = "許可すると、このビューは新しいファイル・フォルダ・ショートカットを作れるようになります（今あるものを書き換えたり消したりはできません）。";
 
   /** まだ届けていない知らせ menu（準備ができる前に選ばれた分。ADR 0036） */
   private pendingMenu: ModMenuEvent[] = [];
@@ -257,6 +313,8 @@ export class ViewHost {
 
   destroy() {
     this.generation++;
+    this.destroyed = true;
+    clearTimeout(this.logTimer);
     window.removeEventListener("message", this.onMessage);
     for (const off of this.unsubscribe) off();
     this.iframe.remove();
@@ -310,6 +368,8 @@ export class ViewHost {
 
   private pushFolder() {
     if (!this.folder) return;
+    // 記録の印を、MOD が開いたフォルダを読む前に覚える（読んだ後に届いた分を、取りこぼさずに知らせるため。ADR 0040）
+    if (this.uses.has("folderLog")) void this.checkFolderLog();
     const folder = this.folder;
     const gen = this.generation;
     this.post({ ep: PROTOCOL_VERSION, kind: "event", event: "folder", data: toSnapshot(folder, this.uses) });
@@ -627,12 +687,12 @@ export class ViewHost {
         return backend.netUrl(this.view.manifest.id, p.url, p.secret);
       // ↓ 書き込みとコレクション（ADR 0025）
       case "files.create": {
-        await this.ensureGrant("createFiles", "新しいファイル・フォルダを作ろうとしています");
+        await this.ensureGrant("createFiles", "新しいファイル・フォルダを作ろうとしています", ViewHost.CREATE_DETAIL);
         const base64 = p.bytes ? bytesToBase64(p.bytes as Uint8Array) : undefined;
         return toEntry(await backend.createEntry(p.folder, p.name, p.kind, p.text, base64), this.uses);
       }
       case "files.createShortcut":
-        await this.ensureGrant("createFiles", "ショートカットを作ろうとしています");
+        await this.ensureGrant("createFiles", "ショートカットを作ろうとしています", ViewHost.CREATE_DETAIL);
         return toEntry(await backend.createShortcut(p.folder, p.target, p.name), this.uses);
       case "collections.list":
         await collectionService.load();
@@ -690,6 +750,25 @@ export class ViewHost {
       }
       case "logs.openFolder":
         return this.tab.mods.openLogsFolder();
+      // ↓ 共有フォルダの記録と、MOD ごとの ID（ADR 0040）。どの MOD からかは、本体が知っている id を渡す（MOD に言わせない）
+      case "folderLog.append": {
+        const checked = checkFolderLogData(p.data);
+        if ("error" in checked) throw new HostError(checked.error);
+        return backend.folderLogAppend(this.view.manifest.id, p.folder, checked.json);
+      }
+      case "folderLog.read":
+        return backend.folderLogRead(this.view.manifest.id, p.folder, p.since);
+      case "identity.get": {
+        const asked = await this.ensureGrant(
+          "identity",
+          "あなたの表示名とアイコンを使おうとしています",
+          "許可すると、このビューに表示名・アイコンと、このビュー用の匿名の ID を渡します。共有フォルダに書くビューなら、フォルダを共有している人にも見えることがあります。表示名は、コマンドの一覧（Ctrl+Shift+P）の「自分の表示名とアイコン…」で、いつでも変えられます。",
+        );
+        let profile = await profileService.get();
+        // 初めて許可したとき、まだ表示名が無ければ、決める画面を出す（やめてもよい）
+        if (asked === "granted" && profile.name === null) profile = (await this.modal(() => profileService.edit())) ?? profile;
+        return { id: await backend.identityId(this.view.manifest.id), ...profile };
+      }
       // ↓ 右クリックのメニューから見えない所で動かしたとき（ADR 0036）。返事を送ってから止める
       case "menu.done":
         if (this.tab.menuDone) setTimeout(() => this.tab.menuDone?.(), 0);

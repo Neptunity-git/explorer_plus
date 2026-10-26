@@ -201,6 +201,8 @@ export function describeModCall(method: string, p: Record<string, unknown>, resu
       return `作る：${ref(p.folder)}\\${String(p.name)}`;
     case "files.createShortcut":
       return `ショートカットを作る：${ref(p.target)} → ${ref(p.folder)}`;
+    case "folderLog.append":
+      return `記録を書き足す：${ref(p.folder)}`;
     case "clipboard.copy":
     case "clipboard.cut":
       return `${method === "clipboard.cut" ? "切り取り" : "コピー"}：${items(p.items)}`;

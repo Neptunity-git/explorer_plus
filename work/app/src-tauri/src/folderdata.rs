@@ -34,7 +34,7 @@ fn data_file(folder: &EntryRef, name: &str) -> Result<PathBuf, String> {
 }
 
 /// 置き場所のフォルダに「隠し」の印を付ける（普通のエクスプローラでも普段は見えないように）
-fn mark_hidden(dir: &Path) {
+pub(crate) fn mark_hidden(dir: &Path) {
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::{GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN, FILE_FLAGS_AND_ATTRIBUTES};
     let w: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();

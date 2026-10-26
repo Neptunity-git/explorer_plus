@@ -543,6 +543,25 @@ function parseCallParams(method: string, params: Record<string, unknown>): { ok:
       return { ok: true, params: { name } };
     }
 
+    // ↓ 共有フォルダの記録と、MOD ごとの ID（ADR 0040）
+    case "folderLog.append": {
+      // data の中身（JSON にできるか・大きさ）は本体が checkFolderLogData で確かめる
+      const folder = parseRef(params.folder);
+      if (!folder.ok || !("data" in params)) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, data: params.data } };
+    }
+
+    case "folderLog.read": {
+      const folder = parseRef(params.folder);
+      const { since } = params;
+      if (!folder.ok) return { ok: false };
+      if (since !== undefined && !(isString(since) && since.length <= 4 * 1024 * 1024)) return { ok: false };
+      return { ok: true, params: { folder: folder.ref, ...(since !== undefined ? { since } : {}) } };
+    }
+
+    case "identity.get":
+      return { ok: true, params: {} };
+
     default:
       return { ok: false };
   }

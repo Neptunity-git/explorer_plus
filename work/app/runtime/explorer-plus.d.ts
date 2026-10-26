@@ -78,6 +78,34 @@ declare global {
       blob(): Promise<Blob>;
     };
     /** コレクション（仮想ディレクトリ。ADR 0025） */
+    /** 共有フォルダの記録の1件（ADR 0040）。id は本体が付けるランダムな 32 文字、author は書いた人の ID、t は書いた PC の時計の時刻（1970年からのミリ秒） */
+    interface FolderLogRecord {
+      id: string;
+      author: string;
+      t: number;
+      data: unknown;
+    }
+
+    interface FolderLogRead {
+      /** 署名を確かめた記録だけ。この1回の中では t の順。同期は遅れて届くことがあるので、前に読んだものより古い t も来る */
+      records: FolderLogRecord[];
+      /** 次の read の since に渡す（中身は決まっていない。storage に覚えておくと、次に開いたとき続きから読める） */
+      cursor: string;
+      /** 1回で読める量（2MB）を超えたので、残りがある。cursor を渡して、もう一度 read する */
+      more: boolean;
+      /** 署名が合わない・壊れている行の数（読まなかった） */
+      rejected: number;
+      /** この PC の、この MOD の ID（自分の記録は author === me） */
+      me: string;
+    }
+
+    /** この MOD 用の匿名の ID（64 文字の16進数。PC ごと・MOD ごとに違う）と、本体で決めた表示名・アイコン（決めていなければ null） */
+    interface Identity {
+      id: string;
+      name: string | null;
+      icon: string | null;
+    }
+
     interface Collection {
       id: string;
       name: string;
@@ -322,6 +350,30 @@ declare global {
        * folderData.get で読み直すと、ウィンドウのあいだで食い違わない
        */
       onFolderData(cb: (data: { path: string }) => void): () => void;
+      /**
+       * uses に "folderLog" が要る（ADR 0040）。フォルダ（共有フォルダなど）の中に、この PC・この MOD の記録を1件ずつ書き足す。
+       * 置き場所は .explorer_plus/log.<MOD の id>/<書いた人の ID>/<年-月>.jsonl。1つのファイルを書くのは1台の PC だけなので、同期でぶつからない。
+       * 書き換え・削除はできない（「消した」も記録として足す）。data は JSON にできる値（64KB まで）。
+       * read は全員の分を返す（本体が署名を確かめたものだけ）。since に前回の cursor を渡すと、続きから
+       */
+      readonly folderLog: {
+        append(folder: EntryRef, data: unknown): Promise<FolderLogRecord>;
+        read(folder: EntryRef, opts?: { since?: string }): Promise<FolderLogRead>;
+      };
+      /**
+       * 開いているフォルダの、この MOD の記録が増えた（ほかの PC から同期で届いた・この PC のほかのタブが足した・自分が足した）。
+       * 本体が数秒おきに確かめて知らせる。folderLog.read に前回の cursor を渡して読み直す
+       */
+      onFolderLog(cb: (data: { path: string }) => void): () => void;
+      /**
+       * uses に "identity" が要る（ADR 0040）。最初に使うとき、本体が許可を聞く（表示中のタブのときだけ。断られると code "denied"）。
+       * まだ表示名を決めていなければ、許可のあとに決める画面も出る
+       */
+      readonly identity: {
+        get(): Promise<Identity>;
+      };
+      /** 本体で表示名・アイコンが変わった（identity.get を許可したあと） */
+      onIdentity(cb: (identity: Identity) => void): () => void;
       /**
        * uses に "fileContent" が要る（ADR 0023）。ファイルの中身を読む。
        * readText は文字コード（UTF-8・UTF-16・Shift_JIS）を見分けて文字にする。maxBytes は 8MB まで（既定 1MB）。
