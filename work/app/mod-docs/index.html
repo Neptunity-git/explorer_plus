@@ -459,7 +459,7 @@ async function pull() {
     for (const rec of r.records) notes.set(rec.id, rec); // 同じ記録がもう一度来ても、id で1つにする
     cursor = r.cursor;
   } while (r.more);                                      // 一度に読めるのは 2MB まで。残りがあれば続けて読む
-  draw([...notes.values()].sort((a, b) =&gt; a.t - b.t));  // 同期は遅れて届くので、表示する前に t で並べ直す
+  draw(current([...notes.values()].sort((a, b) =&gt; a.t - b.t)));  // 同期は遅れて届くので、t で並べ直してから今の状態を作る
 }
 
 // 書く（ボタンを押したときなど）。返り値は { id, author, t, data }。表示名は、見せたい MOD が data に入れる
@@ -467,11 +467,31 @@ async function post(text) {
   const me = await ep.identity.get();                    // { id, name, icon }。初めてのときだけ許可を聞く（名前がまだなら、決める画面も出る）
   const rec = await ep.folderLog.append(world, { type: &quot;note&quot;, text, by: me.name, icon: me.icon });
   notes.set(rec.id, rec);                                // 自分の分はすぐ出す（後で read にも来るが、id で重ならない）
-  draw([...notes.values()].sort((a, b) =&gt; a.t - b.t));
+  draw(current([...notes.values()].sort((a, b) =&gt; a.t - b.t)));
 }
-// 消す・直すも「記録を足す」で表す（書いた記録を書き換えることはできません）
-//   await ep.folderLog.append(world, { type: &quot;delete&quot;, target: noteId });
 </code></pre>
+<p><strong>消す・直す</strong>も「記録を足す」で表します（書いた記録を書き換えることはできません）。足した記録を順に当てはめて「今の状態」を作るとき、
+<strong>元の付箋を書いた人（<code>author</code>）と同じ人の記録だけを効かせる</strong>と、他人の付箋を消す・書き換えるいたずらを防げます。<code>author</code> は本体が署名で確かめた値なので、MOD がそのまま信じてかまいません。</p>
+<pre><code class="language-js">// 直す：ep.folderLog.append(world, { type: &quot;edit&quot;, target: noteId, text: &quot;新しい文&quot; })
+// 消す：ep.folderLog.append(world, { type: &quot;delete&quot;, target: noteId })
+function current(records) {                              // t の順に並べた記録
+  const board = new Map();
+  for (const rec of records) {
+    const d = rec.data;
+    if (d.type === &quot;note&quot;) {
+      board.set(rec.id, { id: rec.id, author: rec.author, t: rec.t, text: d.text, by: d.by, icon: d.icon });
+      continue;
+    }
+    const note = board.get(d.target);
+    if (!note || note.author !== rec.author) continue;   // 無い付箋・他人の付箋には効かせない
+    if (d.type === &quot;edit&quot;) note.text = d.text;
+    if (d.type === &quot;delete&quot;) board.delete(d.target);
+  }
+  return [...board.values()];
+}
+</code></pre>
+<p>自分の付箋を直す・消す記録は、元の付箋と同じ PC（同じ時計）で書かれるので、t の順に並べれば、元の付箋より後に来ます。
+「いいね」のように誰でも足せるものは、<code>{ type: &quot;like&quot;, target: noteId }</code> を足し、同じ <code>author</code> からの分は1つに数えます。</p>
 <p><strong>しくみ</strong>：</p>
 <ul>
 <li>記録は <code>&lt;フォルダ&gt;\.explorer_plus\log.&lt;MOD の id&gt;\&lt;書いた人の ID&gt;\&lt;年-月&gt;.jsonl</code> に、1行1件で本体が書き足します。
@@ -484,12 +504,24 @@ async function post(text) {
 </ul>
 <p><strong>気をつけること</strong>：</p>
 <ul>
-<li>書き換え・削除の API はありません。フォルダに書き込める人は、ほかの人の記録の<strong>ファイルを丸ごと消す</strong>ことはできます（偽物は作れませんが、消すのは防げません）</li>
+<li>書き換え・削除の API はありません。<strong>「消した」記録を足しても、元の文は記録のファイルに残ります</strong>（MOD の画面に出なくなるだけ）。
+人に見られて困ることは書かないよう、MOD の画面でも利用者に伝えてください</li>
+<li>フォルダに書き込める人は、ほかの人の記録の<strong>ファイルを丸ごと消す</strong>ことはできます（偽物は作れませんが、消すのは防げません）</li>
+<li>書けないフォルダ（読むだけの共有など）では、<code>append</code> が <code>denied</code>（共有のしかたによっては <code>io</code>）で失敗します。<code>read</code> はできるので、「見るだけ」の人にも使えます</li>
+<li><code>append</code> が成功しても、ほかの人に届くのは同期のあとです。届いたかどうかは、今は分かりません</li>
+<li>引数の <code>folder</code> は、<code>onFolder</code> で届いたフォルダ（<code>{ id, path }</code>）です。<code>onFolderLog</code> が知らせるのは、開いているフォルダの分だけです</li>
 <li><code>onFolderLog</code> は、自分が足したときや、この PC のほかのタブが足したときにも届きます。<code>id</code> で重ならないようにしてください</li>
 <li>読める量は1回 2MB までです。何年分も貯まる MOD は、<code>cursor</code> と、読んだ記録（またはそれをまとめた今の状態）を<strong>一緒に</strong> <code>storage</code> に覚えておくと、開くたびに初めから読まずに済みます
 （<code>cursor</code> だけを覚えると、次に開いたとき、それより前の記録が読めません。<code>storage</code> の1つの値は 1MB までなので、大きくなったら月ごとなどに分けて覚えてください）</li>
 <li><code>identity.get</code> は、初めてのときだけ確かめの画面が出るので、表示中のタブで（ボタンを押したときなどに）呼んでください。断られたら <code>denied</code> です</li>
 <li>画像を貼りたいときは、今は <code>files.create</code>（uses に <code>createFiles</code>）でワールドのフォルダに画像を置き、その名前を <code>data</code> に入れてください</li>
+</ul>
+<p><strong>作りながら確かめる</strong>：</p>
+<ul>
+<li>1台の PC では、どのタブ・ウィンドウで書いても<strong>同じ人</strong>（同じ <code>author</code>）になります。別のタブで同じフォルダを開くと、5 秒ほどで相手のタブに出ることは、1台で確かめられます</li>
+<li><strong>別の人</strong>として書いたときの動き（他人の付箋を消せないか、など）は、別の PC（OneDrive などで同じフォルダを同期したもの）で確かめてください。
+MOD の id を変えると、記録の置き場所も ID も別になるので、元の MOD の記録は見えません</li>
+<li>確かめ用の小さな MOD が <a href="https://github.com/Neptunity-git/explorer_plus/tree/main/spikes/folder-log-demo">spikes/folder-log-demo</a> にあります。記録のファイル（<code>.jsonl</code>）をメモ帳で書き換えると、その行が <code>rejected</code> に数えられて出なくなるのも確かめられます</li>
 </ul>
 <h3 id="s17">新しく作る（createFiles）</h3>
 <pre><code class="language-js">const note = await ep.files.create(folder, &quot;メモ.txt&quot;, { text: &quot;こんにちは&quot; });

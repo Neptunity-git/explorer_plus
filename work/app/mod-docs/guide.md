@@ -267,7 +267,7 @@ async function pull() {
     for (const rec of r.records) notes.set(rec.id, rec); // 同じ記録がもう一度来ても、id で1つにする
     cursor = r.cursor;
   } while (r.more);                                      // 一度に読めるのは 2MB まで。残りがあれば続けて読む
-  draw([...notes.values()].sort((a, b) => a.t - b.t));  // 同期は遅れて届くので、表示する前に t で並べ直す
+  draw(current([...notes.values()].sort((a, b) => a.t - b.t)));  // 同期は遅れて届くので、t で並べ直してから今の状態を作る
 }
 
 // 書く（ボタンを押したときなど）。返り値は { id, author, t, data }。表示名は、見せたい MOD が data に入れる
@@ -275,11 +275,35 @@ async function post(text) {
   const me = await ep.identity.get();                    // { id, name, icon }。初めてのときだけ許可を聞く（名前がまだなら、決める画面も出る）
   const rec = await ep.folderLog.append(world, { type: "note", text, by: me.name, icon: me.icon });
   notes.set(rec.id, rec);                                // 自分の分はすぐ出す（後で read にも来るが、id で重ならない）
-  draw([...notes.values()].sort((a, b) => a.t - b.t));
+  draw(current([...notes.values()].sort((a, b) => a.t - b.t)));
 }
-// 消す・直すも「記録を足す」で表す（書いた記録を書き換えることはできません）
-//   await ep.folderLog.append(world, { type: "delete", target: noteId });
 ```
+
+**消す・直す**も「記録を足す」で表します（書いた記録を書き換えることはできません）。足した記録を順に当てはめて「今の状態」を作るとき、
+**元の付箋を書いた人（`author`）と同じ人の記録だけを効かせる**と、他人の付箋を消す・書き換えるいたずらを防げます。`author` は本体が署名で確かめた値なので、MOD がそのまま信じてかまいません。
+
+```js
+// 直す：ep.folderLog.append(world, { type: "edit", target: noteId, text: "新しい文" })
+// 消す：ep.folderLog.append(world, { type: "delete", target: noteId })
+function current(records) {                              // t の順に並べた記録
+  const board = new Map();
+  for (const rec of records) {
+    const d = rec.data;
+    if (d.type === "note") {
+      board.set(rec.id, { id: rec.id, author: rec.author, t: rec.t, text: d.text, by: d.by, icon: d.icon });
+      continue;
+    }
+    const note = board.get(d.target);
+    if (!note || note.author !== rec.author) continue;   // 無い付箋・他人の付箋には効かせない
+    if (d.type === "edit") note.text = d.text;
+    if (d.type === "delete") board.delete(d.target);
+  }
+  return [...board.values()];
+}
+```
+
+自分の付箋を直す・消す記録は、元の付箋と同じ PC（同じ時計）で書かれるので、t の順に並べれば、元の付箋より後に来ます。
+「いいね」のように誰でも足せるものは、`{ type: "like", target: noteId }` を足し、同じ `author` からの分は1つに数えます。
 
 **しくみ**：
 
@@ -293,12 +317,24 @@ async function post(text) {
 
 **気をつけること**：
 
-- 書き換え・削除の API はありません。フォルダに書き込める人は、ほかの人の記録の**ファイルを丸ごと消す**ことはできます（偽物は作れませんが、消すのは防げません）
+- 書き換え・削除の API はありません。**「消した」記録を足しても、元の文は記録のファイルに残ります**（MOD の画面に出なくなるだけ）。
+  人に見られて困ることは書かないよう、MOD の画面でも利用者に伝えてください
+- フォルダに書き込める人は、ほかの人の記録の**ファイルを丸ごと消す**ことはできます（偽物は作れませんが、消すのは防げません）
+- 書けないフォルダ（読むだけの共有など）では、`append` が `denied`（共有のしかたによっては `io`）で失敗します。`read` はできるので、「見るだけ」の人にも使えます
+- `append` が成功しても、ほかの人に届くのは同期のあとです。届いたかどうかは、今は分かりません
+- 引数の `folder` は、`onFolder` で届いたフォルダ（`{ id, path }`）です。`onFolderLog` が知らせるのは、開いているフォルダの分だけです
 - `onFolderLog` は、自分が足したときや、この PC のほかのタブが足したときにも届きます。`id` で重ならないようにしてください
 - 読める量は1回 2MB までです。何年分も貯まる MOD は、`cursor` と、読んだ記録（またはそれをまとめた今の状態）を**一緒に** `storage` に覚えておくと、開くたびに初めから読まずに済みます
   （`cursor` だけを覚えると、次に開いたとき、それより前の記録が読めません。`storage` の1つの値は 1MB までなので、大きくなったら月ごとなどに分けて覚えてください）
 - `identity.get` は、初めてのときだけ確かめの画面が出るので、表示中のタブで（ボタンを押したときなどに）呼んでください。断られたら `denied` です
 - 画像を貼りたいときは、今は `files.create`（uses に `createFiles`）でワールドのフォルダに画像を置き、その名前を `data` に入れてください
+
+**作りながら確かめる**：
+
+- 1台の PC では、どのタブ・ウィンドウで書いても**同じ人**（同じ `author`）になります。別のタブで同じフォルダを開くと、5 秒ほどで相手のタブに出ることは、1台で確かめられます
+- **別の人**として書いたときの動き（他人の付箋を消せないか、など）は、別の PC（OneDrive などで同じフォルダを同期したもの）で確かめてください。
+  MOD の id を変えると、記録の置き場所も ID も別になるので、元の MOD の記録は見えません
+- 確かめ用の小さな MOD が [spikes/folder-log-demo](https://github.com/Neptunity-git/explorer_plus/tree/main/spikes/folder-log-demo) にあります。記録のファイル（`.jsonl`）をメモ帳で書き換えると、その行が `rejected` に数えられて出なくなるのも確かめられます
 
 ### 新しく作る（createFiles）
 
